@@ -1,0 +1,27 @@
+# 환경변수 / 비밀정보
+.env
+.env.*
+!.env.example
+
+# IDE 개인 설정
+.vscode/
+.idea/
+*.iml
+
+# Windows / macOS
+Thumbs.db
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 로그
+*.log
+
+# 임시 파일
+*.tmp
+*.temp
