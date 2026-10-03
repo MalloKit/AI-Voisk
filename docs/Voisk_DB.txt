@@ -1,0 +1,109 @@
+CREATE DATABASE IF NOT EXISTS Voisk DEFAULT CHARACTER SET utf8mb4;
+USE Voisk;
+
+-- 관리자
+CREATE TABLE admin (
+  admin_id  INT          NOT NULL AUTO_INCREMENT,
+  admin_nm  VARCHAR(10)  NOT NULL,
+  admin_pw  VARCHAR(255) NOT NULL,
+  PRIMARY KEY (admin_id)
+);
+
+-- 점주
+CREATE TABLE owner (
+  owner_id      INT          NOT NULL AUTO_INCREMENT,
+  own_login_id  VARCHAR(100) NOT NULL,
+  own_pw        VARCHAR(255) NOT NULL,
+  PRIMARY KEY (owner_id),
+  UNIQUE (own_login_id)
+);
+
+-- 매장
+CREATE TABLE store (
+  store_id        INT          NOT NULL AUTO_INCREMENT,
+  store_nm        VARCHAR(100) NOT NULL,
+  store_add1      VARCHAR(200) NOT NULL,
+  store_add2      VARCHAR(200),
+  store_code      CHAR(5)      NOT NULL,
+  store_phone     VARCHAR(50)  NOT NULL,
+  business_no     CHAR(10)     NOT NULL,
+  store_owner_nm  VARCHAR(50)  NOT NULL,
+  store_type      VARCHAR(200) NOT NULL,
+  admin_id        INT          NOT NULL,
+  owner_id        INT,
+  PRIMARY KEY (store_id),
+  FOREIGN KEY (admin_id) REFERENCES admin(admin_id),
+  FOREIGN KEY (owner_id) REFERENCES owner(owner_id)
+);
+
+-- 카테고리
+CREATE TABLE category (
+  category_id    INT          NOT NULL AUTO_INCREMENT,
+  store_id       INT          NOT NULL,
+  category_nm    VARCHAR(100) NOT NULL,
+  category_sort  INT          NOT NULL,
+  PRIMARY KEY (category_id),
+  FOREIGN KEY (store_id) REFERENCES store(store_id)
+);
+
+-- 메뉴
+CREATE TABLE menu (
+  menu_id      INT          NOT NULL AUTO_INCREMENT,
+  category_id  INT          NOT NULL,
+  menu_nm      VARCHAR(50)  NOT NULL,
+  menu_price   INT          NOT NULL,
+  menu_des     VARCHAR(500),
+  is_active    BOOLEAN      NOT NULL DEFAULT TRUE,
+  is_sold_out  BOOLEAN      NOT NULL DEFAULT FALSE,
+  menu_sort    INT          NOT NULL,
+  PRIMARY KEY (menu_id),
+  FOREIGN KEY (category_id) REFERENCES category(category_id)
+);
+
+-- 옵션
+CREATE TABLE menu_option (
+  option_id         INT         NOT NULL AUTO_INCREMENT,
+  menu_id           INT         NOT NULL,
+  option_nm         VARCHAR(50) NOT NULL,
+  menu_option_sort  INT         NOT NULL,
+  is_active         BOOLEAN     NOT NULL DEFAULT TRUE,
+  is_sold_out       BOOLEAN     NOT NULL DEFAULT FALSE,
+  extra_price       INT         NOT NULL DEFAULT 0,
+  PRIMARY KEY (option_id),
+  CHECK (extra_price >= 0),
+  FOREIGN KEY (menu_id) REFERENCES menu(menu_id)
+);
+
+-- 메뉴 이미지
+CREATE TABLE menu_img (
+  img_id   INT          NOT NULL AUTO_INCREMENT,
+  menu_id  INT          NOT NULL,
+  img_nm   VARCHAR(100) NOT NULL,
+  is_main  BOOLEAN      NOT NULL,
+  PRIMARY KEY (img_id),
+  FOREIGN KEY (menu_id) REFERENCES menu(menu_id)
+);
+
+-- 주문내역
+CREATE TABLE orders (
+  order_id    INT       NOT NULL AUTO_INCREMENT,
+  store_id    INT       NOT NULL,
+  ordered_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  table_no    INT       NOT NULL,
+  PRIMARY KEY (order_id),
+  FOREIGN KEY (store_id) REFERENCES store(store_id)
+);
+
+-- 주문상세
+CREATE TABLE order_item (
+  item_id        INT NOT NULL AUTO_INCREMENT,
+  menu_id        INT NOT NULL,
+  item_quantity  INT NOT NULL,
+  option_id      INT,
+  order_id       INT NOT NULL,
+  PRIMARY KEY (item_id),
+  CHECK (item_quantity >= 1),
+  FOREIGN KEY (menu_id)   REFERENCES menu(menu_id),
+  FOREIGN KEY (option_id) REFERENCES menu_option(option_id),
+  FOREIGN KEY (order_id)  REFERENCES orders(order_id)
+);
