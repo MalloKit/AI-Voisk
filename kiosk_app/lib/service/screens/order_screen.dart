@@ -4,30 +4,70 @@ import 'package:flutter/material.dart';
 
 import '../controllers/cart_controller.dart';
 import '../data/menu_repository.dart';
+import '../data/api_menu_repository.dart';
 import '../models/menu_item.dart';
 import '../models/menu_option.dart';
 
 class OrderScreen extends StatefulWidget {
-  const OrderScreen({super.key, this.repository = const MockMenuRepository()});
-  final MenuRepository repository;
+  const OrderScreen({super.key, this.repository, this.orderMode});
+  final MenuRepository? repository;
+  final String? orderMode;
   @override
   State<OrderScreen> createState() => _OrderScreenState();
 }
 
 class _OrderScreenState extends State<OrderScreen> {
   final _cart = CartController();
+  final _categoryScrollController = ScrollController();
+  final _menuScrollController = ScrollController();
   late Future<List<MenuItem>> _menus;
+  late final MenuRepository _repository;
   String _category = '전체';
+  int _textSizeStep = 0;
+  double get _textScale => 1 + _textSizeStep * 0.1;
+
+  Widget _scaled(Widget child) => MediaQuery(
+    data: MediaQuery.of(context)
+        .copyWith(textScaler: TextScaler.linear(_textScale)),
+    child: ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context)
+          .copyWith(overscroll: false, physics: const ClampingScrollPhysics()),
+      child: child,
+    ),
+  );
+
+  void _showRole(String role) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _scaled(
+        AlertDialog(
+          title: Text('$role 기능'),
+          content: const Text('준비 중입니다.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('닫기'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   OverlayEntry? _notice;
 
   ButtonStyle _feedbackStyle() => ButtonStyle(
     backgroundColor: WidgetStateProperty.resolveWith(
-      (states) => states.contains(WidgetState.pressed)
+      (states) => states.contains(WidgetState.disabled)
+          ? const Color(0xFFE0E0E0)
+          : states.contains(WidgetState.pressed)
           ? const Color(0xFF00695C)
           : const Color(0xFFEAF1ED),
     ),
     foregroundColor: WidgetStateProperty.resolveWith(
-      (states) => states.contains(WidgetState.pressed)
+      (states) => states.contains(WidgetState.disabled)
+          ? const Color(0xFF757575)
+          : states.contains(WidgetState.pressed)
           ? Colors.white
           : const Color(0xFF246B58),
     ),
@@ -83,21 +123,27 @@ class _OrderScreenState extends State<OrderScreen> {
   @override
   void initState() {
     super.initState();
-    _menus = widget.repository.loadMenus();
+    _repository = widget.repository ?? configuredMenuRepository();
+    _menus = _repository.loadMenus();
   }
 
   @override
   void dispose() {
     _clearNotice();
+    _categoryScrollController.dispose();
+    _menuScrollController.dispose();
     _cart.dispose();
     super.dispose();
   }
 
   Future<void> _selectMenu(MenuItem menu, {CartEntry? editing}) async {
+    if (menu.isSoldOut) return;
     var quantity = editing?.quantity ?? 1;
     final selectedOptions =
         editing?.options.map((option) => option.id).toSet() ?? <String>{};
-    final options = sampleOptions(menu.category);
+    final options = _repository is ApiMenuRepository
+        ? <MenuOption>[]
+        : sampleOptions(menu.category);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -107,121 +153,128 @@ class _OrderScreenState extends State<OrderScreen> {
               options
                   .where((option) => selectedOptions.contains(option.id))
                   .fold<int>(0, (sum, option) => sum + option.price);
-          return AlertDialog(
-            constraints: const BoxConstraints(maxWidth: 640),
-            title: Text(
-              menu.name,
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-            ),
-            content: SizedBox(
-              width: 560,
-              child: SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      menu.description,
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '기본 가격 ${formatWon(menu.price)}',
-                      style: const TextStyle(fontSize: 20),
-                    ),
-                    if (options.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      const Text(
-                        '추가 선택',
-                        style: TextStyle(
-                          fontSize: 22,
+          return _scaled(
+            AlertDialog(
+              constraints: const BoxConstraints(maxWidth: 640),
+              title: Text(
+                menu.name,
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: SizedBox(
+                width: 560,
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        menu.description,
+                        style: const TextStyle(fontSize: 18),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '기본 가격 ${formatWon(menu.price)}',
+                        style: const TextStyle(fontSize: 20),
+                      ),
+                      if (options.isNotEmpty) ...[
+                        const SizedBox(height: 24),
+                        const Text(
+                          '추가 선택',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        for (final option in options)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 64),
+                                backgroundColor:
+                                    selectedOptions.contains(option.id)
+                                    ? const Color(0xFFD5EEE3)
+                                    : Colors.white,
+                              ),
+                              onPressed: () => updateDialog(() {
+                                if (!selectedOptions.add(option.id)) {
+                                  selectedOptions.remove(option.id);
+                                }
+                              }),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    selectedOptions.contains(option.id)
+                                        ? Icons.check_circle
+                                        : Icons.add_circle_outline,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      option.name,
+                                      style: const TextStyle(fontSize: 20),
+                                    ),
+                                  ),
+                                  Text(
+                                    '+${formatWon(option.price)}',
+                                    style: const TextStyle(fontSize: 20),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        const Text('추가 가격은 메뉴 1개마다 적용됩니다.'),
+                      ],
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text('수량', style: TextStyle(fontSize: 22)),
+                          ),
+                          _QuantitySelector(
+                            quantity: quantity,
+                            onMinus: quantity > 1
+                                ? () => updateDialog(() => quantity--)
+                                : null,
+                            onPlus: () => updateDialog(() => quantity++),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '선택 금액 ${formatWon(unitPrice * quantity)}',
+                        key: const Key('selection-total'),
+                        style: const TextStyle(
+                          fontSize: 26,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      for (final option in options)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 64),
-                              backgroundColor:
-                                  selectedOptions.contains(option.id)
-                                  ? const Color(0xFFD5EEE3)
-                                  : Colors.white,
-                            ),
-                            onPressed: () => updateDialog(() {
-                              if (!selectedOptions.add(option.id)) {
-                                selectedOptions.remove(option.id);
-                              }
-                            }),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  selectedOptions.contains(option.id)
-                                      ? Icons.check_circle
-                                      : Icons.add_circle_outline,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    option.name,
-                                    style: const TextStyle(fontSize: 20),
-                                  ),
-                                ),
-                                Text(
-                                  '+${formatWon(option.price)}',
-                                  style: const TextStyle(fontSize: 20),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      const Text('추가 가격은 메뉴 1개마다 적용됩니다.'),
                     ],
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text('수량', style: TextStyle(fontSize: 22)),
-                        ),
-                        _QuantitySelector(
-                          quantity: quantity,
-                          onMinus: quantity > 1
-                              ? () => updateDialog(() => quantity--)
-                              : null,
-                          onPlus: () => updateDialog(() => quantity++),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '선택 금액 ${formatWon(unitPrice * quantity)}',
-                      key: const Key('selection-total'),
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('취소'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(180, 56),
+                  ),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(
+                    editing == null ? '장바구니 담기' : '변경 저장',
+                    style: const TextStyle(fontSize: 20),
+                  ),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('취소'),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(minimumSize: const Size(180, 56)),
-                onPressed: () => Navigator.pop(context, true),
-                child: Text(
-                  editing == null ? '장바구니 담기' : '변경 저장',
-                  style: const TextStyle(fontSize: 20),
-                ),
-              ),
-            ],
           );
         },
       ),
@@ -243,7 +296,9 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => _scaled(_buildScreen());
+
+  Widget _buildScreen() => Scaffold(
     bottomNavigationBar: SafeArea(
       top: false,
       child: Container(
@@ -253,26 +308,72 @@ class _OrderScreenState extends State<OrderScreen> {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             PopupMenuButton<String>(
-              tooltip: 'Language',
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'ko', child: Text('한국어')),
-                PopupMenuItem(value: 'ja', child: Text('日本語')),
-                PopupMenuItem(value: 'en', child: Text('English')),
-                PopupMenuItem(value: 'zh', child: Text('中文')),
+              tooltip: '설정',
+              onSelected: _showRole,
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: '관리자', child: Text('관리자')),
+                PopupMenuItem(value: '점주', child: Text('점주')),
               ],
               child: const Padding(
                 padding: EdgeInsets.all(12),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.language),
+                    Icon(Icons.settings_outlined),
                     SizedBox(width: 8),
-                    Text('Language', style: TextStyle(fontSize: 18)),
-                    Icon(Icons.arrow_drop_up),
+                    Text('설정'),
                   ],
                 ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                children: [
+                  OutlinedButton(
+                    onPressed: _textSizeStep > -1
+                        ? () => setState(() => _textSizeStep--)
+                        : null,
+                    child: const Text('글자 작게'),
+                  ),
+                  Text(
+                    '${(_textScale * 100).round()}%',
+                    key: const Key('text-size-value'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _textSizeStep < 2
+                        ? () => setState(() => _textSizeStep++)
+                        : null,
+                    child: const Text('글자 크게'),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Language',
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'ko', child: Text('한국어')),
+                      PopupMenuItem(value: 'ja', child: Text('日本語')),
+                      PopupMenuItem(value: 'en', child: Text('English')),
+                      PopupMenuItem(value: 'zh', child: Text('中文')),
+                    ],
+                    child: const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.language),
+                          SizedBox(width: 8),
+                          Text('Language', style: TextStyle(fontSize: 18)),
+                          Icon(Icons.arrow_drop_up),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -280,12 +381,16 @@ class _OrderScreenState extends State<OrderScreen> {
       ),
     ),
     appBar: AppBar(
-      title: const Text('AI 보이스크 · 메뉴 주문'),
+      title: Text(
+        widget.orderMode == null
+            ? 'AI 보이스크 · 메뉴 주문'
+            : 'AI 보이스크 · 메뉴 주문 · ${widget.orderMode}',
+      ),
       actions: [
         OutlinedButton.icon(
           onPressed: () => showDialog<void>(
             context: context,
-            builder: (_) => const _StaffCallDialog(),
+            builder: (_) => _scaled(const _StaffCallDialog()),
           ),
           style: _feedbackStyle(),
           icon: const Icon(Icons.support_agent),
@@ -316,7 +421,7 @@ class _OrderScreenState extends State<OrderScreen> {
                     const Text('메뉴를 불러오지 못했습니다.'),
                     FilledButton(
                       onPressed: () => setState(() {
-                        _menus = widget.repository.loadMenus();
+                        _menus = _repository.loadMenus();
                       }),
                       child: const Text('다시 시도'),
                     ),
@@ -338,7 +443,9 @@ class _OrderScreenState extends State<OrderScreen> {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final compact = constraints.maxWidth < 850;
-                      final cartWidth = compact ? 230.0 : 320.0;
+                      final cartWidth =
+                          (compact ? 230.0 : 320.0) *
+                          _textScale.clamp(1.0, 1.2);
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -348,45 +455,59 @@ class _OrderScreenState extends State<OrderScreen> {
                             child: Column(
                               children: [
                                 Expanded(
-                                  child: ListView(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
-                                    children: [
-                                      for (final category in categories)
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          child: FilledButton(
-                                            style: FilledButton.styleFrom(
-                                              backgroundColor:
-                                                  category == _category
-                                                  ? const Color(0xFFBCE9D8)
-                                                  : Colors.transparent,
-                                              foregroundColor:
-                                                  category == _category
-                                                  ? const Color(0xFF153E39)
-                                                  : Colors.white,
-                                              minimumSize: const Size(0, 64),
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 4,
-                                                  ),
+                                  child: RawScrollbar(
+                                    key: const Key('category-scrollbar'),
+                                    controller: _categoryScrollController,
+                                    thumbVisibility: true,
+                                    trackVisibility: true,
+                                    interactive: true,
+                                    thickness: 10,
+                                    radius: const Radius.circular(5),
+                                    thumbColor: const Color(0xFFBCE9D8),
+                                    trackColor: const Color(0xFF32564F),
+                                    child: ListView(
+                                      controller: _categoryScrollController,
+                                      primary: false,
+                                      key: const Key('category-list'),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      children: [
+                                        for (final category in categories)
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 4,
                                             ),
-                                            onPressed: () => setState(
-                                              () => _category = category,
-                                            ),
-                                            child: Text(
-                                              category,
-                                              style: const TextStyle(
-                                                fontSize: 18,
+                                            child: FilledButton(
+                                              style: FilledButton.styleFrom(
+                                                backgroundColor:
+                                                    category == _category
+                                                    ? const Color(0xFFBCE9D8)
+                                                    : Colors.transparent,
+                                                foregroundColor:
+                                                    category == _category
+                                                    ? const Color(0xFF153E39)
+                                                    : Colors.white,
+                                                minimumSize: const Size(0, 64),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 4,
+                                                    ),
+                                              ),
+                                              onPressed: () => setState(
+                                                () => _category = category,
+                                              ),
+                                              child: Text(
+                                                category,
+                                                style: const TextStyle(
+                                                  fontSize: 18,
+                                                ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
@@ -430,100 +551,146 @@ class _OrderScreenState extends State<OrderScreen> {
                                                           180)
                                                       .floor()
                                                       .clamp(1, 4);
-                                              return GridView.builder(
-                                                padding:
-                                                    const EdgeInsets.fromLTRB(
-                                                      12,
-                                                      0,
-                                                      12,
-                                                      12,
-                                                    ),
-                                                gridDelegate:
-                                                    SliverGridDelegateWithFixedCrossAxisCount(
-                                                      crossAxisCount: columns,
-                                                      mainAxisExtent: 210,
-                                                      crossAxisSpacing: 12,
-                                                      mainAxisSpacing: 12,
-                                                    ),
-                                                itemCount: visible.length,
-                                                itemBuilder: (context, index) {
-                                                  final menu = visible[index];
-                                                  return Card(
-                                                    margin: EdgeInsets.zero,
-                                                    color: Colors.white,
-                                                    clipBehavior:
-                                                        Clip.antiAlias,
-                                                    child: InkWell(
-                                                      onTap: () =>
-                                                          _selectMenu(menu),
-                                                      child: Padding(
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              12,
+                                              return RawScrollbar(
+                                                key: const Key(
+                                                  'menu-scrollbar',
+                                                ),
+                                                controller:
+                                                    _menuScrollController,
+                                                thumbVisibility: true,
+                                                trackVisibility: true,
+                                                interactive: true,
+                                                thickness: 10,
+                                                radius: const Radius.circular(
+                                                  5,
+                                                ),
+                                                thumbColor: const Color(
+                                                  0xFF246B58,
+                                                ),
+                                                trackColor: const Color(
+                                                  0xFFDDE7E1,
+                                                ),
+                                                child: GridView.builder(
+                                                  controller:
+                                                      _menuScrollController,
+                                                  primary: false,
+                                                  padding:
+                                                      const EdgeInsets.fromLTRB(
+                                                        12,
+                                                        0,
+                                                        12,
+                                                        12,
+                                                      ),
+                                                  gridDelegate:
+                                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                                        crossAxisCount: columns,
+                                                        mainAxisExtent:
+                                                            210 *
+                                                            _textScale.clamp(
+                                                              1.0,
+                                                              1.2,
                                                             ),
-                                                        child: Column(
-                                                          children: [
-                                                            Expanded(
-                                                              child: Center(
-                                                                child: Container(
-                                                                  width: 92,
-                                                                  height: 92,
-                                                                  decoration: const BoxDecoration(
-                                                                    color: Color(
-                                                                      0xFFFFF0DC,
+                                                        crossAxisSpacing: 12,
+                                                        mainAxisSpacing: 12,
+                                                      ),
+                                                  itemCount: visible.length,
+                                                  itemBuilder: (context, index) {
+                                                    final menu = visible[index];
+                                                    return Card(
+                                                      margin: EdgeInsets.zero,
+                                                      color: menu.isSoldOut
+                                                          ? const Color(
+                                                              0xFFEEEEEE,
+                                                            )
+                                                          : Colors.white,
+                                                      clipBehavior:
+                                                          Clip.antiAlias,
+                                                      child: InkWell(
+                                                        onTap: menu.isSoldOut
+                                                            ? null
+                                                            : () => _selectMenu(
+                                                                menu,
+                                                              ),
+                                                        child: Padding(
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                12,
+                                                              ),
+                                                          child: Column(
+                                                            children: [
+                                                              Expanded(
+                                                                child: Center(
+                                                                  child: Container(
+                                                                    width: 92,
+                                                                    height: 92,
+                                                                    decoration: const BoxDecoration(
+                                                                      color: Color(
+                                                                        0xFFFFF0DC,
+                                                                      ),
+                                                                      shape: BoxShape
+                                                                          .circle,
                                                                     ),
-                                                                    shape: BoxShape
-                                                                        .circle,
-                                                                  ),
-                                                                  child: Icon(
-                                                                    _categoryIcon(
-                                                                      menu.category,
-                                                                    ),
-                                                                    size: 52,
-                                                                    color: const Color(
-                                                                      0xFFBB743A,
+                                                                    child: Icon(
+                                                                      _categoryIcon(
+                                                                        menu.category,
+                                                                      ),
+                                                                      size: 52,
+                                                                      color: const Color(
+                                                                        0xFFBB743A,
+                                                                      ),
                                                                     ),
                                                                   ),
                                                                 ),
                                                               ),
-                                                            ),
-                                                            const SizedBox(
-                                                              height: 8,
-                                                            ),
-                                                            Text(
-                                                              menu.name,
-                                                              textAlign:
-                                                                  TextAlign
-                                                                      .center,
-                                                              style: const TextStyle(
-                                                                fontSize: 19,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              height: 6,
-                                                            ),
-                                                            Text(
-                                                              formatWon(
-                                                                menu.price,
-                                                              ),
-                                                              style:
-                                                                  const TextStyle(
-                                                                    fontSize:
-                                                                        18,
+                                                              if (menu
+                                                                  .isSoldOut)
+                                                                const Text(
+                                                                  '품절',
+                                                                  style: TextStyle(
                                                                     color: Color(
-                                                                      0xFF246B58,
+                                                                      0xFFB3261E,
                                                                     ),
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold,
                                                                   ),
-                                                            ),
-                                                          ],
+                                                                ),
+                                                              const SizedBox(
+                                                                height: 8,
+                                                              ),
+                                                              Text(
+                                                                menu.name,
+                                                                textAlign:
+                                                                    TextAlign
+                                                                        .center,
+                                                                style: const TextStyle(
+                                                                  fontSize: 19,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                ),
+                                                              ),
+                                                              const SizedBox(
+                                                                height: 6,
+                                                              ),
+                                                              Text(
+                                                                formatWon(
+                                                                  menu.price,
+                                                                ),
+                                                                style: const TextStyle(
+                                                                  fontSize: 18,
+                                                                  color: Color(
+                                                                    0xFF246B58,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
                                                         ),
                                                       ),
-                                                    ),
-                                                  );
-                                                },
+                                                    );
+                                                  },
+                                                ),
                                               );
                                             },
                                           ),
@@ -555,6 +722,29 @@ class _OrderScreenState extends State<OrderScreen> {
     _ => Icons.restaurant_menu,
   };
 
+  Future<void> _clearCart() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _scaled(
+        AlertDialog(
+          title: const Text('장바구니 전체 비우기'),
+          content: const Text('담긴 음식을 모두 삭제할까요?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('취소'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('모두 삭제'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (mounted && confirmed == true) _cart.clear();
+  }
+
   Widget _cartPanel() => ListenableBuilder(
     listenable: _cart,
     builder: (context, _) => Column(
@@ -584,6 +774,17 @@ class _OrderScreenState extends State<OrderScreen> {
                 child: const Text('주문내역', style: TextStyle(fontSize: 13)),
               ),
             ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _cart.entries.isEmpty ? null : _clearCart,
+              icon: const Icon(Icons.delete_sweep_outlined),
+              label: const Text('전체 비우기'),
+            ),
           ),
         ),
         Expanded(
@@ -684,8 +885,21 @@ class _OrderScreenState extends State<OrderScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: OutlinedButton.icon(
-            onPressed: () {},
+            onPressed: _cart.entries.isEmpty ? null : () {},
             style: _feedbackStyle().copyWith(
+              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.disabled)) {
+                  return const Color(0xFFE0E0E0);
+                }
+                return states.contains(WidgetState.pressed)
+                    ? const Color(0xFF153E39)
+                    : const Color(0xFF00695C);
+              }),
+              foregroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.disabled)
+                    ? const Color(0xFF757575)
+                    : Colors.white,
+              ),
               minimumSize: const WidgetStatePropertyAll(Size(0, 52)),
               textStyle: const WidgetStatePropertyAll(
                 TextStyle(fontSize: 18, fontWeight: FontWeight.bold),

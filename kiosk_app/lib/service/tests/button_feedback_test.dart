@@ -44,6 +44,10 @@ void main() {
   testWidgets('버튼 색상 전환만 실행하며 주문 금액은 유지', (tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('제육덮밥'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('장바구니 담기'));
+    await tester.pumpAndSettle();
     for (final label in ['직원 호출', '마이크', '주문내역', '결제하기']) {
       final finder = find
           .ancestor(
@@ -73,7 +77,7 @@ void main() {
       expect(color(), initial);
       expect(
         tester.widget<Text>(find.byKey(const Key('cart-total'))).data,
-        '0원',
+        '9,000원',
       );
     }
     expect(tester.takeException(), isNull);

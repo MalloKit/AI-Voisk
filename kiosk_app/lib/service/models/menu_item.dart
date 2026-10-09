@@ -6,6 +6,7 @@ class MenuItem {
     required this.category,
     required this.price,
     required this.description,
+    this.isSoldOut = false,
   });
   final String id;
   final String name;
@@ -14,6 +15,7 @@ class MenuItem {
   /// 금액은 원 단위 정수로 계산합니다.
   final int price;
   final String description;
+  final bool isSoldOut;
 }
 
 String formatWon(int amount) =>

@@ -22,6 +22,14 @@ void main() {
     Finder entry(String id) => find.byKey(ValueKey('cart-entry-$id'));
 
     await tap(find.text('제육덮밥'));
+    final optionScroll = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(SingleChildScrollView),
+    ).first;
+    final optionContext = tester.element(optionScroll);
+    expect(ScrollConfiguration.of(optionContext)
+        .buildOverscrollIndicator(optionContext, const SizedBox(),
+          const ScrollableDetails(direction: AxisDirection.down)), isA<SizedBox>());
     await tap(find.text('장바구니 담기'));
     expect(total(), '9,000원');
     await tap(entry('rice-1'));

@@ -2,25 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../service/screens/order_screen.dart';
 
-/// 팀 통합·시연용 선택 화면. 관리자·점주 화면은 담당자 구현 후 연결합니다.
+/// 고객이 포장 또는 매장 식사를 선택하는 시작 화면.
 class RoleSelectScreen extends StatelessWidget {
   const RoleSelectScreen({super.key});
-
-  void _showPending(BuildContext context, String role) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('$role 기능'),
-        content: const Text('준비 중입니다.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('닫기'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -35,20 +19,15 @@ class RoleSelectScreen extends StatelessWidget {
             spacing: 20,
             runSpacing: 20,
             children: [
-              _RoleButton(
-                label: '관리자',
-                onPressed: () => _showPending(context, '관리자'),
-              ),
-              _RoleButton(
-                label: '점주',
-                onPressed: () => _showPending(context, '점주'),
-              ),
-              _RoleButton(
-                label: '고객 서비스',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const OrderScreen()),
+              for (final mode in ['포장', '매장 식사'])
+                _RoleButton(
+                  label: mode,
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => OrderScreen(orderMode: mode),
+                    ),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -65,7 +44,7 @@ class _RoleButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     width: 180,
-    height: 80,
+    height: 170,
     child: FilledButton(
       style: FilledButton.styleFrom(
         backgroundColor: const Color(0xFF246B58),
@@ -74,7 +53,17 @@ class _RoleButton extends StatelessWidget {
         textStyle: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
       ),
       onPressed: onPressed,
-      child: Text(label),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            label == '포장' ? Icons.shopping_bag_outlined : Icons.restaurant,
+            size: 56,
+          ),
+          const SizedBox(height: 16),
+          Text(label),
+        ],
+      ),
     ),
   );
 }

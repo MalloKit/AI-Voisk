@@ -29,6 +29,7 @@ class CartController extends ChangeNotifier {
       _entries.values.fold(0, (sum, entry) => sum + entry.quantity);
 
   void add(MenuItem menu, int quantity, {List<MenuOption> options = const []}) {
+    if (menu.isSoldOut) throw StateError('품절 메뉴는 담을 수 없습니다.');
     if (quantity < 1) throw ArgumentError.value(quantity, 'quantity');
     final entry = CartEntry(menu, quantity, options);
     _entries[entry.id] = CartEntry(
@@ -69,5 +70,11 @@ class CartController extends ChangeNotifier {
 
   void remove(String entryId) {
     if (_entries.remove(entryId) != null) notifyListeners();
+  }
+
+  void clear() {
+    if (_entries.isEmpty) return;
+    _entries.clear();
+    notifyListeners();
   }
 }
