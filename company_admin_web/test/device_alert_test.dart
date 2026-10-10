@@ -154,7 +154,7 @@ void main() {
     expect(find.text('데이터를 불러오지 못했습니다.'), findsOneWidget);
     await tester.tap(find.widgetWithText(OutlinedButton, '다시 시도'));
     await tester.pumpAndSettle();
-    expect(find.text('시연 데이터'), findsOneWidget);
+    expect(find.text('Mock 데이터'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -165,7 +165,7 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     repo.pending!.complete(await repo.delegate.load());
     await tester.pumpAndSettle();
-    expect(find.text('시연 데이터'), findsOneWidget);
+    expect(find.text('Mock 데이터'), findsOneWidget);
   });
 
   testWidgets(

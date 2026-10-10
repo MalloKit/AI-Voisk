@@ -39,7 +39,7 @@ class _OrdersPageState extends State<OrdersPage> {
       children: [
         const PageHeading(
           title: '주문 조회',
-          description: '매장별 주문 시각, 테이블 번호와 주문 품목을 확인합니다.',
+          description: 'Mock 주문 데이터 · 실제 주문은 ORDER_API_BASE_URL 설정 후 조회합니다.',
         ),
         AppCard(
           child: Column(
@@ -117,7 +117,11 @@ class OrderTable extends StatelessWidget {
               DataCell(Text('#${order.id}')),
               DataCell(Text(data.store(order.storeId).name)),
               DataCell(Text(dateTimeLabel(order.orderedAt))),
-              DataCell(Text('${order.tableNo}번')),
+              DataCell(
+                Text(
+                  order.tableNo == 0 ? '포장' : '매장 식사 / 테이블 ${order.tableNo}번',
+                ),
+              ),
               DataCell(Text('${data.quantityForOrder(order.id)}개')),
               DataCell(
                 AppButton(
@@ -144,7 +148,10 @@ Future<void> showOrderDetails(
     children: [
       DetailField(label: '매장', value: data.store(order.storeId).name),
       DetailField(label: '주문 시각', value: dateTimeLabel(order.orderedAt)),
-      DetailField(label: '테이블 번호', value: '${order.tableNo}번'),
+      DetailField(
+        label: '주문 유형',
+        value: order.tableNo == 0 ? '포장' : '매장 식사 / 테이블 ${order.tableNo}번',
+      ),
       const Divider(),
       const SizedBox(height: AppSpacing.lg),
       const SectionHeading(title: '주문 품목'),

@@ -45,7 +45,7 @@ void main() {
 
   testWidgets('Store search, detail, empty results and reset', (tester) async {
     await openApp(tester);
-    expect(find.text('시연 데이터'), findsOneWidget);
+    expect(find.text('Mock 데이터'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('nav-stores')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '말로 카페 성수');

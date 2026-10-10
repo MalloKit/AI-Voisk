@@ -3,7 +3,13 @@ import 'package:flutter/material.dart';
 import '../theme/app_spacing.dart';
 
 class TopBar extends StatelessWidget {
-  const TopBar({super.key, required this.title, this.onMenu});
+  const TopBar({
+    super.key,
+    required this.title,
+    this.onMenu,
+    this.sourceLabel = '시연 데이터',
+  });
+  final String sourceLabel;
   final String title;
   final VoidCallback? onMenu;
   @override
@@ -32,7 +38,7 @@ class TopBar extends StatelessWidget {
               ],
               Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
               Chip(
-                label: const Text('시연 데이터'),
+                label: Text(sourceLabel),
                 backgroundColor: theme.colorScheme.secondaryContainer,
               ),
               if (!compact) ...[

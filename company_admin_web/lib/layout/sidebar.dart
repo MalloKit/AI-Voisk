@@ -82,7 +82,7 @@ class Sidebar extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.xl),
                 child: Text(
-                  'AI-Voisk 운영 관리\n시연 데이터 · Mock 모드',
+                  'AI-Voisk 운영 관리\n화면별 데이터 출처 확인',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

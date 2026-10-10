@@ -11,12 +11,15 @@ import '../features/dashboard/dashboard_page.dart';
 import '../features/stores/stores_page.dart';
 import '../features/owners/owners_page.dart';
 import '../features/orders/orders_page.dart';
+import '../features/orders/live_orders_page.dart';
+import '../data/repositories/order_repository.dart';
 import '../theme/app_spacing.dart';
 import 'sidebar.dart';
 import 'top_bar.dart';
 
 class AdminShell extends StatefulWidget {
-  const AdminShell({super.key, required this.repository});
+  const AdminShell({super.key, required this.repository, this.orderRepository});
+  final OrderRepository? orderRepository;
   final AdminRepository repository;
   @override
   State<AdminShell> createState() => _AdminShellState();
@@ -109,7 +112,10 @@ class _AdminShellState extends State<AdminShell> {
               initiallyUnlinked: unlinkedOnly,
             ),
             AdminPage.owners => OwnersPage(data: data),
-            AdminPage.orders => OrdersPage(data: data),
+            AdminPage.orders =>
+              widget.orderRepository == null
+                  ? OrdersPage(data: data)
+                  : LiveOrdersPage(repository: widget.orderRepository!),
             AdminPage.devices => DevicesPage(data: data),
             AdminPage.alerts => AlertsPage(
               data: data,
@@ -131,6 +137,11 @@ class _AdminShellState extends State<AdminShell> {
                   child: Column(
                     children: [
                       TopBar(
+                        sourceLabel:
+                            selected == AdminPage.orders &&
+                                widget.orderRepository != null
+                            ? '실제 주문 API'
+                            : 'Mock 데이터',
                         title: selected.label,
                         onMenu: desktop
                             ? null
