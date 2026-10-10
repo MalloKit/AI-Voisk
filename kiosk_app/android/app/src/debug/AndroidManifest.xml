@@ -4,4 +4,6 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- PC에서 실행하는 HTTP 연습용 API 연결에만 사용합니다. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>
