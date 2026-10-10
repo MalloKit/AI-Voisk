@@ -142,7 +142,7 @@ class _OrderScreenState extends State<OrderScreen> {
     final selectedOptions =
         editing?.options.map((option) => option.id).toSet() ?? <String>{};
     final options = _repository is ApiMenuRepository
-        ? <MenuOption>[]
+        ? menu.options
         : sampleOptions(menu.category);
     final confirmed = await showDialog<bool>(
       context: context,
@@ -201,11 +201,13 @@ class _OrderScreenState extends State<OrderScreen> {
                                     ? const Color(0xFFD5EEE3)
                                     : Colors.white,
                               ),
-                              onPressed: () => updateDialog(() {
-                                if (!selectedOptions.add(option.id)) {
-                                  selectedOptions.remove(option.id);
-                                }
-                              }),
+                              onPressed: option.isSoldOut
+                                  ? null
+                                  : () => updateDialog(() {
+                                      if (!selectedOptions.add(option.id)) {
+                                        selectedOptions.remove(option.id);
+                                      }
+                                    }),
                               child: Row(
                                 children: [
                                   Icon(
@@ -216,7 +218,9 @@ class _OrderScreenState extends State<OrderScreen> {
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
-                                      option.name,
+                                      option.isSoldOut
+                                          ? '${option.name} (품절)'
+                                          : option.name,
                                       style: const TextStyle(fontSize: 20),
                                     ),
                                   ),

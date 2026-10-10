@@ -7,6 +7,13 @@ from fastapi import FastAPI, HTTPException, Path as ApiPath
 from pydantic import BaseModel, Field
 
 
+class MenuOption(BaseModel):
+    id: str
+    name: str
+    price: int = Field(ge=0)
+    isSoldOut: bool = False
+
+
 class Menu(BaseModel):
     id: str
     name: str
@@ -14,6 +21,7 @@ class Menu(BaseModel):
     price: int = Field(ge=0)
     description: str
     isSoldOut: bool = False
+    options: list[MenuOption] = Field(default_factory=list)
 
 
 app = FastAPI(title="AI 보이스크 · 연습용 메뉴 API", version="0.1.0")
@@ -62,7 +70,20 @@ def store_menus(store_id: int = ApiPath(ge=1)):
         WHERE c.store_id = %s AND m.is_active = TRUE
         ORDER BY c.category_sort, c.category_id, m.menu_sort, m.menu_id
     ''', (store_id,))
+    option_rows = _db_query('''
+        SELECT o.option_id, o.menu_id, o.option_nm, o.extra_price, o.is_sold_out
+        FROM menu_option o JOIN menu m ON m.menu_id = o.menu_id
+        JOIN category c ON c.category_id = m.category_id
+        WHERE c.store_id = %s AND m.is_active = TRUE AND o.is_active = TRUE
+        ORDER BY o.menu_option_sort, o.option_id
+    ''', (store_id,)) if rows else []
+    options_by_menu = {}
+    for option in option_rows:
+        options_by_menu.setdefault(option['menu_id'], []).append(MenuOption(
+            id=str(option['option_id']), name=option['option_nm'],
+            price=option['extra_price'], isSoldOut=bool(option['is_sold_out'])))
     return [Menu(id=str(row['menu_id']), name=row['menu_nm'],
                  category=row['category_nm'], price=row['menu_price'],
-                 description=row['menu_des'] or '', isSoldOut=bool(row['is_sold_out']))
+                 description=row['menu_des'] or '', isSoldOut=bool(row['is_sold_out']),
+                 options=options_by_menu.get(row['menu_id'], []))
             for row in rows]

@@ -39,11 +39,14 @@ class MenuApiTests(unittest.TestCase):
     def test_database_menu_mapping(self):
         row = {'menu_id': 12, 'menu_nm': '테스트 메뉴', 'menu_price': 8000,
                'menu_des': None, 'is_sold_out': 1, 'category_nm': '식사'}
-        with patch('database.query', return_value=[row]) as query:
+        option = {'option_id': 3, 'menu_id': 12, 'option_nm': '밥 추가',
+                  'extra_price': 1000, 'is_sold_out': 1}
+        with patch('database.query', side_effect=[[row], [option]]) as query:
             response = self.client.get('/stores/7/menus')
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json(), [{'id': '12', 'name': '테스트 메뉴',
-                'category': '식사', 'price': 8000, 'description': '', 'isSoldOut': True}])
+                'category': '식사', 'price': 8000, 'description': '', 'isSoldOut': True,
+                'options': [{'id': '3', 'name': '밥 추가', 'price': 1000, 'isSoldOut': True}]}])
             self.assertEqual(query.call_args.args[1], (7,))
 
     def test_database_failure_hides_details(self):

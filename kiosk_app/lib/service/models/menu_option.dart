@@ -1,8 +1,14 @@
 class MenuOption {
-  const MenuOption({required this.id, required this.name, required this.price});
+  const MenuOption({
+    required this.id,
+    required this.name,
+    required this.price,
+    this.isSoldOut = false,
+  });
   final String id;
   final String name;
   final int price;
+  final bool isSoldOut;
 }
 
 /// 메뉴 한 개당 적용되는 임시 추가 옵션입니다.

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/menu_item.dart';
+import '../models/menu_option.dart';
 import 'menu_repository.dart';
 
 /// DB 비밀번호 없이 API 주소와 매장 번호로 메뉴를 조회합니다.
@@ -47,6 +48,17 @@ class ApiMenuRepository implements MenuRepository {
             price: price,
             description: row['description'] as String,
             isSoldOut: row['isSoldOut'] as bool,
+            options: ((row['options'] ?? []) as List).map((value) {
+              final option = value as Map<String, dynamic>;
+              final extraPrice = option['price'] as int;
+              if (extraPrice < 0) throw const FormatException('잘못된 옵션 가격입니다.');
+              return MenuOption(
+                id: option['id'] as String,
+                name: option['name'] as String,
+                price: extraPrice,
+                isSoldOut: option['isSoldOut'] as bool? ?? false,
+              );
+            }).toList(),
           );
         }).toList();
       })().timeout(const Duration(seconds: 15));

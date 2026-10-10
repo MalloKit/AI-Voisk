@@ -11,8 +11,17 @@ void main() {
     addTearDown(() => server.close(force: true));
     var status = 200;
     var body = jsonEncode([
-      {'id': '3', 'name': '테스트 메뉴', 'category': '식사', 'price': 8500,
-       'description': '설명', 'isSoldOut': true},
+      {
+        'id': '3',
+        'name': '테스트 메뉴',
+        'category': '식사',
+        'price': 8500,
+        'description': '설명',
+        'isSoldOut': true,
+        'options': [
+          {'id': '8', 'name': '밥 추가', 'price': 1000, 'isSoldOut': true},
+        ],
+      },
     ]);
     final subscription = server.listen((request) async {
       expect(request.uri.path, '/stores/7/menus');
@@ -22,12 +31,18 @@ void main() {
       await request.response.close();
     });
     addTearDown(subscription.cancel);
-    final repository = ApiMenuRepository(baseUrl: 'http://127.0.0.1:${server.port}', storeId: 7);
+    final repository = ApiMenuRepository(
+      baseUrl: 'http://127.0.0.1:${server.port}',
+      storeId: 7,
+    );
     final menus = await repository.loadMenus();
     expect(menus.single.id, '3');
     expect(menus.single.name, '테스트 메뉴');
     expect(menus.single.price, 8500);
     expect(menus.single.isSoldOut, isTrue);
+    expect(menus.single.options.single.name, '밥 추가');
+    expect(menus.single.options.single.price, 1000);
+    expect(menus.single.options.single.isSoldOut, isTrue);
     body = '[]';
     expect(await repository.loadMenus(), isEmpty);
     status = 503;
