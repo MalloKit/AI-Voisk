@@ -19,14 +19,14 @@ class PendingOrder {
     required List<CartEntry> entries,
     required int storeId,
     required int deviceId,
-    required int tableNo,
+    required String orderType,
     String? clientOrderId,
   }) : body = jsonEncode({
          'store_id': storeId,
          'device_id': deviceId,
          'client_order_id': clientOrderId ?? newOrderUuid(),
-         'order_type': tableNo == 0 ? 'takeaway' : 'dine_in',
-         'table_no': tableNo,
+         'order_type': orderType,
+         'table_no': null,
          'items': entries
              .map(
                (entry) => {
@@ -76,7 +76,9 @@ class ApiOrderRepository implements OrderRepository {
           .timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) {
         final detail = jsonDecode(utf8.decode(response.bodyBytes))['detail'];
-        if ([403, 422].contains(response.statusCode)) {
+        if ([403, 422].contains(response.statusCode) ||
+            (response.statusCode == 503 &&
+                detail == '주문 유형 DB 변경이 적용되지 않았습니다. 저장하지 않았습니다.')) {
           throw OrderValidationError(
             detail is String ? detail : '주문 정보를 확인해 주세요.',
           );

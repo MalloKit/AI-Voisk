@@ -17,6 +17,24 @@ Map<String, dynamic> order(int id, int tableNo) => {
 };
 
 void main() {
+  test('명시적 유형과 NULL 테이블, 기존 주문의 테이블 조회 호환', () {
+    for (final type in ['takeaway', 'dine_in']) {
+      final row = LiveOrder.fromJson({
+        ...order(3, 0),
+        'table_no': null,
+        'order_type': type,
+      });
+      expect(row.tableNo, isNull);
+      expect(row.diningLabel, type == 'takeaway' ? '포장' : '매장 식사');
+    }
+    expect(LiveOrder.fromJson(order(1, 0)).diningLabel, '포장');
+    expect(LiveOrder.fromJson(order(2, 3)).diningLabel, '매장 식사 / 테이블 3번');
+    expect(
+      LiveOrder.fromJson({...order(4, 0), 'table_no': null}).diningLabel,
+      '주문 유형 미확인',
+    );
+  });
+
   test('API 페이지 조회 및 상세 복수 옵션 매핑', () async {
     final client = MockClient((request) async {
       final offset = request.url.queryParameters['offset'];

@@ -18,7 +18,13 @@ class Cursor:
     @property
     def lastrowid(self): return self.cursor.lastrowid
     def execute(self, sql, params=()):
+        self.schema_rows = None
         if sql.startswith('SET '): return
+        if 'information_schema.COLUMNS' in sql:
+            rows = self.fixture.db.execute('PRAGMA table_info(orders)').fetchall()
+            self.schema_rows = [{'name': r['name'], 'nullable': 'NO' if r['notnull'] else 'YES'}
+                                for r in rows if r['name'] in ('order_type','table_no')]
+            return
         if sql == 'START TRANSACTION READ ONLY':
             self.fixture.db.execute('BEGIN')
             return
@@ -33,7 +39,7 @@ class Cursor:
             result['ordered_at'] = datetime.fromisoformat(result['ordered_at'])
         return result
     def fetchone(self): return self._row(self.cursor.fetchone())
-    def fetchall(self): return [self._row(r) for r in self.cursor.fetchall()]
+    def fetchall(self): return self.schema_rows if self.schema_rows is not None else [self._row(r) for r in self.cursor.fetchall()]
 
 
 class Connection:
@@ -56,7 +62,7 @@ class OrderApiTests(unittest.TestCase):
             CREATE TABLE category (category_id INTEGER PRIMARY KEY,store_id INT);
             CREATE TABLE menu (menu_id INTEGER PRIMARY KEY,category_id INT,menu_nm TEXT,menu_price INT,is_active INT,is_sold_out INT);
             CREATE TABLE menu_option (option_id INTEGER PRIMARY KEY,menu_id INT,option_nm TEXT,extra_price INT,is_active INT,is_sold_out INT);
-            CREATE TABLE orders (order_id INTEGER PRIMARY KEY AUTOINCREMENT,store_id INT,table_no INT,device_id INT,
+            CREATE TABLE orders (order_id INTEGER PRIMARY KEY AUTOINCREMENT,store_id INT,table_no INT,order_type TEXT,device_id INT,
                 client_order_id TEXT,ordered_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(device_id,client_order_id));
             CREATE TABLE order_item (item_id INTEGER PRIMARY KEY AUTOINCREMENT,order_id INT REFERENCES orders(order_id),
                 menu_id INT,item_quantity INT,option_id INT);
@@ -75,7 +81,7 @@ class OrderApiTests(unittest.TestCase):
         self.no_network = patch('database.connect', side_effect=AssertionError('Live DB access forbidden'))
         self.no_network.start()
         self.client = TestClient(app)
-        self.payload = dict(store_id=1,device_id=7,client_order_id=str(uuid4()),order_type='takeaway',table_no=0,
+        self.payload = dict(store_id=1,device_id=7,client_order_id=str(uuid4()),order_type='takeaway',table_no=None,
                             items=[dict(menu_id=10,quantity=2,option_ids=[101,102])])
     def tearDown(self):
         self.client.close(); self.factory.stop(); self.no_network.stop(); self.db.close()
@@ -89,7 +95,7 @@ class OrderApiTests(unittest.TestCase):
         order_id = response.json()['order_id']
         self.assertEqual(self.count('order_item_option'),2)
         detail = self.client.get(f'/admin/orders/{order_id}').json()
-        self.assertEqual(detail['table_no'],0)
+        self.assertIsNone(detail['table_no'])
         self.assertEqual(detail['order_type'],'takeaway')
         self.assertEqual(detail['items'][0]['quantity'],2)
         self.assertEqual([o['name'] for o in detail['items'][0]['options']],['밥 추가','고기 추가'])
@@ -102,7 +108,7 @@ class OrderApiTests(unittest.TestCase):
     def test_single_no_option_and_dine_in(self):
         for options in ([101],[]):
             self.payload['client_order_id'] = str(uuid4())
-            self.payload.update(order_type='dine_in',table_no=5)
+            self.payload.update(order_type='dine_in',table_no=None)
             self.payload['items'][0]['option_ids'] = options
             response = self.post()
             self.assertEqual(response.status_code,200)
@@ -133,7 +139,7 @@ class OrderApiTests(unittest.TestCase):
 
     def test_table_quantity_uuid_and_price_rules(self):
         original = dict(self.payload)
-        for changes in (dict(table_no=2),dict(order_type='dine_in'),dict(table_no=-1),
+        for changes in (dict(table_no=2),dict(order_type='invalid'),dict(table_no=-1),
                         dict(client_order_id='bad'),dict(table_no=True),dict(price=1)):
             self.payload = original | changes
             self.assertEqual(self.post().status_code,422)
@@ -166,6 +172,35 @@ class OrderApiTests(unittest.TestCase):
         self.db.execute('DELETE FROM order_item_option'); self.db.commit()
         detail = self.client.get(f'/admin/orders/{order_id}').json()
         self.assertEqual([o['option_id'] for o in detail['items'][0]['options']],[101])
+
+    def test_explicit_type_and_legacy_orders_before_and_after_migration(self):
+        for table, mode in ((0,'takeaway'),(3,'dine_in')):
+            self.db.execute('INSERT INTO orders (store_id,device_id,table_no,order_type,client_order_id) VALUES (1,7,?,NULL,?)',
+                            (table,str(uuid4())))
+        self.db.commit()
+        for order_id, table, mode in ((1,0,'takeaway'),(2,3,'dine_in')):
+            detail = self.client.get(f'/admin/orders/{order_id}').json()
+            self.assertEqual((detail['table_no'],detail['order_type']), (table,mode))
+        self.db.execute('ALTER TABLE orders DROP COLUMN order_type'); self.db.commit()
+        page = self.client.get('/admin/orders').json()
+        self.assertEqual({r['order_type'] for r in page['orders']},{'takeaway','dine_in'})
+        for order_id in (1,2):
+            self.assertEqual(self.client.get(f'/admin/orders/{order_id}').status_code,200)
+        rejected = self.post()
+        self.assertEqual(rejected.status_code,503)
+        self.assertIn('저장하지 않았습니다',rejected.json()['detail'])
+        self.assertEqual(self.count('orders'),2)
+
+    def test_type_conflict_uuid_and_missing_type(self):
+        order_id = self.post().json()['order_id']
+        self.payload['order_type']='dine_in'
+        self.assertEqual(self.post().status_code,409)
+        self.assertEqual(self.count('orders'),1)
+        self.payload.pop('order_type')
+        self.assertEqual(self.post().status_code,422)
+        self.db.execute('UPDATE orders SET order_type=NULL,table_no=0 WHERE order_id=?',(order_id,)); self.db.commit()
+        self.payload['order_type']='takeaway'
+        self.assertEqual(self.post().json(),{'order_id':order_id,'replayed':True})
 
     def test_local_access_limits_and_missing_order(self):
         remote = TestClient(app, client=('203.0.113.1',1234))

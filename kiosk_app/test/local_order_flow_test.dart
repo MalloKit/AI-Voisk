@@ -18,7 +18,7 @@ void main() {
       'liveDatabaseBlocked': true,
     });
     final repo = ApiOrderRepository(baseUrl: address);
-    for (final table in [0, 3]) {
+    for (final mode in ['takeaway', 'dine_in']) {
       final pending = PendingOrder(
         entries: [
           CartEntry(
@@ -30,7 +30,7 @@ void main() {
               description: '',
             ),
             2,
-            table == 0
+            mode == 'takeaway'
                 ? const [MenuOption(id: '101', name: '추가', price: 0)]
                 : const [
                     MenuOption(id: '101', name: '추가', price: 0),
@@ -40,7 +40,7 @@ void main() {
         ],
         storeId: 1,
         deviceId: 7,
-        tableNo: table,
+        orderType: mode,
       );
       final id = await repo.submit(pending);
       expect(await repo.submit(pending), id);

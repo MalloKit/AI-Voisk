@@ -49,13 +49,13 @@ void main() {
       entries: entries,
       storeId: 1,
       deviceId: 7,
-      tableNo: 0,
+      orderType: 'takeaway',
     );
     await expectLater(repo.submit(pending), throwsStateError);
     expect(await repo.submit(pending), 77);
     expect(bodies[0], bodies[1]);
     final payload = jsonDecode(bodies[0]);
-    expect(payload['table_no'], 0);
+    expect(payload['table_no'], isNull);
     expect(payload['order_type'], 'takeaway');
     expect(payload['items'], [
       {
@@ -75,7 +75,7 @@ void main() {
     client.close();
   });
 
-  testWidgets('매장 식사 테이블 검증, 저장 중 중복 클릭 차단, 실패 후 재시도', (tester) async {
+  testWidgets('매장 식사 입력 없이 저장, 중복 클릭 차단, 실패 후 재시도', (tester) async {
     final bodies = <String>[];
     final firstResponse = Completer<http.Response>();
     final client = MockClient((request) async {
@@ -112,11 +112,9 @@ void main() {
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('주문 저장'));
-    await tester.pumpAndSettle();
-    expect(bodies, isEmpty);
-    expect(find.text('매장 식사는 1 이상의 테이블 번호를 입력해 주세요.'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), '3');
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(SegmentedButton<String>), findsNothing);
+    expect(find.text('주문 방식: 매장 식사'), findsOneWidget);
     await tester.tap(find.text('주문 저장'));
     await tester.tap(find.text('주문 저장'));
     await tester.pump();
@@ -128,16 +126,18 @@ void main() {
     await tester.tap(find.text('같은 주문 재시도'));
     await tester.pumpAndSettle();
     expect(bodies[0], bodies[1]);
-    expect(jsonDecode(bodies[0])['table_no'], 3);
+    expect(jsonDecode(bodies[0])['table_no'], isNull);
+    expect(jsonDecode(bodies[0])['order_type'], 'dine_in');
     expect(find.text('주문 번호 #77'), findsOneWidget);
     await tester.tap(find.text('확인'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
   });
 
-  testWidgets('포장은 테이블 입력 없이 0 전송', (tester) async {
+  testWidgets('포장은 최초 선택 유형과 NULL 테이블 전송', (tester) async {
     final client = MockClient((request) async {
-      expect(jsonDecode(request.body)['table_no'], 0);
+      expect(jsonDecode(request.body)['table_no'], isNull);
+      expect(jsonDecode(request.body)['order_type'], 'takeaway');
       return http.Response('{"order_id":78}', 200);
     });
     addTearDown(client.close);
@@ -184,6 +184,7 @@ void main() {
                   ),
                   storeId: 1,
                   deviceId: 7,
+                  orderMode: '포장',
                 ),
               ),
               child: const Text('open'),

@@ -1,10 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../service/screens/order_screen.dart';
+import '../service/data/menu_repository.dart';
+import '../service/data/order_repository.dart';
 
 /// 고객이 포장 또는 매장 식사를 선택하는 시작 화면.
 class RoleSelectScreen extends StatelessWidget {
-  const RoleSelectScreen({super.key});
+  const RoleSelectScreen({
+    super.key,
+    this.menuRepository,
+    this.orderRepository,
+    this.storeId = const int.fromEnvironment('STORE_ID'),
+    this.deviceId = const int.fromEnvironment('DEVICE_ID'),
+  });
+  final MenuRepository? menuRepository;
+  final OrderRepository? orderRepository;
+  final int storeId, deviceId;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -24,7 +35,13 @@ class RoleSelectScreen extends StatelessWidget {
                   label: mode,
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => OrderScreen(orderMode: mode),
+                      builder: (_) => OrderScreen(
+                        orderMode: mode,
+                        repository: menuRepository,
+                        orderRepository: orderRepository,
+                        storeId: storeId,
+                        deviceId: deviceId,
+                      ),
                     ),
                   ),
                 ),

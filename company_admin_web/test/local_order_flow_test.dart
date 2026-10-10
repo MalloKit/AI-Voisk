@@ -19,7 +19,8 @@ void main() {
       final repo = ApiOrderRepository(baseUrl: address);
       final rows = await repo.load();
       expect(rows, hasLength(2));
-      expect(rows.map((o) => o.tableNo).toSet(), {0, 3});
+      expect(rows.map((o) => o.orderType).toSet(), {'takeaway', 'dine_in'});
+      expect(rows.every((o) => o.tableNo == null), isTrue);
       for (final row in rows) {
         final detail = await repo.detail(row.id);
         expect(detail.storeName, '시연 매장');
@@ -27,9 +28,12 @@ void main() {
         expect(detail.items.single['menu_name'], '메뉴');
         expect(
           detail.items.single['options'],
-          hasLength(row.tableNo == 0 ? 1 : 2),
+          hasLength(row.orderType == 'takeaway' ? 1 : 2),
         );
-        expect(detail.diningLabel, row.tableNo == 0 ? '포장' : '매장 식사 / 테이블 3번');
+        expect(
+          detail.diningLabel,
+          row.orderType == 'takeaway' ? '포장' : '매장 식사',
+        );
       }
     },
     skip: address.isEmpty

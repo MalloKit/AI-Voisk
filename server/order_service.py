@@ -1,4 +1,4 @@
-"""시연용 주문 저장/조회. 스키마 변경 없이 한 연결의 트랜잭션을 사용합니다."""
+"""주문 유형 이관 후 신규 저장. 기존 스키마의 주문 조회도 유지합니다."""
 from datetime import timezone
 from typing import Literal
 from uuid import UUID
@@ -26,26 +26,33 @@ class OrderInput(BaseModel):
     device_id: StrictInt = Field(ge=1)
     client_order_id: UUID
     order_type: Literal['takeaway', 'dine_in']
-    table_no: StrictInt = Field(ge=0, le=2147483647)
+    table_no: None = None
     items: list[OrderItemInput] = Field(min_length=1, max_length=100)
-
-    @model_validator(mode='after')
-    def table_rule(self):
-        if (self.order_type == 'takeaway') != (self.table_no == 0):
-            raise ValueError('포장은 0, 매장 식사는 1 이상의 테이블 번호가 필요합니다.')
-        return self
-
 
 def connection_factory():
     from database import connect
     return connect()
 
 
+def _order_schema(cursor):
+    cursor.execute('''SELECT COLUMN_NAME AS name, IS_NULLABLE AS nullable
+        FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()
+        AND TABLE_NAME='orders' AND COLUMN_NAME IN ('order_type','table_no')''')
+    return {row['name']: row['nullable'] for row in cursor.fetchall()}
+
+
+def _type(row):
+    if row.get('order_type') in ('takeaway', 'dine_in'):
+        return row['order_type']
+    table = row.get('table_no')
+    return 'takeaway' if table == 0 else ('dine_in' if table is not None and table > 0 else None)
+
+
 def _header(row):
     result = dict(row)
     moment = result['ordered_at']
     result['ordered_at'] = moment.replace(tzinfo=timezone.utc).isoformat()
-    result['order_type'] = 'takeaway' if row['table_no'] == 0 else 'dine_in'
+    result['order_type'] = _type(row)
     return result
 
 
@@ -87,20 +94,23 @@ def save_order(request: OrderInput):
         connection.begin()
         with connection.cursor() as cursor:
             cursor.execute("SET time_zone = '+00:00'")
+            schema = _order_schema(cursor)
+            if 'order_type' not in schema or schema.get('table_no') != 'YES':
+                raise HTTPException(503, '주문 유형 DB 변경이 적용되지 않았습니다. 저장하지 않았습니다.')
             # Serializes retries for this device, including simultaneous workers.
             cursor.execute('SELECT device_id,store_id,is_active FROM kiosk_device WHERE device_id=%s FOR UPDATE',
                            (request.device_id,))
             device = cursor.fetchone()
             if not device or device['store_id'] != request.store_id:
                 raise HTTPException(422, '기기의 소속 매장이 일치하지 않습니다.')
-            cursor.execute('SELECT order_id,store_id,table_no FROM orders WHERE device_id=%s AND client_order_id=%s',
+            cursor.execute('SELECT order_id,store_id,table_no,order_type FROM orders WHERE device_id=%s AND client_order_id=%s',
                            (request.device_id, str(request.client_order_id)))
             existing = cursor.fetchone()
             if existing:
                 saved = _items(cursor, existing['order_id'])
                 same_items = _canonical((i['menu_id'], i['quantity'], [o['option_id'] for o in i['options']]) for i in saved)
                 incoming = _canonical((i.menu_id, i.quantity, i.option_ids) for i in request.items)
-                if existing['store_id'] != request.store_id or existing['table_no'] != request.table_no or same_items != incoming:
+                if existing['store_id'] != request.store_id or _type(existing) != request.order_type or same_items != incoming:
                     raise HTTPException(409, '이미 사용된 주문 UUID의 내용이 다릅니다.')
                 connection.commit()
                 return {'order_id': existing['order_id'], 'replayed': True}
@@ -124,8 +134,8 @@ def save_order(request: OrderInput):
                 if price < 0:
                     raise HTTPException(422, '메뉴 가격 정보를 확인해 주세요.')
                 total += price * item.quantity
-            cursor.execute('INSERT INTO orders (store_id,table_no,device_id,client_order_id) VALUES (%s,%s,%s,%s)',
-                           (request.store_id,request.table_no,request.device_id,str(request.client_order_id)))
+            cursor.execute('INSERT INTO orders (store_id,table_no,device_id,client_order_id,order_type) VALUES (%s,NULL,%s,%s,%s)',
+                           (request.store_id,request.device_id,str(request.client_order_id),request.order_type))
             order_id = cursor.lastrowid
             for item in request.items:
                 cursor.execute('INSERT INTO order_item (order_id,menu_id,item_quantity,option_id) VALUES (%s,%s,%s,NULL)',
@@ -148,9 +158,10 @@ def list_orders(limit=100, offset=0):
         with connection.cursor() as cursor:
             cursor.execute("SET time_zone = '+00:00'")
             cursor.execute('START TRANSACTION READ ONLY')
+            type_column = ',o.order_type' if 'order_type' in _order_schema(cursor) else ''
             cursor.execute('SELECT COUNT(*) AS total FROM orders')
             total = cursor.fetchone()['total']
-            cursor.execute('''SELECT o.order_id,o.store_id,s.store_nm AS store_name,o.ordered_at,o.table_no,
+            cursor.execute(f'''SELECT o.order_id,o.store_id,s.store_nm AS store_name,o.ordered_at,o.table_no{type_column},
                 o.device_id,COALESCE((SELECT SUM(item_quantity) FROM order_item WHERE order_id=o.order_id),0) AS quantity
                 FROM orders o JOIN store s ON s.store_id=o.store_id
                 ORDER BY o.ordered_at DESC,o.order_id DESC LIMIT %s OFFSET %s''', (limit,offset))
@@ -166,7 +177,8 @@ def order_detail(order_id):
         with connection.cursor() as cursor:
             cursor.execute("SET time_zone = '+00:00'")
             cursor.execute('START TRANSACTION READ ONLY')
-            cursor.execute('''SELECT o.order_id,o.store_id,s.store_nm AS store_name,o.ordered_at,o.table_no,o.device_id
+            type_column = ',o.order_type' if 'order_type' in _order_schema(cursor) else ''
+            cursor.execute(f'''SELECT o.order_id,o.store_id,s.store_nm AS store_name,o.ordered_at,o.table_no,o.device_id{type_column}
                 FROM orders o JOIN store s ON s.store_id=o.store_id WHERE o.order_id=%s''', (order_id,))
             row = cursor.fetchone()
             if not row:

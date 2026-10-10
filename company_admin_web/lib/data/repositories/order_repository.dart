@@ -8,14 +8,28 @@ class LiveOrder {
       storeId = row['store_id'] as int,
       storeName = row['store_name'] as String,
       orderedAt = DateTime.parse(row['ordered_at'] as String).toLocal(),
-      tableNo = row['table_no'] as int,
+      tableNo = row['table_no'] as int?,
+      orderType =
+          row['order_type'] as String? ??
+          (row['table_no'] == 0
+              ? 'takeaway'
+              : (row['table_no'] is int && (row['table_no'] as int) > 0
+                    ? 'dine_in'
+                    : 'unknown')),
       quantity = (row['quantity'] as num?)?.toInt() ?? 0,
       items = List<Map<String, dynamic>>.from(row['items'] as List? ?? []);
-  final int id, storeId, tableNo, quantity;
+  final int id, storeId, quantity;
+  final int? tableNo;
+  final String orderType;
   final String storeName;
   final DateTime orderedAt;
   final List<Map<String, dynamic>> items;
-  String get diningLabel => tableNo == 0 ? '포장' : '매장 식사 / 테이블 $tableNo번';
+  String get diningLabel => switch (orderType) {
+    'takeaway' => '포장',
+    'dine_in' =>
+      tableNo != null && tableNo! > 0 ? '매장 식사 / 테이블 $tableNo번' : '매장 식사',
+    _ => '주문 유형 미확인',
+  };
 }
 
 abstract class OrderRepository {

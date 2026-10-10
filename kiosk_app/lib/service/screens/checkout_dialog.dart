@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../controllers/cart_controller.dart';
 import '../data/order_repository.dart';
@@ -23,24 +22,15 @@ class CheckoutDialog extends StatefulWidget {
 }
 
 class _CheckoutDialogState extends State<CheckoutDialog> {
-  final table = TextEditingController();
-  late String mode = widget.orderMode ?? '포장';
   PendingOrder? pending;
   bool sending = false;
   bool rejectedWithoutSave = false;
   int? orderId;
   String? error;
-  @override
-  void dispose() {
-    table.dispose();
-    super.dispose();
-  }
-
   Future<void> submit() async {
     if (sending || orderId != null) return;
-    final number = mode == '포장' ? 0 : int.tryParse(table.text);
-    if (number == null || (mode != '포장' && number < 1) || number > 2147483647) {
-      setState(() => error = '매장 식사는 1 이상의 테이블 번호를 입력해 주세요.');
+    if (!['포장', '매장 식사'].contains(widget.orderMode)) {
+      setState(() => error = '시작 화면에서 주문 방식을 선택해 주세요.');
       return;
     }
     if (widget.storeId < 1 || widget.deviceId < 1) {
@@ -61,7 +51,7 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
         entries: widget.entries,
         storeId: widget.storeId,
         deviceId: widget.deviceId,
-        tableNo: number,
+        orderType: widget.orderMode == '포장' ? 'takeaway' : 'dine_in',
       );
     } on FormatException {
       setState(() => error = 'Mock 메뉴는 저장할 수 없습니다. DB 메뉴 API를 연결해 주세요.');
@@ -93,7 +83,7 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
   Widget build(BuildContext context) => PopScope(
     canPop: pending == null || orderId != null || rejectedWithoutSave,
     child: AlertDialog(
-      title: Text(orderId == null ? '시연용 주문 완료' : '주문이 완료되었습니다'),
+      title: Text(orderId == null ? '주문 내용 확인' : '주문이 완료되었습니다'),
       content: SizedBox(
         width: 360,
         child: Column(
@@ -104,28 +94,26 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
             else ...[
               const Text('실제 결제 없이 주문을 저장합니다.'),
               const SizedBox(height: 16),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: '포장', label: Text('포장')),
-                  ButtonSegment(value: '매장 식사', label: Text('매장 식사')),
-                ],
-                selected: {mode},
-                onSelectionChanged: pending != null
-                    ? null
-                    : (values) => setState(() {
-                        mode = values.single;
-                        error = null;
-                      }),
-              ),
-              if (mode == '매장 식사')
-                TextField(
-                  controller: table,
-                  enabled: pending == null,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(labelText: '테이블 번호 (1 이상)'),
+              Text('주문 방식: ${widget.orderMode ?? '선택되지 않음'}'),
+              const SizedBox(height: 16),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 240),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final entry in widget.entries) ...[
+                        Text('${entry.menu.name} · ${entry.quantity}개'),
+                        if (entry.options.isNotEmpty)
+                          Text(
+                            '옵션: ${entry.options.map((o) => o.name).join(', ')}',
+                          ),
+                        const SizedBox(height: 8),
+                      ],
+                    ],
+                  ),
                 ),
-              if (mode == '포장') const Text('테이블 번호 없이 포장으로 저장합니다.'),
+              ),
               if (error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
