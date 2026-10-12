@@ -1,67 +1,91 @@
-# AI-Voisk 회사 관리자 Web
+# AI-Voisk 회사 관리자 웹
 
-회사 관리자용 Material 3 기반 UI입니다. 모든 데이터는 Mock이며 서버/API 요청과 DB 저장은 없습니다. 알림 확인 처리는 Mock Data Source의 메모리에만 반영됩니다.
+React + TypeScript + Vite 기반 회사 관리자 웹입니다. 같은 폴더의 기존 Flutter 관리자 앱을 대체했습니다. 키오스크·FastAPI·Azure MySQL·점주용 프로젝트는 전환 대상이 아닙니다.
 
 ## 실행
 
-```powershell
-cd company_admin_web
-flutter pub get
-flutter run -d chrome
-```
-
-## 확인
+Node.js 22.12 이상과 npm이 필요합니다. Node 24.19.0에서 검증했습니다. 회사 관리자 폴더에서 실행합니다.
 
 ```powershell
-flutter analyze
-flutter test
-flutter build web
+npm install
+npm run dev
 ```
 
-## 화면
+브라우저: **http://127.0.0.1:8080** (또는 http://localhost:8080). 기존 FastAPI를 **http://127.0.0.1:8001**에서 별도로 실행해야 실제 주문이 조회됩니다. 서버 실행은 기존 서버 안내를 따릅니다. 이 앱은 DB에 직접 접속하지 않습니다.
 
-- 운영 요약: 등록 매장, 점주 계정, 미연결 매장, 최근 7일 주문, 최근 주문 상세
-- 매장 관리: 검색, 업종/점주 연결 필터, 페이지 이동, 기본 정보 상세
-- 점주 계정: ID 검색, 연결 여부 필터, 연결 매장 상세
-- 주문 조회: 주문 ID 검색, 매장/기간 필터, 품목/옵션/수량 상세
-- 기기 관리: 기기 ID/매장 검색, 설치 매장/연결 상태 필터, 마지막 연결/앱 버전 조회, 기기 상세 및 관련 알림
-- 장애/알림: 오프라인/연결 오류/업데이트 필요 목록, 유형/확인 상태 필터, 상세 및 확인 완료 처리
+개발/미리보기 포트는 8080으로 고정되며 이미 사용 중이면 종료합니다. 기존 FastAPI의 CORS 허용 주소와 일치하므로 서버나 프록시를 수정하지 않았습니다.
 
-시연 기준일은 2026-10-03으로 고정합니다. 최근 N일은 기준일을 포함합니다. 메뉴와 옵션 이름은 현재 등록 정보이며 주문 당시 정보의 보존을 의미하지 않습니다.
+```powershell
+npm run build       # TypeScript 검사 + dist 생성
+npm run preview     # localhost:8080 (dev와 동시 실행하지 않음)
+npm test            # 실제 DB 없는 자동 검증
+npm run test:live   # 로컬 FastAPI 실행 시 GET 목록/상세/CORS 읽기 전용 검증
+```
 
-## 구조
+이 PC에는 npm이 PATH에 없어 `.tools/` 안에 공식 npm 패키지를 임시 준비했습니다. 이 도구는 Git에 포함되지 않으며 앱 의존성이 아닙니다. 일반 환경에는 npm이 포함된 Node.js 배포판을 설치하면 위 명령을 사용합니다. 현재 PC의 준비된 도구를 사용하려면 현재 PowerShell 세션에만 다음 경로를 추가합니다.
 
-- `lib/theme/`: 브랜드 색상, 시스템 폰트, 간격/크기 토큰과 Material 3 테마
-- `lib/widgets/admin_widgets.dart`: 공통 카드, 버튼, 입력/필터, 표, 상세 다이얼로그
-- `lib/layout/`: 사이드바, 상단바, 반응형 앱 레이아웃
-- `lib/features/`: 화면 및 화면별 필터 상태
-- `lib/data/models.dart`: 기존 DB 필드의 조회용 모델 (비밀번호 제외)
-- `lib/data/mock/mock_data.dart`: 시연 데이터와 기준일
-- `lib/data/admin_data.dart`: Repository 결과의 조회 및 ID 관계 해석 (Mock에 직접 의존하지 않음)
-- `lib/data/admin_snapshot.dart`: 기존 데이터와 향후 데이터의 변경 불가능한 조회 결과
-- `lib/data/repositories/admin_repository.dart`: 비동기 조회/알림 확인 인터페이스
-- `lib/data/repositories/mock_admin_repository.dart`: Mock Repository 구현
-- `lib/data/sources/admin_data_source.dart`: Data Source 인터페이스
-- `lib/data/sources/mock_admin_data_source.dart`: 기존/향후 샘플 데이터를 조합하고 메모리에서 확인 상태를 관리
-- `lib/data/future/models/`: 현재 DB에 없는 기기/알림의 향후 프론트 계약 (DB/API 확정 명세 아님)
-- `lib/data/future/mock/future_mock_data.dart`: 현재 DB에 없는 데이터의 시연 샘플만 별도 보관
+```powershell
+$env:PATH = (Join-Path (Get-Location) '.tools') + ';' + $env:PATH
+npm install
+npm run dev
+```
 
-## Repository 교체
+## 데이터 출처
 
-`CompanyAdminApp(repository: ...)`에 `AdminRepository` 구현체를 주입합니다. 기본 구현은 앱 시작점 `app.dart`에서 구성한 `MockAdminRepository(MockAdminDataSource())`입니다. 화면은 Mock 파일을 직접 참조하지 않습니다.
+- **주문 조회**: 기본적으로 실제 FastAPI를 호출합니다. GET만 사용하며 저장·결제 API를 호출하지 않습니다.
+- **운영 요약·매장·점주·기기·장애/알림**: 기존 Flutter와 동일한 Mock 데이터/기능을 유지합니다. 대시보드 주문 지표도 Mock입니다.
+- 알림 확인은 Repository 메모리에서만 반영됩니다. 화면 이동 시 유지되지만 새로고침하면 초기화됩니다. 기기 연결 상태나 장애 해소 여부를 변경하지 않습니다.
+- API 오류를 Mock 데이터로 대체하지 않습니다.
 
-향후 API Repository가 `load()`로 `AdminSnapshot`을 반환하고 `acknowledgeAlert()`를 구현하면 같은 화면 흐름을 사용할 수 있습니다. 실제 엔드포인트, 인증, 권한과 DB 확장은 서버/DB 담당자와 별도로 합의해야 합니다. 초기 데이터 로딩, 실패/재시도, 확인 처리 중/실패 UI를 포함합니다.
+공개 설정은 `.env.example`을 참고하세요. 주소를 변경하려면 개인 `.env.local`에 `VITE_ORDER_API_BASE_URL`을 지정하고 개발 서버를 재시작합니다. **VITE\_ 값은 브라우저에 포함되므로 비밀번호·DB 설정·인증 비밀을 넣지 마세요.**
 
-## 기기/알림 시연 규칙
+Mock 주문 확인은 `VITE_ORDER_SOURCE=mock`을 명시합니다. 기본값은 `api`이며 주소를 생략해도 자동으로 Mock 전환하지 않습니다.
 
-기기 상태는 2026-10-03 15:00의 고정 관측 샘플이며 실시간 접속 판정이 아닙니다. 마지막 연결 시각이 없는 기기도 포함합니다.
+## 유지한 화면 기능
 
-알림의 `미확인 → 확인 완료`는 검토 표시이며 기기 상태나 장애 해소를 바꾸지 않습니다. `해소됨`은 샘플 이력으로만 제공합니다. 확인 시각은 처리한 로컬 시각입니다. 확인 결과는 같은 실행 중 화면을 이동해도 유지되며 브라우저 새로고침 시 초기화됩니다. DB 저장, 원격 업데이트/재시작은 수행하지 않습니다.
+| 화면      | 기능                                                                                    |
+| --------- | --------------------------------------------------------------------------------------- |
+| 운영 요약 | 매장·점주·미연결 매장·최근 7일 주문, 기기/알림 현황, Mock 주문·매장 상세, 각 화면 이동  |
+| 매장 관리 | 이름·대표자·사업자번호 검색, 업종·점주 연결 필터, 초기화, 기본 정보·담당자·점주 상세    |
+| 점주 계정 | ID·로그인 ID 검색, 매장 연결 필터, 초기화, 계정별 연결 매장 상세                        |
+| 주문 조회 | 실제 목록·상세, ID·매장·기간 필터, 새로고침, 복수 옵션·수량·유형, 기존/NULL 테이블 주문 |
+| 기기 관리 | ID·매장 검색, 매장·연결 상태 필터, 연결 이력·버전·설치 주소·관련 알림 상세              |
+| 장애/알림 | 검색, 유형·상태 필터, 상세, Mock 확인 처리와 실패 재시도                                |
 
-최종 브랜드 통일 시 `theme/`와 공통 위젯에서 스타일을 조정합니다. 외부 폰트 다운로드 없이 시스템 한글 폰트를 사용합니다. 1000px 미만에서는 사이드바가 드로어로 바뀌며 표는 가로 스크롤됩니다.
+공통: 5행 페이지, 검색어 지우기, 초기화, 로딩/오류/빈 결과, 모바일 메뉴와 표 가로 스크롤, 모달 Escape/초점 복귀.
 
-매출, 결제, AI 성과, 메뉴/가격 수정은 포함하지 않습니다. 점주용 `admin_web` 및 다른 프로젝트에는 의존하지 않습니다. 기존 SQL과 DB 스키마는 수정하지 않습니다.
-# 중간 시연 실제 주문 조회
+## 주문 API
 
-`ORDER_API_BASE_URL`을 지정하면 주문 조회만 실제 FastAPI와 연결됩니다. 나머지 관리 화면은 Mock으로 유지합니다.
-실행 방법·중복 방지·테스트·DB 제약은 [서버 시연 안내](../server/MIDTERM_DEMO.md)를 참고하세요.
+```text
+GET /admin/orders?limit=200&offset=0
+GET /admin/orders/{order_id}
+```
+
+목록의 `orders`/`total`을 읽고 기존 Flutter처럼 모든 페이지를 조회한 뒤 화면 필터를 적용합니다. 상세의 메뉴·수량·옵션과 주문 유형을 표시합니다. 날짜는 API 오프셋을 해석하여 브라우저 현지 시각으로 표시합니다.
+
+명시적 `order_type=takeaway|dine_in`을 우선합니다. 이전 응답에 유형이 없으면 `table_no=0`은 포장, 양수는 매장 식사로 해석합니다. NULL 테이블 신규 주문에는 번호를 표시하지 않고 불명확한 유형은 미확인으로 표시합니다. 주문 당시 가격이 없으므로 과거 금액을 만들어 표시하지 않습니다.
+
+요청 타임아웃 20초, 화면 이탈 시 취소. 정식 관리자 인증이 없는 기존 API이므로 로컬 시연으로 사용하며 외부 배포하지 않습니다.
+
+## 구성
+
+```text
+src/
+  App.tsx / main.tsx          # Repository 주입, 화면 선택
+  components/ui.tsx          # 표·검색·필터·모달·카드·상태
+  layout/AdminShell.tsx      # 사이드바·상단바·모바일 메뉴
+  features/                  # 6개 화면과 상세
+  data/
+    models.ts / selectors.ts
+    adminRepository.ts       # Mock 관리 Repository
+    orderRepository.ts       # 실제 GET 주문 Repository
+    mock/admin-fixture.json  # 등록 정보/주문 샘플
+    mock/future-fixture.json # 미래 기기 상태·알림 샘플
+  theme/tokens.css           # 색상·폰트·간격·크기
+  theme/components.css      # 공통/반응형 스타일
+  hooks/useAsync.ts
+  test/                      # 기능/API 계약 검증
+scripts/verify-live-api.mjs  # 읽기 전용 실연동 확인
+```
+
+기능 비교·검증 범위·미검증 항목: [MIGRATION.md](MIGRATION.md). `.env`, `node_modules`, `.tools`, `dist`, 화면 캡처는 Git에서 제외합니다.

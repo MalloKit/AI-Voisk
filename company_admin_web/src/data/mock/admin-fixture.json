@@ -1,0 +1,267 @@
+{
+  "admins": [
+    {
+      "id": 1,
+      "name": "김지안"
+    },
+    {
+      "id": 2,
+      "name": "박도윤"
+    }
+  ],
+  "owners": [
+    {
+      "id": 1,
+      "loginId": "mallo_cafe"
+    },
+    {
+      "id": 2,
+      "loginId": "seoul_kitchen"
+    },
+    {
+      "id": 3,
+      "loginId": "green_table"
+    },
+    {
+      "id": 4,
+      "loginId": "new_owner"
+    }
+  ],
+  "stores": [
+    {
+      "id": 1,
+      "name": "말로 카페 성수",
+      "address": "서울 성동구 성수이로 10",
+      "addressDetail": "1층",
+      "postcode": "04782",
+      "phone": "02-000-1001",
+      "businessNo": "0000000001",
+      "representative": "이서준",
+      "type": "카페",
+      "adminId": 1,
+      "ownerId": 1
+    },
+    {
+      "id": 2,
+      "name": "서울 한끼",
+      "address": "서울 마포구 월드컵북로 20",
+      "addressDetail": "2층",
+      "postcode": "03992",
+      "phone": "02-000-1002",
+      "businessNo": "0000000002",
+      "representative": "최하린",
+      "type": "한식",
+      "adminId": 2,
+      "ownerId": 2
+    },
+    {
+      "id": 3,
+      "name": "그린 테이블",
+      "address": "서울 강남구 테헤란로 30",
+      "addressDetail": "",
+      "postcode": "06234",
+      "phone": "02-000-1003",
+      "businessNo": "0000000003",
+      "representative": "정유진",
+      "type": "샐러드",
+      "adminId": 1,
+      "ownerId": 3
+    },
+    {
+      "id": 4,
+      "name": "말로 카페 연남",
+      "address": "서울 마포구 동교로 40",
+      "addressDetail": "1층",
+      "postcode": "03983",
+      "phone": "02-000-1004",
+      "businessNo": "0000000004",
+      "representative": "이서준",
+      "type": "카페",
+      "adminId": 1,
+      "ownerId": 1
+    },
+    {
+      "id": 5,
+      "name": "온기 분식",
+      "address": "서울 송파구 백제고분로 50",
+      "addressDetail": "",
+      "postcode": "05560",
+      "phone": "02-000-1005",
+      "businessNo": "0000000005",
+      "representative": "한지우",
+      "type": "분식",
+      "adminId": 2,
+      "ownerId": null
+    },
+    {
+      "id": 6,
+      "name": "모닝 베이커리",
+      "address": "서울 서초구 서초대로 60",
+      "addressDetail": "상가 101호",
+      "postcode": "06600",
+      "phone": "02-000-1006",
+      "businessNo": "0000000006",
+      "representative": "윤수아",
+      "type": "베이커리",
+      "adminId": 2,
+      "ownerId": null
+    }
+  ],
+  "orders": [
+    {
+      "id": 1008,
+      "storeId": 1,
+      "orderedAt": "2026-10-03T14:32:00",
+      "tableNo": 3
+    },
+    {
+      "id": 1007,
+      "storeId": 2,
+      "orderedAt": "2026-10-03T13:15:00",
+      "tableNo": 2
+    },
+    {
+      "id": 1006,
+      "storeId": 3,
+      "orderedAt": "2026-10-03T12:40:00",
+      "tableNo": 5
+    },
+    {
+      "id": 1005,
+      "storeId": 4,
+      "orderedAt": "2026-10-02T10:20:00",
+      "tableNo": 1
+    },
+    {
+      "id": 1004,
+      "storeId": 5,
+      "orderedAt": "2026-09-30T16:05:00",
+      "tableNo": 4
+    },
+    {
+      "id": 1003,
+      "storeId": 6,
+      "orderedAt": "2026-09-28T09:10:00",
+      "tableNo": 2
+    },
+    {
+      "id": 1002,
+      "storeId": 2,
+      "orderedAt": "2026-09-15T12:30:00",
+      "tableNo": 3
+    },
+    {
+      "id": 1001,
+      "storeId": 1,
+      "orderedAt": "2026-08-31T11:20:00",
+      "tableNo": 1
+    }
+  ],
+  "menus": [
+    {
+      "id": 1,
+      "name": "아메리카노"
+    },
+    {
+      "id": 2,
+      "name": "카페라떼"
+    },
+    {
+      "id": 3,
+      "name": "제육덮밥"
+    },
+    {
+      "id": 4,
+      "name": "된장찌개"
+    },
+    {
+      "id": 5,
+      "name": "치킨 샐러드"
+    },
+    {
+      "id": 6,
+      "name": "떡볶이"
+    },
+    {
+      "id": 7,
+      "name": "크루아상"
+    },
+    {
+      "id": 8,
+      "name": "아메리카노"
+    }
+  ],
+  "options": [
+    {
+      "id": 1,
+      "menuId": 1,
+      "name": "샷 추가"
+    }
+  ],
+  "items": [
+    {
+      "id": 1,
+      "orderId": 1008,
+      "menuId": 1,
+      "quantity": 2,
+      "optionId": 1
+    },
+    {
+      "id": 2,
+      "orderId": 1008,
+      "menuId": 2,
+      "quantity": 1,
+      "optionId": null
+    },
+    {
+      "id": 3,
+      "orderId": 1007,
+      "menuId": 3,
+      "quantity": 2,
+      "optionId": null
+    },
+    {
+      "id": 4,
+      "orderId": 1006,
+      "menuId": 5,
+      "quantity": 1,
+      "optionId": null
+    },
+    {
+      "id": 5,
+      "orderId": 1005,
+      "menuId": 8,
+      "quantity": 3,
+      "optionId": null
+    },
+    {
+      "id": 6,
+      "orderId": 1004,
+      "menuId": 6,
+      "quantity": 2,
+      "optionId": null
+    },
+    {
+      "id": 7,
+      "orderId": 1003,
+      "menuId": 7,
+      "quantity": 4,
+      "optionId": null
+    },
+    {
+      "id": 8,
+      "orderId": 1002,
+      "menuId": 4,
+      "quantity": 1,
+      "optionId": null
+    },
+    {
+      "id": 9,
+      "orderId": 1001,
+      "menuId": 1,
+      "quantity": 1,
+      "optionId": null
+    }
+  ],
+  "referenceDate": "2026-10-03T00:00:00"
+}
