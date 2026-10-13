@@ -8,6 +8,8 @@ void main() {
   testWidgets('담기 알림은 정중앙에 표시되고 자동으로 사라짐', (tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('포장'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('제육덮밥'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('장바구니 담기'));
@@ -23,6 +25,8 @@ void main() {
   });
   testWidgets('직원 호출 자동 닫기와 수동 닫기', (tester) async {
     await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('포장'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('직원 호출'));
     await tester.pumpAndSettle();
@@ -44,11 +48,13 @@ void main() {
   testWidgets('버튼 색상 전환만 실행하며 주문 금액은 유지', (tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('포장'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('제육덮밥'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('장바구니 담기'));
     await tester.pumpAndSettle();
-    for (final label in ['직원 호출', '마이크', '주문내역', '결제하기']) {
+    for (final label in ['직원 호출', '마이크', '주문내역', '주문 완료 (시연)']) {
       final finder = find
           .ancestor(
             of: find.text(label),
@@ -70,6 +76,10 @@ void main() {
       expect(color(), isNot(initial));
       await gesture.up();
       await tester.pumpAndSettle();
+      if (label == '주문 완료 (시연)') {
+        await tester.tap(find.text('취소'));
+        await tester.pumpAndSettle();
+      }
       if (label == '직원 호출') {
         await tester.tap(find.text('닫기'));
         await tester.pumpAndSettle();

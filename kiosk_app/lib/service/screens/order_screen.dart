@@ -7,9 +7,21 @@ import '../data/menu_repository.dart';
 import '../data/api_menu_repository.dart';
 import '../models/menu_item.dart';
 import '../models/menu_option.dart';
+import '../data/order_repository.dart';
+import 'checkout_dialog.dart';
 
 class OrderScreen extends StatefulWidget {
-  const OrderScreen({super.key, this.repository, this.orderMode});
+  const OrderScreen({
+    super.key,
+    this.repository,
+    this.orderMode,
+    this.orderRepository,
+    this.storeId = const int.fromEnvironment('STORE_ID'),
+    this.deviceId = const int.fromEnvironment('DEVICE_ID'),
+  });
+  final OrderRepository? orderRepository;
+  final int storeId;
+  final int deviceId;
   final MenuRepository? repository;
   final String? orderMode;
   @override
@@ -17,6 +29,26 @@ class OrderScreen extends StatefulWidget {
 }
 
 class _OrderScreenState extends State<OrderScreen> {
+  Future<void> _checkout() async {
+    const address = String.fromEnvironment(
+      'ORDER_API_BASE_URL',
+      defaultValue: String.fromEnvironment('MENU_API_BASE_URL'),
+    );
+    final id = await showDialog<int>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CheckoutDialog(
+        entries: _cart.entries,
+        repository:
+            widget.orderRepository ?? ApiOrderRepository(baseUrl: address),
+        storeId: widget.storeId,
+        deviceId: widget.deviceId,
+        orderMode: widget.orderMode,
+      ),
+    );
+    if (id != null && mounted) _cart.clear();
+  }
+
   final _cart = CartController();
   final _categoryScrollController = ScrollController();
   final _menuScrollController = ScrollController();
@@ -889,7 +921,7 @@ class _OrderScreenState extends State<OrderScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: OutlinedButton.icon(
-            onPressed: _cart.entries.isEmpty ? null : () {},
+            onPressed: _cart.entries.isEmpty ? null : _checkout,
             style: _feedbackStyle().copyWith(
               backgroundColor: WidgetStateProperty.resolveWith((states) {
                 if (states.contains(WidgetState.disabled)) {
@@ -909,8 +941,8 @@ class _OrderScreenState extends State<OrderScreen> {
                 TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
-            icon: const Icon(Icons.credit_card),
-            label: const Text('결제하기'),
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text('주문 완료 (시연)'),
           ),
         ),
       ],

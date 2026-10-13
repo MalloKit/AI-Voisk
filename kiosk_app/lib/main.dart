@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'service/screens/order_screen.dart';
+import 'home/role_select_screen.dart';
 
 void main() => runApp(const MyApp());
 
@@ -14,6 +14,6 @@ class MyApp extends StatelessWidget {
       colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
       useMaterial3: true,
     ),
-    home: const OrderScreen(),
+    home: const RoleSelectScreen(),
   );
 }

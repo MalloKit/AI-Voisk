@@ -1,0 +1,39 @@
+/* Company-admin-only design tokens. No dependency on another team's web. */
+:root {
+  --brand: #315bc7;
+  --canvas: #f5f7fb;
+  --surface: #fff;
+  --ink: #202b40;
+  --muted: #667085;
+  --border: #e3e8f0;
+  --selected: #e0e5fc;
+  --selected-ink: #233b76;
+  --table-head: #f5f4fa;
+  --error: #a02626;
+  --error-surface: #ffdad6;
+  --font: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --title: 20px;
+  --headline: 28px;
+  --xs: 4px;
+  --sm: 8px;
+  --md: 12px;
+  --lg: 16px;
+  --xl: 24px;
+  --xxl: 32px;
+  --radius: 12px;
+  --sidebar: 232px;
+  --content: 1440px;
+  --field: 280px;
+  --filter: 200px;
+  --table-min: 760px;
+  --row: 64px;
+  --header: 48px;
+  --dialog: 620px;
+  --topbar: 64px;
+  --modal-shadow: 0 12px 48px #202b4033;
+  --overlay: #202b4066;
+}

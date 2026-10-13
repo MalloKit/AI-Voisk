@@ -7,9 +7,11 @@ void main() {
   testWidgets('품절 선택 차단과 전체 비우기 취소·확인, 결제 활성 상태', (tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('포장'));
+    await tester.pumpAndSettle();
     OutlinedButton payment() => tester.widget<OutlinedButton>(
       find.ancestor(
-        of: find.text('결제하기'),
+        of: find.text('주문 완료 (시연)'),
         matching: find.byType(OutlinedButton),
       ),
     );

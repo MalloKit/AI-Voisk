@@ -60,6 +60,8 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(const MyApp());
       await tester.pumpAndSettle();
+      await tester.tap(find.text('포장'));
+      await tester.pumpAndSettle();
       // 언어 선택 창만 표시하고 실제 번역은 하지 않습니다.
       await tester.tap(find.text('Language'));
       await tester.pumpAndSettle();

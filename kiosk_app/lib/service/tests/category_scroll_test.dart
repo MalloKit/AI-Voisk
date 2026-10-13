@@ -11,6 +11,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.text('포장'));
+    await tester.pumpAndSettle();
     final list = find.byKey(const Key('category-list'));
     final scrollable = find.descendant(
       of: list,
