@@ -1,5 +1,6 @@
 import type {
   AdminSnapshot,
+  ApiStore,
   Store,
   Owner,
   Device,
@@ -19,28 +20,31 @@ export function StoreDetails({
   store: s,
 }: {
   data: AdminSnapshot;
-  store: Store;
+  store: Store | ApiStore;
 }) {
   return (
     <>
       <Section title="매장 기본 정보" />
       <dl>
         <Field label="매장 ID">{s.id}</Field>
+        <Field label="매장명">{s.name}</Field>
         <Field label="업종">{s.type}</Field>
         <Field label="대표자">{s.representative}</Field>
         <Field label="사업자번호">{s.businessNo}</Field>
         <Field label="주소">{`${s.address} ${s.addressDetail}`.trim()}</Field>
-        <Field label="우편번호">{s.postcode}</Field>
+        {"storeCode" in s ? (
+          <Field label="store_code (의미 미확인)">{s.storeCode}</Field>
+        ) : <Field label="우편번호">{s.postcode}</Field>}
         <Field label="전화번호">{s.phone}</Field>
       </dl>
       <hr />
       <Section title="담당자 및 점주 연결" />
       <dl>
         <Field label="담당 관리자">
-          {data.admins.find((a) => a.id === s.adminId)?.name}
+          {"adminName" in s ? (s.adminName ?? "정보 없음") : data.admins.find((a) => a.id === s.adminId)?.name}
         </Field>
         <Field label="점주 로그인 ID">
-          {data.owners.find((o) => o.id === s.ownerId)?.loginId ?? "미연결"}
+          {s.ownerId === null ? "미연결" : "ownerLoginId" in s ? (s.ownerLoginId ?? "연결됨 · 계정 정보 없음") : (data.owners.find((o) => o.id === s.ownerId)?.loginId ?? "연결됨 · 계정 정보 없음")}
         </Field>
       </dl>
     </>

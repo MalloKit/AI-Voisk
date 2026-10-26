@@ -9,6 +9,7 @@ from fastapi import Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from order_service import OrderInput, save_order, list_orders, order_detail
+from store_service import StoreNotFound, list_stores, store_detail
 
 
 class MenuOption(BaseModel):
@@ -127,3 +128,43 @@ def store_menus(store_id: int = ApiPath(ge=1)):
                  description=row['menu_des'] or '', isSoldOut=bool(row['is_sold_out']),
                  options=options_by_menu.get(row['menu_id'], []))
             for row in rows]
+
+
+class AdminStoreView(BaseModel):
+    store_id: int
+    store_name: str
+    address: str
+    address_detail: str | None
+    store_code: str
+    phone: str
+    business_no: str
+    representative: str
+    store_type: str
+    admin_id: int
+    admin_name: str | None
+    owner_id: int | None
+    owner_login_id: str | None
+
+
+class AdminStoreList(BaseModel):
+    stores: list[AdminStoreView]
+    total: int
+
+
+def _store_call(function, *args):
+    try:
+        return function(*args)
+    except StoreNotFound:
+        raise HTTPException(404, '매장이 없습니다.') from None
+    except Exception:
+        raise HTTPException(503, '매장 조회 실패. 서버 연결과 DB 설정을 확인해 주세요.') from None
+
+
+@app.get('/admin/stores', response_model=AdminStoreList)
+def admin_stores():
+    return _store_call(list_stores)
+
+
+@app.get('/admin/stores/{store_id}', response_model=AdminStoreView)
+def admin_store_detail(store_id: int = ApiPath(ge=1)):
+    return _store_call(store_detail, store_id)

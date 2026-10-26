@@ -88,3 +88,10 @@ export interface Order {
   quantity: number;
   items: OrderItem[];
 }
+
+/** store_code is intentionally not interpreted as a postcode. */
+export interface ApiStore extends Omit<Store, "postcode"> {
+  storeCode: string;
+  adminName: string | null;
+  ownerLoginId: string | null;
+}

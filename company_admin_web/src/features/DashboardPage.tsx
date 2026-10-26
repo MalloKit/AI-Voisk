@@ -13,11 +13,13 @@ export function DashboardPage({
   onNavigate,
   orderRepository,
   ordersResult: result,
+  liveStores,
 }: {
   data: AdminSnapshot;
   onNavigate(page: Page, unlinked?: boolean): void;
   orderRepository: OrderRepository | null;
   ordersResult: AsyncResult<Order[]>;
+  liveStores: boolean;
 }) {
   const live = orderRepository !== null;
   const unlinked = data.stores.filter((s) => s.ownerId === null);
@@ -70,8 +72,9 @@ export function DashboardPage({
         {live ? "주문은 실제 API, 다른 현황은 Mock 데이터입니다." : "모든 요약은 Mock 데이터입니다."}
       </Heading>
       <p className="muted">
-        매장·점주·기기·알림: Mock · 주문: {live ? "실제 API" : `Mock (시연 기준일 ${dateLabel(data.referenceDate)})`}
+        이 대시보드의 매장·점주·기기·알림 요약: Mock · 주문: {live ? "실제 API" : `Mock (시연 기준일 ${dateLabel(data.referenceDate)})`}
       </p>
+      {liveStores && <p className="muted">매장 관리 화면은 실제 API 조회입니다. 이 화면의 Mock 매장 건수·상세와 일치하지 않을 수 있습니다.</p>}
       <div className="metrics">
         {metrics.map((m) => (
           <Card key={m.label}>
