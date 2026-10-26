@@ -67,7 +67,11 @@ export function App({
       liveOrders={orderRepository !== null}
     >
       {page === "dashboard" && (
-        <DashboardPage data={data} onNavigate={navigate} />
+        <DashboardPage
+          data={data}
+          onNavigate={navigate}
+          orderRepository={orderRepository}
+        />
       )}
       {page === "stores" && (
         <StoresPage

@@ -1,20 +1,40 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Store as StoreIcon, Users, Unlink, ReceiptText } from "lucide-react";
 import type { AdminSnapshot, Order, Page, Store } from "../data/models";
+import type { OrderRepository } from "../data/orderRepository";
+import { useAsync } from "../hooks/useAsync";
 import { dateLabel, filterOrders, mockOrders } from "../data/selectors";
-import { Badge, Card, Heading, Modal, Section, Table } from "../components/ui";
+import { Badge, Card, ErrorState, Heading, Loading, Modal, Section, Table } from "../components/ui";
 import { OrderDetails, StoreDetails } from "./details";
-import { OrderTable } from "./OrdersPage";
+import { LiveDetail, OrderTable } from "./OrdersPage";
 
 export function DashboardPage({
   data,
   onNavigate,
+  orderRepository,
 }: {
   data: AdminSnapshot;
   onNavigate(page: Page, unlinked?: boolean): void;
+  orderRepository: OrderRepository | null;
 }) {
+  const live = orderRepository !== null;
+  const load = useCallback(
+    (signal: AbortSignal) =>
+      orderRepository ? orderRepository.load(signal) : Promise.resolve<Order[]>([]),
+    [orderRepository],
+  );
+  const result = useAsync(load);
   const unlinked = data.stores.filter((s) => s.ownerId === null);
-  const orders = mockOrders(data);
+  const orders = live ? (result.data ?? []) : mockOrders(data);
+  const reference = live ? new Date() : new Date(data.referenceDate);
+  const recentCount = filterOrders(orders, "", 0, 7, reference, true).length;
+  const latestOrders = [...orders]
+    .sort(
+      (a, b) =>
+        new Date(b.ordered_at).getTime() - new Date(a.ordered_at).getTime() ||
+        b.order_id - a.order_id,
+    )
+    .slice(0, 5);
   const [store, setStore] = useState<Store>(),
     [order, setOrder] = useState<Order>();
   const metrics = [
@@ -38,19 +58,23 @@ export function DashboardPage({
     },
     {
       label: "최근 7일 주문",
-      value: `${filterOrders(orders, "", 0, 7, new Date(data.referenceDate), true).length}건`,
-      caption: "시연 기준일 포함 · Mock",
+      value: live && result.loading
+        ? "조회 중"
+        : live && result.error
+          ? "조회 실패"
+          : `${recentCount}건`,
+      caption: live ? "실제 주문 API" : "시연 기준일 포함 · Mock",
       Icon: ReceiptText,
     },
   ];
   return (
     <>
       <Heading title="운영 요약">
-        등록 매장과 점주 연결, 최근 주문 현황을 한눈에 확인합니다. · 모든 요약은
-        Mock 데이터입니다.
+        등록 매장과 점주 연결, 최근 주문 현황을 한눈에 확인합니다. ·
+        {live ? "주문은 실제 API, 다른 현황은 Mock 데이터입니다." : "모든 요약은 Mock 데이터입니다."}
       </Heading>
       <p className="muted">
-        전체 등록 데이터 · 시연 기준일 {dateLabel(data.referenceDate)}
+        매장·점주·기기·알림: Mock · 주문: {live ? "실제 API" : `Mock (시연 기준일 ${dateLabel(data.referenceDate)})`}
       </p>
       <div className="metrics">
         {metrics.map((m) => (
@@ -80,10 +104,24 @@ export function DashboardPage({
           <button onClick={() => onNavigate("alerts")}>알림 목록 보기</button>
         </div>
       </Card>
-      <Section title="최근 주문 · Mock">
+      <Section title={live ? "최근 주문 · 실제 API" : "최근 주문 · Mock"}>
         <button onClick={() => onNavigate("orders")}>주문 전체 보기</button>
+        {live && (
+          <button onClick={result.reload} disabled={result.loading}>
+            새로고침
+          </button>
+        )}
       </Section>
-      <OrderTable orders={orders.slice(0, 5)} onDetail={setOrder} />
+      {live && result.loading ? (
+        <Loading text="실제 주문을 불러오는 중…" />
+      ) : live && result.error ? (
+        <ErrorState
+          message="실제 주문 조회 실패. Mock 주문으로 대체하지 않습니다."
+          onRetry={result.reload}
+        />
+      ) : (
+        <OrderTable orders={latestOrders} onDetail={setOrder} />
+      )}
       <Section title="점주 미연결 매장">
         <button onClick={() => onNavigate("stores", true)}>
           미연결 매장 보기
@@ -127,10 +165,14 @@ export function DashboardPage({
       )}
       {order && (
         <Modal
-          title={`Mock 주문 #${order.order_id}`}
+          title={`${live ? "실제" : "Mock"} 주문 #${order.order_id}`}
           onClose={() => setOrder(undefined)}
         >
-          <OrderDetails order={order} live={false} />
+          {live && orderRepository ? (
+            <LiveDetail id={order.order_id} repository={orderRepository} />
+          ) : (
+            <OrderDetails order={order} live={false} />
+          )}
         </Modal>
       )}
     </>

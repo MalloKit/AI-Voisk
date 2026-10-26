@@ -54,7 +54,7 @@ export function OrderTable({
     />
   );
 }
-function LiveDetail({
+export function LiveDetail({
   id,
   repository,
 }: {
