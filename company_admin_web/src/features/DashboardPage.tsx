@@ -45,7 +45,7 @@ export function DashboardPage({
     {
       label: "점주 계정",
       value: `${data.owners.length}개`,
-      caption: "등록 계정",
+      caption: "등록 계정 · Mock",
       Icon: Users,
     },
     {

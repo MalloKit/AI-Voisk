@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from order_service import OrderInput, save_order, list_orders, order_detail
 from store_service import StoreNotFound, list_stores, store_detail
+from owner_service import OwnerNotFound, list_owners, owner_detail
 
 
 class MenuOption(BaseModel):
@@ -168,3 +169,46 @@ def admin_stores():
 @app.get('/admin/stores/{store_id}', response_model=AdminStoreView)
 def admin_store_detail(store_id: int = ApiPath(ge=1)):
     return _store_call(store_detail, store_id)
+
+
+class AdminOwnerView(BaseModel):
+    owner_id: int = Field(ge=1)
+    login_id: str
+    store_count: int = Field(ge=0)
+
+
+class AdminOwnerStoreView(BaseModel):
+    store_id: int = Field(ge=1)
+    store_name: str
+    address: str
+    address_detail: str | None
+    admin_id: int = Field(ge=1)
+    admin_name: str | None
+
+
+class AdminOwnerDetail(AdminOwnerView):
+    stores: list[AdminOwnerStoreView]
+
+
+class AdminOwnerList(BaseModel):
+    owners: list[AdminOwnerView]
+    total: int = Field(ge=0)
+
+
+def _owner_call(function, *args):
+    try:
+        return function(*args)
+    except OwnerNotFound:
+        raise HTTPException(404, '점주 계정이 없습니다.') from None
+    except Exception:
+        raise HTTPException(503, '점주 계정 조회 실패. 서버 연결과 DB 설정을 확인해 주세요.') from None
+
+
+@app.get('/admin/owners', response_model=AdminOwnerList)
+def admin_owners():
+    return _owner_call(list_owners)
+
+
+@app.get('/admin/owners/{owner_id}', response_model=AdminOwnerDetail)
+def admin_owner_detail(owner_id: int = ApiPath(ge=1)):
+    return _owner_call(owner_detail, owner_id)

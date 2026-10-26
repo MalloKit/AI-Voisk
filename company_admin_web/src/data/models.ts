@@ -95,3 +95,18 @@ export interface ApiStore extends Omit<Store, "postcode"> {
   adminName: string | null;
   ownerLoginId: string | null;
 }
+
+export interface ApiOwner extends Owner {
+  storeCount: number;
+}
+export interface OwnerStore {
+  id: number;
+  name: string;
+  address: string;
+  addressDetail: string;
+  adminId: number;
+  adminName: string | null;
+}
+export interface ApiOwnerDetail extends ApiOwner {
+  stores: OwnerStore[];
+}

@@ -25,12 +25,14 @@ export function AdminShell({
   onNavigate,
   liveOrders,
   liveStores,
+  liveOwners,
   children,
 }: {
   page: Page;
   onNavigate(page: Page): void;
   liveOrders: boolean;
   liveStores: boolean;
+  liveOwners: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -117,7 +119,7 @@ export function AdminShell({
           </button>
           <strong>{label}</strong>
           <span className="badge source">
-            {page === "orders" && liveOrders ? "실제 주문 API" : page === "stores" && liveStores ? "실제 매장 API" : page === "dashboard" ? "출처별 요약" : "Mock 데이터"}
+            {page === "orders" && liveOrders ? "실제 주문 API" : page === "stores" && liveStores ? "실제 매장 API" : page === "owners" && liveOwners ? "실제 점주 API" : page === "dashboard" ? "출처별 요약" : "Mock 데이터"}
           </span>
           <span className="account">
             <UserCircle size={23} aria-hidden="true" />

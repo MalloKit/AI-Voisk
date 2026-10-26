@@ -16,7 +16,7 @@ const nav = () => within(screen.getByRole("navigation", { name: "주요 화면" 
   .getByRole("button", { name: "매장 관리" });
 async function open(repository: StoreRepository) {
   const user = userEvent.setup();
-  render(<App repository={new MockAdminRepository()} orderRepository={null} storeRepository={repository} />);
+  render(<App ownerRepository={null} repository={new MockAdminRepository()} orderRepository={null} storeRepository={repository} />);
   await screen.findByRole("heading", { level: 1, name: "운영 요약" });
   expect(screen.getByText(/이 화면의 Mock 매장 건수/)).toBeInTheDocument();
   await user.click(nav());
@@ -157,7 +157,7 @@ describe("live store management", () => {
       detail: vi.fn(),
     };
     const user = userEvent.setup();
-    render(<App repository={new MockAdminRepository()} orderRepository={null} storeRepository={repository} />);
+    render(<App ownerRepository={null} repository={new MockAdminRepository()} orderRepository={null} storeRepository={repository} />);
     await user.click(await screen.findByRole("button", { name: "미연결 매장 보기" }));
     await screen.findByText("매장 목록 · 1곳");
     expect(screen.getByRole("table")).toHaveTextContent("실제 매장 42");

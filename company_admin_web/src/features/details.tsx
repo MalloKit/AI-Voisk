@@ -1,5 +1,6 @@
 import type {
   AdminSnapshot,
+  ApiOwnerDetail,
   ApiStore,
   Store,
   Owner,
@@ -50,14 +51,25 @@ export function StoreDetails({
     </>
   );
 }
-export function OwnerDetails({
-  data,
-  owner,
-}: {
-  data: AdminSnapshot;
-  owner: Owner;
-}) {
-  const stores = data.stores.filter((s) => s.ownerId === owner.id);
+export function OwnerDetails(
+  props:
+    | { source: "api"; owner: ApiOwnerDetail }
+    | { source: "mock"; owner: Owner; data: AdminSnapshot },
+) {
+  const { owner } = props;
+  // The API branch has no AdminSnapshot and cannot join against Mock stores.
+  const mockStores = (data: AdminSnapshot, ownerId: number) =>
+    data.stores.filter((s) => s.ownerId === ownerId).map((s) => ({
+      id: s.id,
+      name: s.name,
+      address: s.address,
+      addressDetail: s.addressDetail,
+      adminId: s.adminId,
+      adminName: data.admins.find((a) => a.id === s.adminId)?.name ?? null,
+    }));
+  const stores = props.source === "api"
+    ? props.owner.stores
+    : mockStores(props.data, owner.id);
   return (
     <>
       <dl>
@@ -70,9 +82,11 @@ export function OwnerDetails({
       <dl>
         {stores.map((s) => (
           <Field label={s.name} key={s.id}>
-            {s.address}
+            매장 ID: {s.id}
             <br />
-            담당 관리자: {data.admins.find((a) => a.id === s.adminId)?.name}
+            {`${s.address} ${s.addressDetail}`.trim()}
+            <br />
+            담당 관리자: {s.adminName ?? "정보 없음"} (ID: {s.adminId})
           </Field>
         ))}
       </dl>

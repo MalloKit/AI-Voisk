@@ -20,6 +20,12 @@ import { AlertsPage } from "./features/AlertsPage";
 
 import { ApiStoreRepository, type StoreRepository } from "./data/storeRepository";
 
+import { ApiOwnerRepository, type OwnerRepository } from "./data/ownerRepository";
+
+const defaultOwners = import.meta.env.VITE_OWNER_SOURCE === "mock"
+  ? null
+  : new ApiOwnerRepository(import.meta.env.VITE_OWNER_API_BASE_URL || import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001");
+
 const defaultStores = import.meta.env.VITE_STORE_SOURCE === "mock"
   ? null
   : new ApiStoreRepository(import.meta.env.VITE_STORE_API_BASE_URL || import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001");
@@ -35,10 +41,12 @@ export function App({
   repository = defaultAdmin,
   orderRepository = defaultOrders,
   storeRepository = defaultStores,
+  ownerRepository = defaultOwners,
 }: {
   repository?: AdminRepository;
   orderRepository?: OrderRepository | null;
   storeRepository?: StoreRepository | null;
+  ownerRepository?: OwnerRepository | null;
 }) {
   const [page, setPage] = useState<Page>("dashboard"),
     [unlinked, setUnlinked] = useState(false);
@@ -81,6 +89,7 @@ export function App({
       onNavigate={navigate}
       liveOrders={orderRepository !== null}
       liveStores={storeRepository !== null}
+      liveOwners={ownerRepository !== null}
     >
       {page === "dashboard" && (
         <DashboardPage
@@ -99,7 +108,7 @@ export function App({
           repository={storeRepository}
         />
       )}
-      {page === "owners" && <OwnersPage data={data} />}
+      {page === "owners" && <OwnersPage data={data} repository={ownerRepository} />}
       {page === "orders" && (
         <OrdersPage data={data} repository={orderRepository} ordersResult={ordersResult} />
       )}
