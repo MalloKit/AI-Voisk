@@ -4,8 +4,9 @@ import type { OrderRepository } from "../data/orderRepository";
 import {
   dateLabel,
   diningLabel,
-  filterOrders,
+  filterOrdersAdvanced,
   mockOrders,
+  type OrderKindFilter,
 } from "../data/selectors";
 import { useAsync, type AsyncResult } from "../hooks/useAsync";
 import {
@@ -38,6 +39,7 @@ export function OrderTable({
         { label: "매장", render: (o) => o.store_name },
         { label: "주문 시각", render: (o) => dateLabel(o.ordered_at, true) },
         { label: "주문 유형 / 테이블", render: diningLabel },
+        { label: "기기", render: (o) => o.device_id == null ? "미확인" : `#${o.device_id}` },
         { label: "총 수량", render: (o) => `${o.quantity}개` },
         {
           label: "",
@@ -89,10 +91,28 @@ export function OrdersPage({
   const [search, setSearch] = useState(""),
     [store, setStore] = useState(0),
     [days, setDays] = useState(7),
+    [kind, setKind] = useState<OrderKindFilter>("all"),
+    [device, setDevice] = useState("all"),
+    [fromDate, setFromDate] = useState(""),
+    [toDate, setToDate] = useState(""),
     [detail, setDetail] = useState<Order>();
   const all = live ? (ordersResult.data ?? []) : mockOrders(data);
   const reference = live ? new Date() : new Date(data.referenceDate);
-  const rows = filterOrders(all, search, store, days, reference, !live);
+  const invalidRange = days === -1 && !!fromDate && !!toDate && fromDate > toDate;
+  const rows = invalidRange
+    ? []
+    : filterOrdersAdvanced(all, search, store, days, reference, !live, {
+        kind, device, fromDate, toDate,
+      });
+  const deviceIds = [...new Set(all.map((o) => o.device_id).filter((id): id is number => id != null))]
+    .sort((a, b) => a - b);
+  const deviceOptions = [
+    { value: "all", label: "전체 기기" },
+    ...deviceIds.map((id) => ({ value: String(id), label: `기기 #${id}` })),
+    { value: "unknown", label: "기기 미확인" },
+  ];
+  if (device !== "all" && device !== "unknown" && !deviceIds.some((id) => String(id) === device))
+    deviceOptions.splice(deviceOptions.length - 1, 0, { value: device, label: `기기 #${device}` });
   const stores = live
     ? [...new Map(all.map((o) => [o.store_id, o.store_name])).entries()].map(
         ([value, label]) => ({ value, label }),
@@ -126,6 +146,23 @@ export function OrdersPage({
               onChange={(v) => setStore(Number(v))}
             />
             <Filter
+              label="주문 유형"
+              value={kind}
+              options={[
+                { value: "all", label: "전체 유형" },
+                { value: "takeaway", label: "포장" },
+                { value: "dine_in", label: "매장 식사" },
+                { value: "unknown", label: "유형 미확인" },
+              ]}
+              onChange={(v) => setKind(v as OrderKindFilter)}
+            />
+            <Filter
+              label="기기"
+              value={device}
+              options={deviceOptions}
+              onChange={setDevice}
+            />
+            <Filter
               label="조회 기간"
               value={days}
               options={[
@@ -133,15 +170,42 @@ export function OrdersPage({
                 { value: 7, label: "최근 7일" },
                 { value: 30, label: "최근 30일" },
                 { value: 0, label: "전체 기간" },
+                { value: -1, label: "직접 지정" },
               ]}
               onChange={(v) => setDays(Number(v))}
             />
+            {days === -1 && (
+              <>
+                <label className="field filter">
+                  <span>시작일</span>
+                  <input
+                    type="date"
+                    aria-label="시작일"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                  />
+                </label>
+                <label className="field filter">
+                  <span>종료일</span>
+                  <input
+                    type="date"
+                    aria-label="종료일"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                  />
+                </label>
+              </>
+            )}
             {live && <button onClick={ordersResult.reload}>새로고침</button>}
             <button
               onClick={() => {
                 setSearch("");
                 setStore(0);
                 setDays(7);
+                setKind("all");
+                setDevice("all");
+                setFromDate("");
+                setToDate("");
               }}
             >
               초기화
@@ -149,14 +213,19 @@ export function OrdersPage({
             {!live && (
               <p className="filter-note">
                 시연 기준일 {dateLabel(data.referenceDate)} · 기간은 기준일을
-                포함합니다.
+                포함합니다. Mock 주문에는 기기 ID가 없습니다.
+              </p>
+            )}
+            {invalidRange && (
+              <p role="alert" className="filter-note">
+                시작일이 종료일보다 늦습니다. 날짜 범위를 확인해 주세요.
               </p>
             )}
           </Filters>
           <Section
             title={`${live ? "실제 " : ""}주문 목록 · ${rows.length}건`}
           />
-          <OrderTable orders={rows} onDetail={setDetail} />
+          {!invalidRange && <OrderTable orders={rows} onDetail={setDetail} />}
         </>
       )}
       {detail && (

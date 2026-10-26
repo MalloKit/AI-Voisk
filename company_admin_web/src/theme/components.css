@@ -242,6 +242,13 @@ main {
 .filter {
   width: min(var(--filter), 100%);
 }
+.filter input[type="date"] {
+  width: 100%;
+  min-height: var(--header);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--md);
+}
 select {
   width: 100%;
   border: 1px solid var(--border);

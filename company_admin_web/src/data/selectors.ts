@@ -84,3 +84,46 @@ export function filterOrders(
           (!bounded || new Date(o.ordered_at) < end))),
   );
 }
+
+export type OrderKind = "takeaway" | "dine_in" | "unknown";
+export type OrderKindFilter = OrderKind | "all";
+export interface ExtendedOrderFilter {
+  kind: OrderKindFilter;
+  device: string;
+  fromDate: string;
+  toDate: string;
+}
+
+export function getOrderKind(order: Pick<Order, "order_type" | "table_no">): OrderKind {
+  const declared = order.order_type;
+  if (declared != null)
+    return declared === "takeaway" || declared === "dine_in" ? declared : "unknown";
+  if (order.table_no === 0) return "takeaway";
+  if (order.table_no !== null && order.table_no > 0) return "dine_in";
+  return "unknown";
+}
+
+// days === -1 means a custom date range using the browser's local calendar dates.
+export function filterOrdersAdvanced(
+  orders: Order[],
+  query: string,
+  store: number,
+  days: number,
+  at: Date,
+  bounded: boolean,
+  extra: ExtendedOrderFilter,
+): Order[] {
+  const base = filterOrders(orders, query, store, days === -1 ? 0 : days, at, bounded);
+  return base.filter((o) => {
+    if (extra.kind !== "all" && getOrderKind(o) !== extra.kind) return false;
+    if (extra.device === "unknown" && o.device_id != null) return false;
+    if (extra.device !== "all" && extra.device !== "unknown" && String(o.device_id) !== extra.device)
+      return false;
+    if (days === -1) {
+      const day = dateLabel(o.ordered_at);
+      if (extra.fromDate && day < extra.fromDate) return false;
+      if (extra.toDate && day > extra.toDate) return false;
+    }
+    return true;
+  });
+}
