@@ -10,7 +10,12 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
-      exclude: ["node_modules/**", ".tools/**", "dist/**"],
+      exclude: [
+        "node_modules/**",
+        ".tools/**",
+        "dist/**",
+        "scripts/store-contract.test.mjs",
+      ],
     },
     // No proxy or backend changes. Only the public API URL is exposed to the app.
     define: {
