@@ -81,6 +81,30 @@ describe("live orders on company dashboard", () => {
     expect(screen.getByText(/조건에 맞는 결과가 없습니다/)).toBeInTheDocument();
   });
 
+  it("reuses the same order list when moving between dashboard and orders", async () => {
+    const repository: OrderRepository = {
+      load: vi.fn().mockResolvedValueOnce([order(30)]).mockResolvedValueOnce([order(30), order(31)]),
+      detail: vi.fn().mockResolvedValue(detail(30)),
+    };
+    const user = userEvent.setup();
+    render(
+      <App repository={new MockAdminRepository()} orderRepository={repository} />,
+    );
+    await screen.findByRole("button", { name: "주문 상세: #30" });
+    expect(repository.load).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("navigation", { name: "주요 화면" }).querySelectorAll("button")[3]);
+    await screen.findByText("실제 주문 목록 · 1건");
+    expect(repository.load).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "새로고침" }));
+    await screen.findByText("실제 주문 목록 · 2건");
+    expect(repository.load).toHaveBeenCalledTimes(2);
+
+    await user.click(screen.getByRole("navigation", { name: "주요 화면" }).querySelectorAll("button")[0]);
+    expect(screen.getByText("2건")).toBeInTheDocument();
+  });
+
   it("refreshes dashboard live orders without modifying the other Mock metrics", async () => {
     const repository: OrderRepository = {
       load: vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([order(20)]),

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { Page } from "./data/models";
+import type { Order, Page } from "./data/models";
 import {
   MockAdminRepository,
   type AdminRepository,
@@ -36,6 +36,13 @@ export function App({
     [unlinked, setUnlinked] = useState(false);
   const load = useCallback(() => repository.load(), [repository]);
   const result = useAsync(load);
+  // Share one order snapshot across dashboard and order list screens.
+  const loadOrders = useCallback(
+    (signal: AbortSignal) =>
+      orderRepository ? orderRepository.load(signal) : Promise.resolve<Order[]>([]),
+    [orderRepository],
+  );
+  const ordersResult = useAsync(loadOrders);
   function navigate(next: Page, onlyUnlinked = false) {
     setPage(next);
     setUnlinked(onlyUnlinked);
@@ -71,6 +78,7 @@ export function App({
           data={data}
           onNavigate={navigate}
           orderRepository={orderRepository}
+          ordersResult={ordersResult}
         />
       )}
       {page === "stores" && (
@@ -82,7 +90,7 @@ export function App({
       )}
       {page === "owners" && <OwnersPage data={data} />}
       {page === "orders" && (
-        <OrdersPage data={data} repository={orderRepository} />
+        <OrdersPage data={data} repository={orderRepository} ordersResult={ordersResult} />
       )}
       {page === "devices" && <DevicesPage data={data} />}
       {page === "alerts" && (

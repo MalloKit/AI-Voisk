@@ -7,7 +7,7 @@ import {
   filterOrders,
   mockOrders,
 } from "../data/selectors";
-import { useAsync } from "../hooks/useAsync";
+import { useAsync, type AsyncResult } from "../hooks/useAsync";
 import {
   ErrorState,
   Filter,
@@ -79,22 +79,18 @@ export function LiveDetail({
 export function OrdersPage({
   data,
   repository,
+  ordersResult,
 }: {
   data: AdminSnapshot;
   repository: OrderRepository | null;
+  ordersResult: AsyncResult<Order[]>;
 }) {
   const live = repository !== null;
-  const load = useCallback(
-    (signal: AbortSignal) =>
-      repository ? repository.load(signal) : Promise.resolve(mockOrders(data)),
-    [data, repository],
-  );
-  const result = useAsync(load);
   const [search, setSearch] = useState(""),
     [store, setStore] = useState(0),
     [days, setDays] = useState(7),
     [detail, setDetail] = useState<Order>();
-  const all = result.data ?? [];
+  const all = live ? (ordersResult.data ?? []) : mockOrders(data);
   const reference = live ? new Date() : new Date(data.referenceDate);
   const rows = filterOrders(all, search, store, days, reference, !live);
   const stores = live
@@ -112,12 +108,12 @@ export function OrdersPage({
           ? "실제 API 주문 데이터 · 다른 관리 화면은 Mock 데이터입니다."
           : "Mock 주문 데이터 · 명시적으로 선택한 시연 모드입니다."}
       </Heading>
-      {result.loading ? (
+      {live && ordersResult.loading ? (
         <Loading />
-      ) : result.error ? (
+      ) : live && ordersResult.error ? (
         <ErrorState
           message="실제 주문 조회 실패. Mock 데이터로 대체하지 않습니다."
-          onRetry={result.reload}
+          onRetry={ordersResult.reload}
         />
       ) : (
         <>
@@ -140,7 +136,7 @@ export function OrdersPage({
               ]}
               onChange={(v) => setDays(Number(v))}
             />
-            {live && <button onClick={result.reload}>새로고침</button>}
+            {live && <button onClick={ordersResult.reload}>새로고침</button>}
             <button
               onClick={() => {
                 setSearch("");

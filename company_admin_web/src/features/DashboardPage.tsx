@@ -1,8 +1,8 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Store as StoreIcon, Users, Unlink, ReceiptText } from "lucide-react";
 import type { AdminSnapshot, Order, Page, Store } from "../data/models";
 import type { OrderRepository } from "../data/orderRepository";
-import { useAsync } from "../hooks/useAsync";
+import type { AsyncResult } from "../hooks/useAsync";
 import { dateLabel, filterOrders, mockOrders } from "../data/selectors";
 import { Badge, Card, ErrorState, Heading, Loading, Modal, Section, Table } from "../components/ui";
 import { OrderDetails, StoreDetails } from "./details";
@@ -12,18 +12,14 @@ export function DashboardPage({
   data,
   onNavigate,
   orderRepository,
+  ordersResult: result,
 }: {
   data: AdminSnapshot;
   onNavigate(page: Page, unlinked?: boolean): void;
   orderRepository: OrderRepository | null;
+  ordersResult: AsyncResult<Order[]>;
 }) {
   const live = orderRepository !== null;
-  const load = useCallback(
-    (signal: AbortSignal) =>
-      orderRepository ? orderRepository.load(signal) : Promise.resolve<Order[]>([]),
-    [orderRepository],
-  );
-  const result = useAsync(load);
   const unlinked = data.stores.filter((s) => s.ownerId === null);
   const orders = live ? (result.data ?? []) : mockOrders(data);
   const reference = live ? new Date() : new Date(data.referenceDate);

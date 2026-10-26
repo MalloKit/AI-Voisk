@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
 
+export interface AsyncResult<T> {
+  data?: T;
+  loading: boolean;
+  error: boolean;
+  reload(): void;
+}
+
 export function useAsync<T>(load: (signal: AbortSignal) => Promise<T>) {
   const [data, setData] = useState<T>();
   const [loading, setLoading] = useState(true);
