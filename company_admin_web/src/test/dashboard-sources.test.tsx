@@ -64,7 +64,7 @@ describe("shared live dashboard sources", () => {
     expect(metric("최근 7일 주문")).toHaveTextContent("0건");
     expect(screen.getByText("등록된 매장이 없습니다.")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByText(/기기·알림: Mock/)).toHaveTextContent("매장: 실제 API");
+    expect(screen.getByText(/기기: Mock · 알림: Mock/)).toHaveTextContent("매장: 실제 API");
   });
 
   it("shows one actual unlinked store and zero owners, including real store detail", async () => {

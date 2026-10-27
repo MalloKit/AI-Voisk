@@ -142,6 +142,10 @@ export function App({
           storesResult={storesResult}
           ownerRepository={ownerRepository}
           ownersResult={ownersResult}
+          liveDevices={deviceRepository !== null}
+          devicesResult={devicesResult}
+          liveAlerts={alertRepository !== null}
+          alertsResult={alertsResult}
         />
       )}
       {page === "stores" && (

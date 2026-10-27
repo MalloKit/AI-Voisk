@@ -18,7 +18,7 @@ async function open(repository: StoreRepository) {
   const user = userEvent.setup();
   render(<App alertRepository={null} deviceRepository={null} ownerRepository={null} repository={new MockAdminRepository()} orderRepository={null} storeRepository={repository} />);
   await screen.findByRole("heading", { level: 1, name: "운영 요약" });
-  expect(screen.getByText(/매장: 실제 API/)).toHaveTextContent("기기·알림: Mock");
+  expect(screen.getByText(/매장: 실제 API/)).toHaveTextContent("기기: Mock · 알림: Mock");
   await user.click(nav());
   return user;
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Store as StoreIcon, Users, Unlink, ReceiptText } from "lucide-react";
-import type { AdminSnapshot, ApiOwner, ApiStore, Order, Page, Store } from "../data/models";
+import type { AdminSnapshot, ApiAlert, ApiDevice, ApiOwner, ApiStore, Order, Page, Store } from "../data/models";
 import type { OwnerRepository } from "../data/ownerRepository";
 import type { StoreRepository } from "../data/storeRepository";
 import type { OrderRepository } from "../data/orderRepository";
@@ -20,6 +20,10 @@ export function DashboardPage({
   storesResult,
   ownerRepository,
   ownersResult,
+  liveDevices,
+  devicesResult,
+  liveAlerts,
+  alertsResult,
 }: {
   data: AdminSnapshot;
   onNavigate(page: Page, unlinked?: boolean): void;
@@ -29,7 +33,15 @@ export function DashboardPage({
   storesResult: AsyncResult<ApiStore[]>;
   ownerRepository: OwnerRepository | null;
   ownersResult: AsyncResult<ApiOwner[]>;
+  liveDevices: boolean;
+  devicesResult: AsyncResult<ApiDevice[]>;
+  liveAlerts: boolean;
+  alertsResult: AsyncResult<ApiAlert[]>;
 }) {
+  const deviceValue = (count: number) => devicesResult.loading ? "조회 중"
+    : devicesResult.error ? "조회 실패" : `${count}대`;
+  const alertValue = (count: number) => alertsResult.loading ? "조회 중"
+    : alertsResult.error ? "조회 실패" : `${count}건`;
   const live = orderRepository !== null;
   const liveStores = storeRepository !== null;
   const liveOwners = ownerRepository !== null;
@@ -90,7 +102,8 @@ export function DashboardPage({
       <p className="muted">
         매장: {liveStores ? "실제 API" : "Mock"} · 점주: {liveOwners ? "실제 API" : "Mock"}
         {" · "}주문: {live ? "실제 API" : `Mock (시연 기준일 ${dateLabel(data.referenceDate)})`}
-        {" · "}기기·알림: Mock
+        {" · "}기기: {liveDevices ? "실제 API" : "Mock"}
+        {" · "}알림: {liveAlerts ? "실제 API" : "Mock"}
       </p>
       <div className="metrics">
         {metrics.map((m) => (
@@ -123,15 +136,44 @@ export function DashboardPage({
       )}
       <Card>
         <Section title="기기 및 알림 현황" />
-        <p>
-          등록 기기 {data.devices.length}대 · 오프라인{" "}
-          {data.devices.filter((d) => d.connection === "offline").length}대 ·
-          미확인 알림{" "}
-          {data.alerts.filter((a) => a.status === "unconfirmed").length}건
-        </p>
-        <p className="muted">
-          향후 기능 Mock · 관측 기준 {dateLabel(data.observedAt, true)}
-        </p>
+        <section aria-label="기기 현황">
+          <p className="muted">기기: {liveDevices ? "실제 API" : `Mock · 관측 기준 ${dateLabel(data.observedAt, true)}`}</p>
+          {liveDevices ? (
+            <>
+              <p>
+                등록 기기 {deviceValue(devicesResult.data?.length ?? 0)} ·
+                활성 기기 {deviceValue(devicesResult.data?.filter((d) => d.is_active === true).length ?? 0)} ·
+                비활성 기기 {deviceValue(devicesResult.data?.filter((d) => d.is_active === false).length ?? 0)}
+              </p>
+              <p className="muted">활성·비활성은 온라인·오프라인 상태가 아닙니다. 하트비트 관측이 없어 연결 상태는 미확인입니다.</p>
+              <button onClick={devicesResult.reload} disabled={devicesResult.loading}>
+                {devicesResult.error ? "기기 다시 시도" : "기기 새로고침"}
+              </button>
+              {devicesResult.error && <ErrorState message="실제 기기 조회 실패. Mock 수치로 대체하지 않습니다." />}
+            </>
+          ) : (
+            <p>등록 기기 {data.devices.length}대 · 온라인 {data.devices.filter((d) => d.connection === "online").length}대 ·
+              오프라인 {data.devices.filter((d) => d.connection === "offline").length}대</p>
+          )}
+        </section>
+        <section aria-label="알림 현황">
+          <p className="muted">알림: {liveAlerts ? "실제 API" : `Mock · 관측 기준 ${dateLabel(data.observedAt, true)}`}</p>
+          {liveAlerts ? (
+            <>
+              <p>
+                전체 등록 알림 {alertValue(alertsResult.data?.length ?? 0)} ·
+                미열람 알림 (UNREAD) {alertValue(alertsResult.data?.filter((a) => a.alert_status === "UNREAD").length ?? 0)}
+              </p>
+              <p className="muted">UNREAD 이외 상태의 의미는 추정하지 않습니다. 관리자 확인과 장애 해소는 별도 기록입니다.</p>
+              <button onClick={alertsResult.reload} disabled={alertsResult.loading}>
+                {alertsResult.error ? "알림 다시 시도" : "알림 새로고침"}
+              </button>
+              {alertsResult.error && <ErrorState message="실제 알림 조회 실패. Mock 수치로 대체하지 않습니다." />}
+            </>
+          ) : (
+            <p>전체 등록 알림 {data.alerts.length}건 · 미확인 알림 {data.alerts.filter((a) => a.status === "unconfirmed").length}건</p>
+          )}
+        </section>
         <div className="actions">
           <button onClick={() => onNavigate("devices")}>기기 목록 보기</button>
           <button onClick={() => onNavigate("alerts")}>알림 목록 보기</button>

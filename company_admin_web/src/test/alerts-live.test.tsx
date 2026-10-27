@@ -23,7 +23,7 @@ async function open(repository: AlertRepository, admin = new MockAdminRepository
   render(<App repository={admin} orderRepository={null} storeRepository={null}
     ownerRepository={null} deviceRepository={null} alertRepository={repository} />);
   await screen.findByRole("heading", { name: "운영 요약", level: 1 });
-  expect(screen.getByText(/기기·알림: Mock/)).toBeInTheDocument();
+  expect(screen.getByText(/기기: Mock · 알림: 실제 API/)).toBeInTheDocument();
   await user.click(nav("장애/알림"));
   return user;
 }
