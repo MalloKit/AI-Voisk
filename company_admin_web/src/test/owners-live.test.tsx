@@ -22,7 +22,7 @@ async function open(repository: OwnerRepository) {
   render(<App repository={new MockAdminRepository()} orderRepository={null}
     storeRepository={null} ownerRepository={repository} />);
   await screen.findByRole("heading", { name: "운영 요약", level: 1 });
-  expect(screen.getByText("등록 계정 · Mock")).toBeInTheDocument();
+  expect(screen.getByText("점주 계정 · 실제 API")).toBeInTheDocument();
   await user.click(within(screen.getByRole("navigation", { name: "주요 화면" }))
     .getByRole("button", { name: "점주 계정" }));
   return user;

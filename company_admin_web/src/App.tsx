@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { Order, Page } from "./data/models";
+import type { ApiOwner, ApiStore, Order, Page } from "./data/models";
 import {
   MockAdminRepository,
   type AdminRepository,
@@ -59,6 +59,19 @@ export function App({
     [orderRepository],
   );
   const ordersResult = useAsync(loadOrders);
+  // Keep independent list snapshots across dashboard and management navigation.
+  const loadStores = useCallback(
+    (signal: AbortSignal) =>
+      storeRepository ? storeRepository.load(signal) : Promise.resolve<ApiStore[]>([]),
+    [storeRepository],
+  );
+  const storesResult = useAsync(loadStores);
+  const loadOwners = useCallback(
+    (signal: AbortSignal) =>
+      ownerRepository ? ownerRepository.load(signal) : Promise.resolve<ApiOwner[]>([]),
+    [ownerRepository],
+  );
+  const ownersResult = useAsync(loadOwners);
   function navigate(next: Page, onlyUnlinked = false) {
     setPage(next);
     setUnlinked(onlyUnlinked);
@@ -97,7 +110,10 @@ export function App({
           onNavigate={navigate}
           orderRepository={orderRepository}
           ordersResult={ordersResult}
-          liveStores={storeRepository !== null}
+          storeRepository={storeRepository}
+          storesResult={storesResult}
+          ownerRepository={ownerRepository}
+          ownersResult={ownersResult}
         />
       )}
       {page === "stores" && (
@@ -106,9 +122,10 @@ export function App({
           data={data}
           initiallyUnlinked={unlinked}
           repository={storeRepository}
+          storesResult={storesResult}
         />
       )}
-      {page === "owners" && <OwnersPage data={data} repository={ownerRepository} />}
+      {page === "owners" && <OwnersPage data={data} repository={ownerRepository} ownersResult={ownersResult} />}
       {page === "orders" && (
         <OrdersPage data={data} repository={orderRepository} ordersResult={ordersResult} />
       )}

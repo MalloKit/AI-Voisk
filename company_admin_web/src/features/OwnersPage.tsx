@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import type { AdminSnapshot, ApiOwner } from "../data/models";
 import type { OwnerRepository } from "../data/ownerRepository";
-import { useAsync } from "../hooks/useAsync";
+import { useAsync, type AsyncResult } from "../hooks/useAsync";
 import {
   Badge, ErrorState, Filter, Filters, Heading, Loading,
   Modal, Search, Section, Table,
@@ -26,16 +26,13 @@ function LiveOwnerDetail({ id, repository }: { id: number; repository: OwnerRepo
 export function OwnersPage({
   data,
   repository = null,
+  ownersResult: result,
 }: {
   data: AdminSnapshot;
   repository?: OwnerRepository | null;
+  ownersResult: AsyncResult<ApiOwner[]>;
 }) {
   const live = repository !== null;
-  const load = useCallback(
-    (signal: AbortSignal) => repository ? repository.load(signal) : Promise.resolve<ApiOwner[]>([]),
-    [repository],
-  );
-  const result = useAsync(load);
   const all: ApiOwner[] = live ? (result.data ?? []) : data.owners.map((o) => ({
     ...o, storeCount: data.stores.filter((s) => s.ownerId === o.id).length,
   }));

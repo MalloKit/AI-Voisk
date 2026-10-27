@@ -14,7 +14,7 @@ import {
 } from "../components/ui";
 import { StoreDetails } from "./details";
 import type { StoreRepository } from "../data/storeRepository";
-import { useAsync } from "../hooks/useAsync";
+import { useAsync, type AsyncResult } from "../hooks/useAsync";
 
 export function LiveStoreDetail({ id, repository, data }: { id: number; repository: StoreRepository; data: AdminSnapshot }) {
   const load = useCallback((signal: AbortSignal) => repository.detail(id, signal), [id, repository]);
@@ -28,14 +28,14 @@ export function StoresPage({
   data,
   initiallyUnlinked = false,
   repository = null,
+  storesResult: result,
 }: {
   data: AdminSnapshot;
   initiallyUnlinked?: boolean;
   repository?: StoreRepository | null;
+  storesResult: AsyncResult<ApiStore[]>;
 }) {
   const live = repository !== null;
-  const load = useCallback((signal: AbortSignal) => repository ? repository.load(signal) : Promise.resolve<ApiStore[]>([]), [repository]);
-  const result = useAsync(load);
   const all: (Store | ApiStore)[] = live ? (result.data ?? []) : data.stores;
   const [search, setSearch] = useState(""),
     [type, setType] = useState("전체"),
