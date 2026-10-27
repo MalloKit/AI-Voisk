@@ -36,11 +36,11 @@ class StoreApiTests(unittest.TestCase):
         self.assertEqual(self.client.get('/admin/stores/999').status_code, 404)
         self.assertEqual(self.client.get('/admin/stores/0').status_code, 422)
 
-    def test_remote_access_and_writes_denied(self):
+    def test_remote_access_unsupported_writes_and_invalid_create_denied(self):
         with TestClient(app, client=('203.0.113.1', 1234)) as remote:
             for path in ('/admin/stores', '/admin/stores/1'):
                 self.assertEqual(remote.get(path).status_code, 403)
-        self.assertEqual(self.client.post('/admin/stores', json={}).status_code, 405)
+        self.assertEqual(self.client.post('/admin/stores', json={}).status_code, 422)
         self.assertEqual(self.client.put('/admin/stores/1', json={}).status_code, 405)
         self.assertEqual(self.client.delete('/admin/stores/1').status_code, 405)
 

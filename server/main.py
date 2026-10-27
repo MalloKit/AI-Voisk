@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from order_service import OrderInput, save_order, list_orders, order_detail
 from store_service import StoreNotFound, list_stores, store_detail
+from store_write_service import StoreCreate, StorePatch, create_store, update_store
 from owner_service import OwnerNotFound, list_owners, owner_detail
 from device_service import DeviceNotFound, list_devices, device_detail
 from alert_service import AlertNotFound, list_alerts, alert_detail
@@ -77,7 +78,7 @@ async def local_demo_only(request: Request, call_next):
 app.add_middleware(CORSMiddleware,
     allow_origins=list(admin_auth.settings.origins),
     allow_credentials=True,
-    allow_methods=['GET', 'POST'],
+    allow_methods=['GET', 'POST', 'PATCH'],
     allow_headers=['Content-Type', 'X-CSRF-Token'])
 app.include_router(admin_auth.router)
 
@@ -86,6 +87,9 @@ app.include_router(admin_auth.router)
 async def safe_validation_error(request: Request, error: RequestValidationError):
     if request.url.path.startswith('/auth/admin/'):
         return JSONResponse(status_code=422, content={'detail': '로그인 입력 형식을 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
+    if request.url.path.startswith('/admin/stores') and request.method in ('POST', 'PATCH'):
+        return JSONResponse(status_code=422, content={'detail': '매장 입력 형식과 허용 길이를 확인해 주세요.'},
                             headers={'Cache-Control': 'no-store'})
     return await request_validation_exception_handler(request, error)
 
@@ -204,6 +208,28 @@ def _store_call(function, *args):
         raise HTTPException(404, '매장이 없습니다.') from None
     except Exception:
         raise HTTPException(503, '매장 조회 실패. 서버 연결과 DB 설정을 확인해 주세요.') from None
+
+
+def _store_write_call(function, *args):
+    try:
+        return function(*args)
+    except StoreNotFound:
+        raise HTTPException(404, '매장이 없습니다.') from None
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(503, '매장 저장 결과를 확인할 수 없습니다. 목록을 새로고침해 확인한 뒤 다시 시도해 주세요.') from None
+
+
+@app.post('/admin/stores', response_model=AdminStoreView, status_code=201)
+def admin_create_store(payload: StoreCreate, request: Request):
+    session = admin_auth.require_admin(request)
+    return _store_write_call(create_store, payload, session.admin.admin_id)
+
+
+@app.patch('/admin/stores/{store_id}', response_model=AdminStoreView)
+def admin_update_store(payload: StorePatch, store_id: int = ApiPath(ge=1)):
+    return _store_write_call(update_store, store_id, payload)
 
 
 @app.get('/admin/stores', response_model=AdminStoreList)

@@ -1,15 +1,17 @@
 # 매장 조회 실데이터 연동
 
+현재 등록·수정 기능과 실제 확인된 스키마는 [STORE_WRITES.md](STORE_WRITES.md)를 참고하세요. 아래 초기 구현 기록보다 최신 정책을 우선합니다.
+
 ## 범위 및 API 계약
 - `GET /admin/stores`: `{stores: AdminStoreView[], total: number}`. 전체 매장을 store_id 순으로 반환합니다.
 - `GET /admin/stores/{store_id}`: 매장 1건. 없는 매장 404, 잘못된 ID 422, DB 오류 503.
 - 기존 키오스크 `GET /stores`의 ID·이름 배열 응답은 변경하지 않습니다.
-- 관리자 조회는 기존 /admin/ 로컬 접속 제한을 적용합니다. 로그인 인증을 대신하지 않으므로 외부 공개용이 아닙니다.
+- 관리자 조회·등록·수정은 서버 세션과 회사 관리자 역할을 검사하며 기존 /admin/ 로컬 접속 제한도 유지합니다.
 - 조회는 명시적인 READ ONLY 트랜잭션으로 실행하고 종료 시 rollback/close합니다.
 - DB 구조의 매장 필드와 admin_nm, own_login_id만 명시적으로 선택합니다. 비밀번호는 조회하지 않습니다.
 - store.admin_id → admin.admin_id, store.owner_id → owner.owner_id. owner_id NULL은 미연결이며 한 점주가 여러 매장을 가질 수 있습니다.
 - LEFT JOIN을 사용합니다. 연결 ID는 있지만 계정 표시 정보가 없으면 미연결로 오인하지 않습니다.
-- store_code는 의미가 문서화되지 않았습니다. 우편번호로 변환하거나 해석하지 않고 원래 이름과 값으로 표시합니다.
+- store_code는 실제 스키마 확인으로 우편번호 CHAR(5)임이 확정되었습니다. 문자열과 선행 0을 보존하며 UNIQUE 제약을 가정하지 않습니다.
 
 응답 필드: store_id, store_name, address, address_detail(nullable), store_code, phone,
 business_no, representative, store_type, admin_id, admin_name(nullable), owner_id(nullable),
@@ -27,7 +29,7 @@ owner_login_id(nullable). API와 프론트엔드가 계약을 검증하며 누�
 - 웹 환경변수는 공개 값이므로 DB 설정이나 인증 비밀을 넣지 않습니다.
 
 ## 등록·수정·점주 연결 전 필요한 조건
-현재 로그인/권한 체계가 없으므로 쓰기 라우트와 저장 버튼을 추가하지 않았습니다.
+아래는 초기 조회 구현 시점의 선행 조건 기록입니다. 관리자 인증 및 매장 기본 정보 등록·수정은 현재 구현되었으며 점주 연결 변경은 여전히 제외합니다.
 1. 관리자 로그인, 안전한 비밀번호 해시·검증, 세션/토큰 만료 및 폐기, 전송 구간 TLS.
 2. 서버에서 회사 관리자 권한과 담당 매장 범위를 검사하고 클라이언트가 보낸 admin_id를 신뢰하지 않을 것.
 3. 쿠키 인증이면 CSRF 방어. 배포 시 신뢰 프록시·접속 제한 정책도 별도로 설계.

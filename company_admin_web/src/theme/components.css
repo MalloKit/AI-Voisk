@@ -685,3 +685,14 @@ dd {
 .session-retry {
   margin-top: var(--lg);
 }
+
+
+.store-page-actions { display: flex; justify-content: flex-end; margin-bottom: var(--md); }
+.store-form { display: flex; flex-direction: column; gap: var(--lg); }
+.store-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lg); }
+.store-form-grid .field { min-width: 0; }
+.store-form-grid .field-help, .store-form-grid .field-error { margin: 0; }
+.store-form-grid input { width: 100%; min-width: 0; }
+.store-form-grid [aria-invalid="true"] { border-color: var(--error); }
+.store-form-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--md); }
+@media (max-width: 599px) { .store-form-grid { grid-template-columns: minmax(0, 1fr); } }

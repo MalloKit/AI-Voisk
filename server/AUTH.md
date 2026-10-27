@@ -88,7 +88,7 @@ HTTPS 모드를 선택하는 것만으로 인증서나 외부 배포가 구성�
 HTTPS 설정 역시 외부 IP의 관리자 접근을 자동 허용하지 않습니다.
 프록시·LAN·인터넷 공개는 별도 검토 대상이며 X-Forwarded-For를 임의로 신뢰하도록 변경하지 않았습니다.
 
-CORS는 정확한 허용 출처, credentials=True, GET/POST, Content-Type/X-CSRF-Token을 사용합니다.
+CORS는 정확한 허용 출처, credentials=True, GET/POST/PATCH, Content-Type/X-CSRF-Token을 사용합니다.
 CORS를 인증이나 CSRF 토큰의 대체로 취급하지 않습니다.
 인증 실패 응답에도 CORS가 적용되고 preflight OPTIONS는 세션 없이 처리할 수 있습니다.
 
@@ -117,7 +117,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8001 --workers 1
 
 /admin/orders·stores·owners·devices·alerts와 각 상세의 성공 JSON·조회 서비스는 유지합니다.
 인증 없는 요청은 조회 전에 401이며 기존 로컬 접근 제한과 함께 적용됩니다.
-향후 관리자 쓰기 경로가 생겨도 현재 미들웨어는 안전하지 않은 HTTP 메서드에 CSRF를 요구합니다.
+매장 POST/PATCH를 포함해 현재 미들웨어는 안전하지 않은 HTTP 메서드에 CSRF를 요구합니다. 매장 쓰기 계약은 [STORE_WRITES.md](../company_admin_web/STORE_WRITES.md)를 참고하세요.
 
 GET /stores, GET /stores/{id}/menus, POST /orders의 서비스·요청·응답은 변경하지 않았습니다.
 POST /orders의 기존 로컬 제한, 기기·매장 검사, UUID 중복 방지·재시도·활성화 검사 순서도 유지합니다.

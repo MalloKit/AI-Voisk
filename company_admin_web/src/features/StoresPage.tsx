@@ -12,16 +12,17 @@ import {
   Section,
   Table,
 } from "../components/ui";
+import { StoreEditor } from "./StoreEditor";
 import { StoreDetails } from "./details";
 import type { StoreRepository } from "../data/storeRepository";
 import { useAsync, type AsyncResult } from "../hooks/useAsync";
 
-export function LiveStoreDetail({ id, repository, data }: { id: number; repository: StoreRepository; data: AdminSnapshot }) {
+export function LiveStoreDetail({ id, repository, data, onEdit }: { id: number; repository: StoreRepository; data: AdminSnapshot; onEdit?: (store: ApiStore) => void }) {
   const load = useCallback((signal: AbortSignal) => repository.detail(id, signal), [id, repository]);
   const result = useAsync(load);
   if (result.loading) return <Loading text="실제 매장 상세를 불러오는 중…" />;
   if (result.error || !result.data) return <ErrorState message="실제 매장 상세 조회 실패. Mock 데이터로 대체하지 않습니다." onRetry={result.reload} />;
-  return <StoreDetails data={data} store={result.data} />;
+  return <><StoreDetails data={data} store={result.data} />{onEdit && <button onClick={() => onEdit(result.data!)}>매장 정보 수정</button>}</>;
 }
 
 export function StoresPage({
@@ -43,6 +44,19 @@ export function StoresPage({
       initiallyUnlinked ? "미연결" : "전체",
     );
   const [detail, setDetail] = useState<Store | ApiStore>();
+  const [editing, setEditing] = useState<ApiStore | null | undefined>();
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const writable = !!repository?.create && !!repository?.update;
+  function saved(store: ApiStore) {
+    setNotice(editing === null ? "매장을 등록했습니다." : "매장 정보를 저장했습니다.");
+    setSaving(false); setEditing(undefined); setDetail(store);
+    result.reload();
+  }
+  function close() {
+    if (saving) return;
+    setEditing(undefined); setDetail(undefined);
+  }
   const rows = all.filter(
     (s) =>
       `${s.name} ${s.representative} ${s.businessNo}`
@@ -55,8 +69,10 @@ export function StoresPage({
   return (
     <>
       <Heading title="매장 관리">
-        등록 매장의 기본 정보와 담당자, 점주 연결 현황을 확인합니다. · {live ? "실제 매장 API · 읽기 전용" : "Mock 데이터 · 시연 모드"}
+        등록 매장의 기본 정보와 담당자, 점주 연결 현황을 확인합니다. · {live ? "실제 매장 API" : "Mock 데이터 · 시연 모드"}
       </Heading>
+      {writable && <div className="store-page-actions"><button className="button-primary" onClick={() => { setNotice(""); setEditing(null); }}>매장 등록</button></div>}
+      {notice && <p role="status" className="form-feedback">{notice} 목록과 운영 요약은 최신 조회 결과로 갱신합니다.</p>}
       {live && result.loading ? <Loading text="실제 매장을 불러오는 중…" /> : live && result.error ? (
         <ErrorState message="실제 매장 조회 실패. Mock 데이터로 대체하지 않습니다." onRetry={result.reload} />
       ) : <>
@@ -127,9 +143,14 @@ export function StoresPage({
         ]}
       />
       </>}
-      {detail && (
-        <Modal title={detail.name} onClose={() => setDetail(undefined)}>
-          {repository ? <LiveStoreDetail id={detail.id} repository={repository} data={data} /> : <StoreDetails data={data} store={detail} />}
+      {(detail || editing !== undefined) && (
+        <Modal title={editing === null ? "매장 등록" : editing ? "매장 정보 수정" : detail!.name}
+          onClose={close} closeDisabled={saving}>
+          {editing !== undefined && repository ? <StoreEditor store={editing} repository={repository}
+            onBusy={setSaving} onSaved={saved} onCancel={() => setEditing(undefined)} />
+            : repository ? <LiveStoreDetail id={detail!.id} repository={repository} data={data}
+                onEdit={writable ? setEditing : undefined} />
+            : <StoreDetails data={data} store={detail!} />}
         </Modal>
       )}
     </>

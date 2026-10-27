@@ -35,7 +35,7 @@ export function StoreDetails({
         <Field label="사업자번호">{s.businessNo}</Field>
         <Field label="주소">{`${s.address} ${s.addressDetail}`.trim()}</Field>
         {"storeCode" in s ? (
-          <Field label="store_code (의미 미확인)">{s.storeCode}</Field>
+          <Field label="우편번호 (store_code)">{s.storeCode}</Field>
         ) : <Field label="우편번호">{s.postcode}</Field>}
         <Field label="전화번호">{s.phone}</Field>
       </dl>

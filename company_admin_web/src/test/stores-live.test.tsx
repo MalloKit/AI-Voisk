@@ -113,8 +113,8 @@ describe("live store management", () => {
     const dialog = await screen.findByRole("dialog");
     await within(dialog).findByText("real-owner");
     expect(dialog).toHaveTextContent("실제 담당자");
-    expect(dialog).toHaveTextContent("store_code (의미 미확인)");
-    expect(within(dialog).queryByText("우편번호")).not.toBeInTheDocument();
+    expect(dialog).toHaveTextContent("우편번호 (store_code)");
+    expect(within(dialog).getByText("00123")).toBeInTheDocument();
     expect(repository.detail).toHaveBeenCalledWith(41, expect.any(AbortSignal));
   });
   it("shows list loading, error and retry without displaying Mock stores", async () => {

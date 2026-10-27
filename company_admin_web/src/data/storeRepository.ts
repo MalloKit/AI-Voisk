@@ -1,7 +1,19 @@
-import { adminRequest } from "./apiSession.ts";
+import { adminRequest, AdminApiError } from "./apiSession.ts";
 import type { ApiStore } from "./models";
 
+export interface StoreInput {
+  store_name: string;
+  address: string;
+  address_detail: string | null;
+  store_code: string;
+  phone: string;
+  business_no: string;
+  representative: string;
+  store_type: string;
+}
 export interface StoreRepository {
+  create?(input: StoreInput, signal?: AbortSignal): Promise<ApiStore>;
+  update?(id: number, input: Partial<StoreInput>, signal?: AbortSignal): Promise<ApiStore>;
   load(signal?: AbortSignal): Promise<ApiStore[]>;
   detail(id: number, signal?: AbortSignal): Promise<ApiStore>;
 }
@@ -48,7 +60,7 @@ export class ApiStoreRepository implements StoreRepository {
     private transport: typeof fetch = (input, init) => fetch(input, init),
     private timeoutMs = 20_000,
   ) {}
-  private async get(path: string, signal?: AbortSignal): Promise<unknown> {
+  private async get(path: string, signal?: AbortSignal, init: RequestInit = { method: "GET" }): Promise<unknown> {
     const base = new URL(this.baseUrl);
     if (!["http:", "https:"].includes(base.protocol) || base.username || base.password)
       throw new Error("매장 API 주소를 확인해 주세요.");
@@ -60,16 +72,41 @@ export class ApiStoreRepository implements StoreRepository {
     try {
       const response = await adminRequest(this.transport, 
         base.origin + base.pathname.replace(/\/$/, "") + path,
-        { method: "GET", signal: controller.signal },
+        { ...init, signal: controller.signal },
       );
       if (!response.ok) {
-        throw new Error(response.status === 404 ? "매장이 없습니다." : "실제 매장 조회에 실패했습니다.");
+        throw new AdminApiError(response.status, response.status === 404 ? "매장이 없습니다."
+          : response.status === 409 ? "DB 제약 또는 연결 정보가 변경되었습니다. 새로고침 후 확인해 주세요."
+          : response.status === 422 ? "입력값과 허용 길이를 확인해 주세요."
+          : init.method === "GET" ? "실제 매장 조회에 실패했습니다."
+          : "저장 결과를 확인할 수 없습니다. 목록을 새로고침해 확인한 뒤 다시 시도해 주세요.");
       }
       return await response.json();
     } finally {
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
     }
+  }
+  private async save(path: string, method: "POST" | "PATCH", input: Partial<StoreInput>, signal?: AbortSignal) {
+    const token = record(await this.get("/auth/admin/csrf", signal)).csrf_token;
+    if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token))
+      throw new Error("보안 요청 정보를 확인할 수 없습니다.");
+    // 허용한 기본 정보만 전송. 인증·관계 필드를 런타임에도 제외합니다.
+    const keys: (keyof StoreInput)[] = ["store_name", "address", "address_detail", "store_code", "phone", "business_no", "representative", "store_type"];
+    const body = Object.fromEntries(keys.filter((key) => Object.hasOwn(input, key)).map((key) => [key, input[key]]));
+    return parseStore(await this.get(path, signal, {
+      method, headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+      body: JSON.stringify(body),
+    }));
+  }
+  async create(input: StoreInput, signal?: AbortSignal): Promise<ApiStore> {
+    return this.save("/admin/stores", "POST", input, signal);
+  }
+  async update(storeId: number, input: Partial<StoreInput>, signal?: AbortSignal): Promise<ApiStore> {
+    id(storeId);
+    const store = await this.save("/admin/stores/" + storeId, "PATCH", input, signal);
+    if (store.id !== storeId) throw invalid();
+    return store;
   }
   async load(signal?: AbortSignal): Promise<ApiStore[]> {
     const result = record(await this.get("/admin/stores", signal));

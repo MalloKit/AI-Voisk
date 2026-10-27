@@ -238,14 +238,17 @@ export function Modal({
   title,
   children,
   onClose,
+  closeDisabled = false,
 }: {
   title: string;
   children: ReactNode;
   onClose(): void;
+  closeDisabled?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+    const previous = returnFocus.current;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     ref.current?.focus();
@@ -258,7 +261,7 @@ export function Modal({
     <div
       className="modal-backdrop"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (!closeDisabled && e.target === e.currentTarget) onClose();
       }}
     >
       <div
@@ -271,12 +274,12 @@ export function Modal({
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.stopPropagation();
-            onClose();
+            if (!closeDisabled) onClose();
           }
           if (e.key === "Tab") {
             const nodes = Array.from(
               ref.current!.querySelectorAll<HTMLElement>(
-                'button:not(:disabled), input, select, [tabindex="0"]',
+                'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]',
               ),
             );
             if (!nodes.length) {
@@ -306,7 +309,7 @@ export function Modal({
         <h2>{title}</h2>
         <div className="modal-content">{children}</div>
         <footer>
-          <button onClick={onClose}>닫기</button>
+          <button disabled={closeDisabled} onClick={onClose}>닫기</button>
         </footer>
       </div>
     </div>
