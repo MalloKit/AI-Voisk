@@ -108,6 +108,7 @@ export function AdminShell({
           AI-Voisk 운영 관리
           <br />
           화면별 데이터 출처 확인
+          <a className="login-preview-link" href="/login">로그인 UI 미리보기</a>
         </small>
       </aside>
       <div className="workspace">

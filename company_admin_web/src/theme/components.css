@@ -23,6 +23,7 @@ button {
   color: var(--selected-ink);
   cursor: pointer;
   font-weight: 600;
+  min-height: 44px;
 }
 button:hover {
   background: var(--selected);
@@ -120,16 +121,19 @@ hr {
   margin-left: var(--sidebar);
 }
 .topbar {
-  height: var(--topbar);
+  min-height: var(--topbar);
+  height: auto;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   gap: var(--lg);
-  padding: 0 var(--xl);
+  padding: var(--sm) var(--xl);
 }
 .topbar strong {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: var(--text-lg);
 }
 .account {
@@ -198,12 +202,16 @@ main {
   gap: var(--lg);
   flex-wrap: wrap;
   margin-top: var(--lg);
+  margin-bottom: var(--lg);
 }
 .filters {
   display: flex;
   flex-wrap: wrap;
   gap: var(--lg);
-  align-items: center;
+  align-items: flex-end;
+}
+.filters > button {
+  min-height: var(--header);
 }
 .field {
   display: flex;
@@ -226,7 +234,7 @@ main {
   align-items: center;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: var(--sm) var(--md);
+  padding: 0 var(--sm);
   gap: var(--sm);
   min-height: var(--header);
 }
@@ -234,7 +242,8 @@ main {
   width: 100%;
   min-width: 0;
   border: 0;
-  padding: var(--xs);
+  padding: var(--sm) var(--xs);
+  min-height: 44px;
 }
 .search input:focus {
   outline-offset: 0;
@@ -269,7 +278,9 @@ select {
   font-size: var(--text-xs);
   color: var(--selected-ink);
   background: var(--selected);
-  white-space: nowrap;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .badge.attention {
   background: var(--error-surface);
@@ -281,12 +292,17 @@ select {
   justify-content: center;
   border: 0;
   padding: var(--sm);
+  min-width: 44px;
+  min-height: 44px;
 }
 .table-card {
   overflow: hidden;
   margin-bottom: var(--xl);
 }
 .table-scroll {
+  /* Keep absolutely positioned accessible labels inside the scroll viewport. */
+  position: relative;
+  max-width: 100%;
   overflow-x: auto;
 }
 table {
@@ -302,6 +318,8 @@ th {
   white-space: nowrap;
 }
 td {
+  max-width: 24rem;
+  overflow-wrap: anywhere;
   height: var(--row);
 }
 th,
@@ -340,19 +358,27 @@ td button {
   background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--modal-shadow);
-  max-height: calc(100dvh - var(--xxl));
+  max-height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
 .modal h2 {
   font-size: var(--title);
+  flex-shrink: 0;
+  max-height: 30dvh;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
   padding: var(--xl) var(--xl) 0;
 }
 .modal-content {
   padding: var(--xl);
   overflow-y: auto;
+  min-height: 0;
+  overscroll-behavior: contain;
 }
 .modal footer {
+  flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
   padding: 0 var(--xl) var(--xl);
@@ -381,6 +407,7 @@ dd {
   padding: var(--xxl);
 }
 .spinner {
+  flex-shrink: 0;
   width: var(--xl);
   height: var(--xl);
   border: 3px solid var(--border);
@@ -490,5 +517,158 @@ dd {
 @media (prefers-reduced-motion: reduce) {
   .spinner {
     animation: none;
+  }
+}
+
+/* Shared form controls and a standalone, non-authenticating login preview. */
+.card, .page-heading, .section-heading, .notice, .empty, .loading {
+  overflow-wrap: anywhere;
+}
+.field, .section-heading h2, .search > div, .login-panel {
+  min-width: 0;
+}
+.field > span, .login-form > .field {
+  color: var(--ink);
+}
+.form-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--header);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--md);
+}
+.form-field input[aria-invalid="true"], .password-control:has(input[aria-invalid="true"]) {
+  border-color: var(--error);
+}
+.button-primary {
+  background: var(--brand);
+  color: var(--surface);
+  border-color: var(--brand);
+  min-height: var(--header);
+}
+.button-primary:hover {
+  background: var(--selected-ink);
+}
+.login-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--xxl) var(--xl);
+}
+.login-panel {
+  width: min(100%, 440px);
+}
+.login-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--md);
+  margin-bottom: var(--xl);
+  text-decoration: none;
+  color: var(--selected-ink);
+  font-size: var(--title);
+  font-weight: 700;
+}
+.login-brand small {
+  font-weight: 400;
+  color: var(--muted);
+}
+.login-panel .card {
+  margin-bottom: var(--lg);
+}
+.login-panel .page-heading h1 {
+  font-size: 24px;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md);
+}
+.login-notice {
+  background: var(--canvas);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--xs);
+  padding: var(--md);
+  margin-bottom: var(--xl);
+}
+.password-control {
+  display: flex;
+  align-items: center;
+  padding-right: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.password-control input {
+  border: 0;
+}
+.password-control button {
+  flex-shrink: 0;
+}
+.field-help, .field-error {
+  font-size: var(--text-xs);
+  margin: calc(-1 * var(--sm)) 0 0;
+}
+.field-help {
+  color: var(--muted);
+}
+.field-error {
+  color: var(--error);
+}
+.form-feedback {
+  margin: 0;
+  padding: var(--md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+.form-feedback.error-text {
+  border-color: var(--error);
+  background: var(--error-surface);
+}
+.login-preview-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--selected-ink);
+  text-underline-offset: 3px;
+  margin-top: var(--md);
+  overflow-wrap: anywhere;
+}
+.login-caption {
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  margin-bottom: 0;
+}
+@media (max-width: 599px) {
+  .card {
+    padding: var(--lg);
+  }
+  .topbar {
+    gap: var(--sm);
+  }
+  .topbar .source {
+    max-width: 42%;
+  }
+  .field input, .field select {
+    font-size: var(--text-lg);
+  }
+  .modal h2 {
+    padding: var(--lg) var(--lg) 0;
+  }
+  .modal-content {
+    padding: var(--lg);
+  }
+  .modal footer {
+    padding: 0 var(--lg) var(--lg);
+  }
+  .pagination {
+    flex-wrap: wrap;
+    gap: var(--sm);
+  }
+  .login-page {
+    padding: var(--xl) var(--lg);
   }
 }

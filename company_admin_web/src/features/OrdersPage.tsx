@@ -125,7 +125,7 @@ export function OrdersPage({
     <>
       <Heading title="주문 조회">
         {live
-          ? "실제 API 주문 데이터 · 다른 관리 화면은 Mock 데이터입니다."
+          ? "실제 주문 API · 읽기 전용 조회입니다. 각 화면에서 데이터 출처를 확인해 주세요."
           : "Mock 주문 데이터 · 명시적으로 선택한 시연 모드입니다."}
       </Heading>
       {live && ordersResult.loading ? (
