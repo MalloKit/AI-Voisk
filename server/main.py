@@ -12,6 +12,7 @@ from order_service import OrderInput, save_order, list_orders, order_detail
 from store_service import StoreNotFound, list_stores, store_detail
 from owner_service import OwnerNotFound, list_owners, owner_detail
 from device_service import DeviceNotFound, list_devices, device_detail
+from alert_service import AlertNotFound, list_alerts, alert_detail
 
 
 class MenuOption(BaseModel):
@@ -251,3 +252,44 @@ def admin_devices():
 @app.get('/admin/devices/{device_id}', response_model=AdminDeviceView)
 def admin_device_detail(device_id: int = ApiPath(ge=1)):
     return _device_call(device_detail, device_id)
+
+
+class AdminAlertView(BaseModel):
+    alert_id: int = Field(ge=1)
+    device_id: int = Field(ge=1)
+    device_code: str
+    store_id: int = Field(ge=1)
+    store_name: str
+    alert_type: str
+    severity: str
+    message: str
+    alert_status: str
+    occurred_at: str
+    acknowledged_at: str | None
+    acknowledged_by: int | None
+    acknowledged_by_name: str | None
+    resolved_at: str | None
+
+
+class AdminAlertList(BaseModel):
+    alerts: list[AdminAlertView]
+    total: int = Field(ge=0)
+
+
+def _alert_call(function, *args):
+    try:
+        return function(*args)
+    except AlertNotFound:
+        raise HTTPException(404, '알림이 없습니다.') from None
+    except Exception:
+        raise HTTPException(503, '알림 조회 실패. 서버 연결과 DB 설정을 확인해 주세요.') from None
+
+
+@app.get('/admin/alerts', response_model=AdminAlertList)
+def admin_alerts():
+    return _alert_call(list_alerts)
+
+
+@app.get('/admin/alerts/{alert_id}', response_model=AdminAlertView)
+def admin_alert_detail(alert_id: int = ApiPath(ge=1)):
+    return _alert_call(alert_detail, alert_id)

@@ -20,7 +20,7 @@ async function open(orders: Order[], live = true) {
     detail: vi.fn().mockResolvedValue({ ...orders[0], items: [] }),
   };
   const user = userEvent.setup();
-  render(<App deviceRepository={null} ownerRepository={null} storeRepository={null} repository={new MockAdminRepository()} orderRepository={live ? repo : null} />);
+  render(<App alertRepository={null} deviceRepository={null} ownerRepository={null} storeRepository={null} repository={new MockAdminRepository()} orderRepository={live ? repo : null} />);
   await screen.findByRole("heading", { name: "운영 요약" });
   await user.click(within(screen.getByRole("navigation", { name: "주요 화면" })).getByRole("button", { name: "주문 조회" }));
   if (live) await screen.findByText(`실제 주문 목록 · ${orders.length}건`);

@@ -18,7 +18,7 @@ const nav = (name: string) => within(screen.getByRole("navigation", { name: "주
   .getByRole("button", { name });
 async function open(repository: DeviceRepository, admin = new MockAdminRepository()) {
   const user = userEvent.setup();
-  render(<App repository={admin} orderRepository={null} storeRepository={null}
+  render(<App alertRepository={null} repository={admin} orderRepository={null} storeRepository={null}
     ownerRepository={null} deviceRepository={repository} />);
   await screen.findByRole("heading", { name: "운영 요약", level: 1 });
   expect(screen.getByText(/기기·알림: Mock/)).toBeInTheDocument();

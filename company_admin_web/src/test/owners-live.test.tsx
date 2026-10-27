@@ -19,7 +19,7 @@ const detail = (id = 1, count = 0): ApiOwnerDetail => ({
 });
 async function open(repository: OwnerRepository) {
   const user = userEvent.setup();
-  render(<App deviceRepository={null} repository={new MockAdminRepository()} orderRepository={null}
+  render(<App alertRepository={null} deviceRepository={null} repository={new MockAdminRepository()} orderRepository={null}
     storeRepository={null} ownerRepository={repository} />);
   await screen.findByRole("heading", { name: "운영 요약", level: 1 });
   expect(screen.getByText("점주 계정 · 실제 API")).toBeInTheDocument();

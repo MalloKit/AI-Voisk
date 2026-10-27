@@ -27,6 +27,7 @@ export function AdminShell({
   liveStores,
   liveOwners,
   liveDevices,
+  liveAlerts,
   children,
 }: {
   page: Page;
@@ -35,6 +36,7 @@ export function AdminShell({
   liveStores: boolean;
   liveOwners: boolean;
   liveDevices: boolean;
+  liveAlerts: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -121,7 +123,7 @@ export function AdminShell({
           </button>
           <strong>{label}</strong>
           <span className="badge source">
-            {page === "orders" && liveOrders ? "실제 주문 API" : page === "stores" && liveStores ? "실제 매장 API" : page === "owners" && liveOwners ? "실제 점주 API" : page === "devices" && liveDevices ? "실제 기기 API" : page === "dashboard" ? "출처별 요약" : "Mock 데이터"}
+            {page === "orders" && liveOrders ? "실제 주문 API" : page === "stores" && liveStores ? "실제 매장 API" : page === "owners" && liveOwners ? "실제 점주 API" : page === "devices" && liveDevices ? "실제 기기 API" : page === "alerts" && liveAlerts ? "실제 알림 API" : page === "dashboard" ? "출처별 요약" : "Mock 데이터"}
           </span>
           <span className="account">
             <UserCircle size={23} aria-hidden="true" />

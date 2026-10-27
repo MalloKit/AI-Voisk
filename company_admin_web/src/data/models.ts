@@ -125,3 +125,21 @@ export interface ApiDevice {
   last_seen_at: string | null;
   last_synced_at: string | null;
 }
+
+/** 실제 정수 알림 ID와 원본 문자열을 Mock DeviceAlert 모델과 분리합니다. */
+export interface ApiAlert {
+  alert_id: number;
+  device_id: number;
+  device_code: string;
+  store_id: number;
+  store_name: string;
+  alert_type: string;
+  severity: string;
+  message: string;
+  alert_status: string;
+  occurred_at: string;
+  acknowledged_at: string | null;
+  acknowledged_by: number | null;
+  acknowledged_by_name: string | null;
+  resolved_at: string | null;
+}

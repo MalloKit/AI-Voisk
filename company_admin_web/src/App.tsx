@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { ApiDevice, ApiOwner, ApiStore, Order, Page } from "./data/models";
+import type { ApiAlert, ApiDevice, ApiOwner, ApiStore, Order, Page } from "./data/models";
 import {
   MockAdminRepository,
   type AdminRepository,
@@ -23,6 +23,12 @@ import { ApiStoreRepository, type StoreRepository } from "./data/storeRepository
 import { ApiOwnerRepository, type OwnerRepository } from "./data/ownerRepository";
 
 import { ApiDeviceRepository, type DeviceRepository } from "./data/deviceRepository";
+
+import { ApiAlertRepository, type AlertRepository } from "./data/alertRepository";
+
+const defaultAlerts = import.meta.env.VITE_ALERT_SOURCE === "mock"
+  ? null
+  : new ApiAlertRepository(import.meta.env.VITE_ALERT_API_BASE_URL || import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001");
 
 const defaultDevices = import.meta.env.VITE_DEVICE_SOURCE === "mock"
   ? null
@@ -49,12 +55,14 @@ export function App({
   storeRepository = defaultStores,
   ownerRepository = defaultOwners,
   deviceRepository = defaultDevices,
+  alertRepository = defaultAlerts,
 }: {
   repository?: AdminRepository;
   orderRepository?: OrderRepository | null;
   storeRepository?: StoreRepository | null;
   ownerRepository?: OwnerRepository | null;
   deviceRepository?: DeviceRepository | null;
+  alertRepository?: AlertRepository | null;
 }) {
   const [page, setPage] = useState<Page>("dashboard"),
     [unlinked, setUnlinked] = useState(false);
@@ -85,6 +93,11 @@ export function App({
     [deviceRepository],
   );
   const devicesResult = useAsync(loadDevices);
+  const loadAlerts = useCallback(
+    (signal: AbortSignal) => alertRepository ? alertRepository.load(signal) : Promise.resolve<ApiAlert[]>([]),
+    [alertRepository],
+  );
+  const alertsResult = useAsync(loadAlerts);
   function navigate(next: Page, onlyUnlinked = false) {
     setPage(next);
     setUnlinked(onlyUnlinked);
@@ -117,6 +130,7 @@ export function App({
       liveStores={storeRepository !== null}
       liveOwners={ownerRepository !== null}
       liveDevices={deviceRepository !== null}
+      liveAlerts={alertRepository !== null}
     >
       {page === "dashboard" && (
         <DashboardPage
@@ -145,7 +159,7 @@ export function App({
       )}
       {page === "devices" && <DevicesPage data={data} repository={deviceRepository} devicesResult={devicesResult} />}
       {page === "alerts" && (
-        <AlertsPage data={data} onAcknowledge={acknowledge} />
+        <AlertsPage data={data} onAcknowledge={acknowledge} repository={alertRepository} alertsResult={alertsResult} />
       )}
     </AdminShell>
   );
