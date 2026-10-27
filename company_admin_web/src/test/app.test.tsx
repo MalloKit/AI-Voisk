@@ -43,7 +43,7 @@ async function open(
   orders: OrderRepository | null = null,
 ) {
   const user = userEvent.setup();
-  render(<App ownerRepository={null} storeRepository={null} repository={repository} orderRepository={orders} />);
+  render(<App deviceRepository={null} ownerRepository={null} storeRepository={null} repository={repository} orderRepository={orders} />);
   await screen.findByRole("heading", { level: 1, name: "운영 요약" });
   return user;
 }
@@ -208,7 +208,7 @@ describe("six screens and Flutter behaviour parity", () => {
     const repository = new MockAdminRepository();
     vi.spyOn(repository, "load").mockRejectedValueOnce(new Error("fail"));
     const user = userEvent.setup();
-    render(<App ownerRepository={null} storeRepository={null} repository={repository} orderRepository={null} />);
+    render(<App deviceRepository={null} ownerRepository={null} storeRepository={null} repository={repository} orderRepository={null} />);
     expect(screen.getByRole("status")).toBeInTheDocument();
     await screen.findByText("데이터를 불러오지 못했습니다.");
     await user.click(screen.getByRole("button", { name: "다시 시도" }));

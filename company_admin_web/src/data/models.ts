@@ -110,3 +110,18 @@ export interface OwnerStore {
 export interface ApiOwnerDetail extends ApiOwner {
   stores: OwnerStore[];
 }
+
+/** 실제 기기 식별자는 주문 API와 동일한 정수이며 Mock Device와 분리합니다. */
+export interface ApiDevice {
+  device_id: number;
+  device_code: string;
+  store_id: number;
+  store_name: string;
+  store_address: string;
+  store_address_detail: string | null;
+  is_active: boolean;
+  registered_at: string;
+  app_version: string | null;
+  last_seen_at: string | null;
+  last_synced_at: string | null;
+}

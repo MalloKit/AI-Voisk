@@ -44,7 +44,7 @@ function repositories() {
 }
 async function open(repos = repositories()) {
   const user = userEvent.setup();
-  render(<App repository={new MockAdminRepository()} storeRepository={repos.stores}
+  render(<App deviceRepository={null} repository={new MockAdminRepository()} storeRepository={repos.stores}
     ownerRepository={repos.owners} orderRepository={repos.orders} />);
   await screen.findByRole("heading", { name: "운영 요약", level: 1 });
   return { user, ...repos };
@@ -222,7 +222,7 @@ describe("shared live dashboard sources", () => {
 
   it("retains explicit Mock demo mode for store and owner navigation", async () => {
     const user = userEvent.setup();
-    render(<App repository={new MockAdminRepository()} storeRepository={null}
+    render(<App deviceRepository={null} repository={new MockAdminRepository()} storeRepository={null}
       ownerRepository={null} orderRepository={null} />);
     await screen.findByRole("heading", { name: "운영 요약", level: 1 });
     expect(metric("등록 매장")).toHaveTextContent("6곳");

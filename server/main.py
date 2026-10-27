@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from order_service import OrderInput, save_order, list_orders, order_detail
 from store_service import StoreNotFound, list_stores, store_detail
 from owner_service import OwnerNotFound, list_owners, owner_detail
+from device_service import DeviceNotFound, list_devices, device_detail
 
 
 class MenuOption(BaseModel):
@@ -212,3 +213,41 @@ def admin_owners():
 @app.get('/admin/owners/{owner_id}', response_model=AdminOwnerDetail)
 def admin_owner_detail(owner_id: int = ApiPath(ge=1)):
     return _owner_call(owner_detail, owner_id)
+
+
+class AdminDeviceView(BaseModel):
+    device_id: int = Field(ge=1)
+    device_code: str
+    store_id: int = Field(ge=1)
+    store_name: str
+    store_address: str
+    store_address_detail: str | None
+    is_active: bool
+    registered_at: str
+    app_version: str | None
+    last_seen_at: str | None
+    last_synced_at: str | None
+
+
+class AdminDeviceList(BaseModel):
+    devices: list[AdminDeviceView]
+    total: int = Field(ge=0)
+
+
+def _device_call(function, *args):
+    try:
+        return function(*args)
+    except DeviceNotFound:
+        raise HTTPException(404, '기기가 없습니다.') from None
+    except Exception:
+        raise HTTPException(503, '기기 조회 실패. 서버 연결과 DB 설정을 확인해 주세요.') from None
+
+
+@app.get('/admin/devices', response_model=AdminDeviceList)
+def admin_devices():
+    return _device_call(list_devices)
+
+
+@app.get('/admin/devices/{device_id}', response_model=AdminDeviceView)
+def admin_device_detail(device_id: int = ApiPath(ge=1)):
+    return _device_call(device_detail, device_id)

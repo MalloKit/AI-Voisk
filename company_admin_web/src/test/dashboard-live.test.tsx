@@ -41,7 +41,7 @@ describe("live orders on company dashboard", () => {
     };
     const user = userEvent.setup();
     render(
-      <App ownerRepository={null} storeRepository={null}
+      <App deviceRepository={null} ownerRepository={null} storeRepository={null}
         repository={new MockAdminRepository()}
         orderRepository={repository}
       />,
@@ -66,7 +66,7 @@ describe("live orders on company dashboard", () => {
     };
     const user = userEvent.setup();
     render(
-      <App ownerRepository={null} storeRepository={null}
+      <App deviceRepository={null} ownerRepository={null} storeRepository={null}
         repository={new MockAdminRepository()}
         orderRepository={repository}
       />,
@@ -88,7 +88,7 @@ describe("live orders on company dashboard", () => {
     };
     const user = userEvent.setup();
     render(
-      <App ownerRepository={null} storeRepository={null} repository={new MockAdminRepository()} orderRepository={repository} />,
+      <App deviceRepository={null} ownerRepository={null} storeRepository={null} repository={new MockAdminRepository()} orderRepository={repository} />,
     );
     await screen.findByRole("button", { name: "주문 상세: #30" });
     expect(repository.load).toHaveBeenCalledTimes(1);
@@ -112,7 +112,7 @@ describe("live orders on company dashboard", () => {
     };
     const user = userEvent.setup();
     render(
-      <App ownerRepository={null} storeRepository={null} repository={new MockAdminRepository()} orderRepository={repository} />,
+      <App deviceRepository={null} ownerRepository={null} storeRepository={null} repository={new MockAdminRepository()} orderRepository={repository} />,
     );
     await screen.findByText("0건");
     expect(screen.getByText("6곳")).toBeInTheDocument();
