@@ -696,3 +696,7 @@ dd {
 .store-form-grid [aria-invalid="true"] { border-color: var(--error); }
 .store-form-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--md); }
 @media (max-width: 599px) { .store-form-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Store editor actions live in Modal's non-scrolling footer. */
+.modal footer:has(.store-form-actions) { padding-top: var(--md); border-top: 1px solid var(--border); }
+.store-form-actions { width: 100%; }

@@ -172,11 +172,14 @@ describe("live store registration and editing", () => {
     const repo = repositories(); repo.create.mockReturnValue(pending.promise);
     const { user } = await open(repo);
     await user.click(screen.getByRole("button", { name: "매장 등록" })); fill();
-    const form = screen.getByRole("button", { name: "저장" }).closest("form")!;
+    const saveButton = screen.getByRole("button", { name: "저장" });
+    const form = document.getElementById(saveButton.getAttribute("form")!)!;
+    expect(form.tagName).toBe("FORM");
     fireEvent.submit(form); fireEvent.submit(form);
     expect(repo.create).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "취소" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "닫기" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "닫기" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "저장 중…" })).toBeDisabled();
     for (const field of within(screen.getByRole("dialog")).getAllByRole("textbox")) expect(field).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -250,3 +253,102 @@ describe("live store registration and editing", () => {
     expect(repo.update).not.toHaveBeenCalled();
   });
 });
+  it("allows a name-only edit with unchanged legacy postcode, business number and other invalid fields", async () => {
+    const legacy = parseStore({ ...raw(), store_code: "T0001", business_no: "LEGACY-NO",
+      phone: "", store_type: "가".repeat(201), address: " 부산 " });
+    const repo = repositories([legacy]);
+    repo.update.mockImplementation(async (_id, changes) => ({ ...legacy, name: changes.store_name! }));
+    const { user } = await open(repo);
+    await user.click(screen.getByRole("button", { name: "매장 상세: 등록 매장" }));
+    await user.click(await screen.findByRole("button", { name: "매장 정보 수정" }));
+    expect(screen.getByRole("textbox", { name: "우편번호 *" })).toHaveValue("T0001");
+    fireEvent.change(screen.getByRole("textbox", { name: "매장명 *" }), { target: { value: "레거시 이름 수정" } });
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await screen.findByText(/매장 정보를 저장했습니다/);
+    expect(repo.update).toHaveBeenCalledWith(41, { store_name: "레거시 이름 수정" }, expect.any(AbortSignal));
+    expect(Object.keys(repo.update.mock.calls[0][1])).toEqual(["store_name"]);
+    expect(legacy.storeCode).toBe("T0001");
+    expect(legacy.address).toBe(" 부산 ");
+  });
+  it.each([
+    ["우편번호 *", "X0002", "우편번호는 숫자 5자리"],
+    ["사업자번호 *", "BAD-NEW", "사업자번호는 하이픈 없이 숫자 10자리"],
+    ["매장명 *", "", "매장명을(를) 입력해 주세요."],
+    ["전화번호 *", "가".repeat(51), "50자 이하로 입력해 주세요."],
+  ])("validates the changed legacy field %s without validating untouched fields", async (label, value, message) => {
+    const legacy = parseStore({ ...raw(), store_code: "T0001", business_no: "OLD" });
+    const repo = repositories([legacy]); const { user } = await open(repo);
+    await user.click(screen.getByRole("button", { name: "매장 상세: 등록 매장" }));
+    await user.click(await screen.findByRole("button", { name: "매장 정보 수정" }));
+    fireEvent.change(screen.getByRole("textbox", { name: label }), { target: { value } });
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    expect(screen.getByText(new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))).toBeInTheDocument();
+    expect(repo.update).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: label })).toHaveFocus();
+  });
+  it("accepts an explicitly corrected postcode, sends only it, and retains the legacy business number", async () => {
+    const legacy = parseStore({ ...raw(), store_code: "T0001", business_no: "OLD" });
+    const repo = repositories([legacy]); const { user } = await open(repo);
+    await user.click(screen.getByRole("button", { name: "매장 상세: 등록 매장" }));
+    await user.click(await screen.findByRole("button", { name: "매장 정보 수정" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "우편번호 *" }), { target: { value: "00123" } });
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await screen.findByText(/매장 정보를 저장했습니다/);
+    expect(repo.update).toHaveBeenCalledWith(41, { store_code: "00123" }, expect.any(AbortSignal));
+    expect(legacy.businessNo).toBe("OLD");
+  });
+  it("treats restored legacy values as unchanged, clears errors and does not send an empty PATCH", async () => {
+    const repo = repositories([parseStore({ ...raw(), store_code: "T0001", business_no: "OLD" })]);
+    const { user } = await open(repo);
+    await user.click(screen.getByRole("button", { name: "매장 상세: 등록 매장" }));
+    await user.click(await screen.findByRole("button", { name: "매장 정보 수정" }));
+    const postcode = screen.getByRole("textbox", { name: "우편번호 *" });
+    fireEvent.change(postcode, { target: { value: "X0002" } });
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    expect(postcode).toHaveAttribute("aria-invalid", "true");
+    fireEvent.change(postcode, { target: { value: "T0001" } });
+    expect(postcode).toHaveAttribute("aria-invalid", "false");
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await screen.findByText("변경된 정보가 없습니다.");
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+  it("keeps create validation strict for the same legacy postcode and business number", async () => {
+    const { user, repo } = await open();
+    await user.click(screen.getByRole("button", { name: "매장 등록" })); fill();
+    fireEvent.change(screen.getByRole("textbox", { name: "우편번호 *" }), { target: { value: "T0001" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "사업자번호 *" }), { target: { value: "OLD" } });
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    expect(screen.getByText("우편번호는 숫자 5자리로 입력해 주세요.")).toBeInTheDocument();
+    expect(screen.getByText("사업자번호는 하이픈 없이 숫자 10자리로 입력해 주세요.")).toBeInTheDocument();
+    expect(repo.create).not.toHaveBeenCalled();
+  });
+  it("places only save and cancel outside the scrollable form with a valid form association", async () => {
+    const { user } = await open();
+    await user.click(screen.getByRole("button", { name: "매장 등록" }));
+    const dialog = screen.getByRole("dialog"), footer = dialog.querySelector("footer")!;
+    const save = within(footer).getByRole("button", { name: "저장" });
+    expect(within(footer).getByRole("button", { name: "취소" })).toBeInTheDocument();
+    expect(within(dialog).getAllByRole("button")).toHaveLength(2);
+    expect(dialog.querySelector(".modal-content")!.contains(save)).toBe(false);
+    expect((save as HTMLButtonElement).form).toBe(dialog.querySelector("form"));
+    await user.click(save);
+    expect(screen.getByRole("textbox", { name: "매장명 *" })).toHaveFocus();
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(save).toHaveFocus();
+    await user.keyboard("{Tab}");
+    expect(screen.getByRole("textbox", { name: "매장명 *" })).toHaveFocus();
+  });
+  it("returns focus to the edit action after cancel and save while keeping detail close", async () => {
+    const repo = repositories([parseStore(raw())]); const { user } = await open(repo);
+    await user.click(screen.getByRole("button", { name: "매장 상세: 등록 매장" }));
+    await user.click(await screen.findByRole("button", { name: "매장 정보 수정" }));
+    await user.click(screen.getByRole("button", { name: "취소" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "매장 정보 수정" })).toHaveFocus());
+    expect(screen.getByRole("button", { name: "닫기" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "매장 정보 수정" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "매장명 *" }), { target: { value: "변경 이름" } });
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "매장 정보 수정" })).toHaveFocus());
+    await user.click(screen.getByRole("button", { name: "닫기" }));
+    expect(screen.getByRole("button", { name: "매장 상세: 변경 이름" })).toHaveFocus();
+  });

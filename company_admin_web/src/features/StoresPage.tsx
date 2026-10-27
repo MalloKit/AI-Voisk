@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import type { AdminSnapshot, ApiStore, Store } from "../data/models";
 import {
   Badge,
@@ -17,12 +17,12 @@ import { StoreDetails } from "./details";
 import type { StoreRepository } from "../data/storeRepository";
 import { useAsync, type AsyncResult } from "../hooks/useAsync";
 
-export function LiveStoreDetail({ id, repository, data, onEdit }: { id: number; repository: StoreRepository; data: AdminSnapshot; onEdit?: (store: ApiStore) => void }) {
+export function LiveStoreDetail({ id, repository, data, onEdit, focusEdit = false }: { id: number; repository: StoreRepository; data: AdminSnapshot; onEdit?: (store: ApiStore) => void; focusEdit?: boolean }) {
   const load = useCallback((signal: AbortSignal) => repository.detail(id, signal), [id, repository]);
   const result = useAsync(load);
   if (result.loading) return <Loading text="실제 매장 상세를 불러오는 중…" />;
   if (result.error || !result.data) return <ErrorState message="실제 매장 상세 조회 실패. Mock 데이터로 대체하지 않습니다." onRetry={result.reload} />;
-  return <><StoreDetails data={data} store={result.data} />{onEdit && <button onClick={() => onEdit(result.data!)}>매장 정보 수정</button>}</>;
+  return <><StoreDetails data={data} store={result.data} />{onEdit && <button autoFocus={focusEdit} onClick={() => onEdit(result.data!)}>매장 정보 수정</button>}</>;
 }
 
 export function StoresPage({
@@ -45,12 +45,14 @@ export function StoresPage({
     );
   const [detail, setDetail] = useState<Store | ApiStore>();
   const [editing, setEditing] = useState<ApiStore | null | undefined>();
+  const editorFormId = useId();
+  const [focusEdit, setFocusEdit] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const writable = !!repository?.create && !!repository?.update;
   function saved(store: ApiStore) {
     setNotice(editing === null ? "매장을 등록했습니다." : "매장 정보를 저장했습니다.");
-    setSaving(false); setEditing(undefined); setDetail(store);
+    setSaving(false); setFocusEdit(true); setEditing(undefined); setDetail(store);
     result.reload();
   }
   function close() {
@@ -71,7 +73,7 @@ export function StoresPage({
       <Heading title="매장 관리">
         등록 매장의 기본 정보와 담당자, 점주 연결 현황을 확인합니다. · {live ? "실제 매장 API" : "Mock 데이터 · 시연 모드"}
       </Heading>
-      {writable && <div className="store-page-actions"><button className="button-primary" onClick={() => { setNotice(""); setEditing(null); }}>매장 등록</button></div>}
+      {writable && <div className="store-page-actions"><button className="button-primary" onClick={() => { setNotice(""); setFocusEdit(false); setEditing(null); }}>매장 등록</button></div>}
       {notice && <p role="status" className="form-feedback">{notice} 목록과 운영 요약은 최신 조회 결과로 갱신합니다.</p>}
       {live && result.loading ? <Loading text="실제 매장을 불러오는 중…" /> : live && result.error ? (
         <ErrorState message="실제 매장 조회 실패. Mock 데이터로 대체하지 않습니다." onRetry={result.reload} />
@@ -134,7 +136,7 @@ export function StoresPage({
             render: (s) => (
               <button
                 aria-label={`매장 상세: ${s.name}`}
-                onClick={() => setDetail(s)}
+                onClick={() => { setFocusEdit(false); setDetail(s); }}
               >
                 상세
               </button>
@@ -145,11 +147,15 @@ export function StoresPage({
       </>}
       {(detail || editing !== undefined) && (
         <Modal title={editing === null ? "매장 등록" : editing ? "매장 정보 수정" : detail!.name}
-          onClose={close} closeDisabled={saving}>
+          onClose={close} closeDisabled={saving}
+          footer={editing !== undefined ? <div className="store-form-actions">
+            <button type="button" disabled={saving} onClick={() => { setFocusEdit(true); setEditing(undefined); }}>취소</button>
+            <button type="submit" form={editorFormId} disabled={saving} className="button-primary">{saving ? "저장 중…" : "저장"}</button>
+          </div> : undefined}>
           {editing !== undefined && repository ? <StoreEditor store={editing} repository={repository}
-            onBusy={setSaving} onSaved={saved} onCancel={() => setEditing(undefined)} />
+            onBusy={setSaving} onSaved={saved} formId={editorFormId} />
             : repository ? <LiveStoreDetail id={detail!.id} repository={repository} data={data}
-                onEdit={writable ? setEditing : undefined} />
+                onEdit={writable ? setEditing : undefined} focusEdit={focusEdit} />
             : <StoreDetails data={data} store={detail!} />}
         </Modal>
       )}

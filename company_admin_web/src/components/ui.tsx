@@ -239,11 +239,13 @@ export function Modal({
   children,
   onClose,
   closeDisabled = false,
+  footer,
 }: {
   title: string;
   children: ReactNode;
   onClose(): void;
   closeDisabled?: boolean;
+  footer?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const returnFocus = useRef(document.activeElement as HTMLElement | null);
@@ -309,7 +311,7 @@ export function Modal({
         <h2>{title}</h2>
         <div className="modal-content">{children}</div>
         <footer>
-          <button disabled={closeDisabled} onClick={onClose}>닫기</button>
+          {footer ?? <button disabled={closeDisabled} onClick={onClose}>닫기</button>}
         </footer>
       </div>
     </div>
