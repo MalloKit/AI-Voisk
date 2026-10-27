@@ -1,43 +1,52 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppEntry } from "../AppEntry";
 import { MockAdminRepository } from "../data/adminRepository";
 import { AdminLoginForm, LoginPage, parseAdminLoginId } from "../features/LoginPage";
+import { AdminApiError } from "../data/apiSession.ts";
+import { ApiAuthRepository } from "../data/authRepository";
 
 afterEach(() => {
   window.history.replaceState(null, "", "/");
   vi.unstubAllGlobals();
 });
+const unauthenticated = () => ({
+  me: vi.fn().mockRejectedValue(new AdminApiError(401, "로그인이 필요합니다.")),
+  login: vi.fn().mockRejectedValue(new AdminApiError(401, "관리자 ID 또는 비밀번호를 확인해 주세요.")),
+  logout: vi.fn(),
+});
 
-describe("login UI preview without authentication", () => {
-  it("opens /login independently without mounting the admin data loaders", () => {
+describe("login UI connected to server authentication", () => {
+  it("opens /login after server validation without mounting admin data loaders", async () => {
     window.history.replaceState(null, "", "/login");
     const transport = vi.fn();
     vi.stubGlobal("fetch", transport);
-    render(<AppEntry />);
-    expect(screen.getByRole("heading", { name: "관리자 로그인" })).toBeInTheDocument();
-    expect(screen.getByText(/인증 API 미연동/)).toBeInTheDocument();
-    expect(screen.getByText(/접근을 제한하지 않습니다/)).toBeInTheDocument();
+    const auth = unauthenticated();
+    render(<AppEntry authRepository={auth} />);
+    await screen.findByRole("heading", { name: "관리자 로그인" });
+    expect(auth.me).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("관리자 ID")).toHaveAttribute("inputmode", "numeric");
     expect(screen.getByLabelText("비밀번호", { exact: true })).toHaveAttribute("type", "password");
-    expect(screen.getByRole("link", { name: /기존 관리자 화면 보기/ })).toHaveAttribute("href", "/");
+    expect(screen.queryByRole("link", { name: /기존 관리자 화면 보기/ })).not.toBeInTheDocument();
     expect(transport).not.toHaveBeenCalled();
   });
 
-  it("also supports a trailing slash preview URL", () => {
+  it("also supports a trailing slash login URL", async () => {
     window.history.replaceState(null, "", "/login/");
-    render(<AppEntry />);
-    expect(screen.getByRole("heading", { name: "관리자 로그인" })).toBeInTheDocument();
+    render(<AppEntry authRepository={unauthenticated()} />);
+    await screen.findByRole("heading", { name: "관리자 로그인" });
+    expect(window.location.pathname).toBe("/login");
   });
 
-  it("keeps the existing admin root accessible without a fake authentication guard", async () => {
-    render(<AppEntry repository={new MockAdminRepository()}
+  it("keeps the existing admin root accessible after server session validation", async () => {
+    const auth = { ...unauthenticated(), me: vi.fn().mockResolvedValue({ id: 12, name: "격리 관리자" }) };
+    render(<AppEntry authRepository={auth} repository={new MockAdminRepository()}
       orderRepository={null} storeRepository={null} ownerRepository={null}
       deviceRepository={null} alertRepository={null} />);
     await screen.findByRole("heading", { name: "운영 요약" });
-    expect(screen.getByRole("link", { name: "로그인 UI 미리보기" })).toHaveAttribute("href", "/login");
-    expect(screen.getByText("회사 관리자 · 시연 모드")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "로그아웃" })).toBeInTheDocument();
+    expect(screen.queryByText("회사 관리자 · 시연 모드")).not.toBeInTheDocument();
   });
 
   it("validates empty inputs, focuses ID first, and never submits invalid data", async () => {
@@ -84,7 +93,7 @@ describe("login UI preview without authentication", () => {
 
   it("focuses the missing password and clears its field error on editing", async () => {
     const user = userEvent.setup();
-    render(<LoginPage />);
+    render(<LoginPage onLogin={vi.fn()} />);
     await user.type(screen.getByLabelText("관리자 ID"), "12");
     await user.click(screen.getByRole("button", { name: "로그인" }));
     const field = screen.getByLabelText("비밀번호", { exact: true });
@@ -109,22 +118,26 @@ describe("login UI preview without authentication", () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
-  it("never sends, persists, logs, echoes or authenticates valid preview input", async () => {
-    const transport = vi.fn();
-    vi.stubGlobal("fetch", transport);
+  it("does not persist, log, echo or authenticate rejected login input", async () => {
+    const token = crypto.randomUUID().replaceAll("-", "") + "a".repeat(11);
+    const transport = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("{}", { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrf_token: token })))
+      .mockResolvedValueOnce(new Response("{}", { status: 401 }));
     const storage = vi.spyOn(Storage.prototype, "setItem");
     const logs = [vi.spyOn(console, "log"), vi.spyOn(console, "info"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
     window.history.replaceState(null, "", "/login");
-    render(<AppEntry />);
+    render(<AppEntry authRepository={new ApiAuthRepository("http://localhost:8001", transport)} />);
+    await screen.findByRole("heading", { name: "관리자 로그인" });
     const user = userEvent.setup();
     const generatedInput = crypto.randomUUID();
     await user.type(screen.getByLabelText("관리자 ID"), "12");
     await user.type(screen.getByLabelText("비밀번호", { exact: true }), generatedInput);
     await user.click(screen.getByRole("button", { name: "로그인" }));
-    expect(screen.getByRole("status")).toHaveTextContent("로그인할 수 없습니다");
+    expect(await screen.findByRole("alert")).toHaveTextContent("ID 또는 비밀번호");
     expect(screen.getByLabelText("비밀번호", { exact: true })).toHaveValue("");
     expect(document.body.textContent?.includes(generatedInput)).toBe(false);
-    expect(transport).not.toHaveBeenCalled();
+    expect(transport).toHaveBeenCalledTimes(3);
     expect(storage).not.toHaveBeenCalled();
     for (const log of logs) expect(log).not.toHaveBeenCalled();
     expect(window.location.pathname).toBe("/login");
@@ -132,7 +145,7 @@ describe("login UI preview without authentication", () => {
     expect(screen.queryByText(/로그인 성공|로그아웃/)).not.toBeInTheDocument();
   });
 
-  it("supports a safe authentication error presentation without interpreting HTML", () => {
+  it("supports safe authentication errors without interpreting HTML", () => {
     render(<AdminLoginForm onSubmit={() => undefined} feedback={{
       kind: "error", message: "<b>인증 요청에 실패했습니다.</b>",
     }} />);

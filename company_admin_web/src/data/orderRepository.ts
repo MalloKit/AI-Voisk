@@ -1,3 +1,4 @@
+import { adminRequest } from "./apiSession.ts";
 import type { Order, OrderItem } from "./models";
 
 export interface OrderRepository {
@@ -91,7 +92,7 @@ export class ApiOrderRepository implements OrderRepository {
     try {
       // Preserve an optional base path, like the Flutter repository.
       const target = `${url.origin}${url.pathname.replace(/\/$/, "")}${path}`;
-      const response = await this.transport(target, {
+      const response = await adminRequest(this.transport, target, {
         method: "GET",
         signal: controller.signal,
       });

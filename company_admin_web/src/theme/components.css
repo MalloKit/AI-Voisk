@@ -672,3 +672,16 @@ dd {
     padding: var(--xl) var(--lg);
   }
 }
+
+.signed-in-admin {
+  display: block;
+  margin-top: var(--md);
+  overflow-wrap: anywhere;
+}
+.logout-button {
+  width: 100%;
+  margin-top: var(--md);
+}
+.session-retry {
+  margin-top: var(--lg);
+}

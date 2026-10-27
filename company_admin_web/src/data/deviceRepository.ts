@@ -1,3 +1,4 @@
+import { adminRequest } from "./apiSession.ts";
 import type { ApiDevice } from "./models";
 
 export interface DeviceRepository {
@@ -62,7 +63,7 @@ export class ApiDeviceRepository implements DeviceRepository {
     if (signal?.aborted) cancel();
     const timer = setTimeout(cancel, this.timeoutMs);
     try {
-      const response = await this.transport(
+      const response = await adminRequest(this.transport, 
         base.origin + base.pathname.replace(/\/$/, "") + path,
         { method: "GET", signal: controller.signal },
       );

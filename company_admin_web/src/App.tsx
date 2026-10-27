@@ -1,3 +1,5 @@
+import { localAdminBaseUrl } from "./data/apiSession.ts";
+import type { AuthAdmin } from "./data/authRepository";
 import { useCallback, useState } from "react";
 import type { ApiAlert, ApiDevice, ApiOwner, ApiStore, Order, Page } from "./data/models";
 import {
@@ -28,29 +30,30 @@ import { ApiAlertRepository, type AlertRepository } from "./data/alertRepository
 
 const defaultAlerts = import.meta.env.VITE_ALERT_SOURCE === "mock"
   ? null
-  : new ApiAlertRepository(import.meta.env.VITE_ALERT_API_BASE_URL || import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001");
+  : new ApiAlertRepository(localAdminBaseUrl(import.meta.env.VITE_ALERT_API_BASE_URL || import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001"));
 
 const defaultDevices = import.meta.env.VITE_DEVICE_SOURCE === "mock"
   ? null
-  : new ApiDeviceRepository(import.meta.env.VITE_DEVICE_API_BASE_URL || import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001");
+  : new ApiDeviceRepository(localAdminBaseUrl(import.meta.env.VITE_DEVICE_API_BASE_URL || import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001"));
 
 const defaultOwners = import.meta.env.VITE_OWNER_SOURCE === "mock"
   ? null
-  : new ApiOwnerRepository(import.meta.env.VITE_OWNER_API_BASE_URL || import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001");
+  : new ApiOwnerRepository(localAdminBaseUrl(import.meta.env.VITE_OWNER_API_BASE_URL || import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001"));
 
 const defaultStores = import.meta.env.VITE_STORE_SOURCE === "mock"
   ? null
-  : new ApiStoreRepository(import.meta.env.VITE_STORE_API_BASE_URL || import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001");
+  : new ApiStoreRepository(localAdminBaseUrl(import.meta.env.VITE_STORE_API_BASE_URL || import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001"));
 
-const defaultAdmin = new MockAdminRepository();
 const defaultOrders =
   import.meta.env.VITE_ORDER_SOURCE === "mock"
     ? null
     : new ApiOrderRepository(
-        import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001",
+        localAdminBaseUrl(import.meta.env.VITE_ORDER_API_BASE_URL || "http://127.0.0.1:8001"),
       );
 export function App({
-  repository = defaultAdmin,
+  repository,
+  admin,
+  onLogout,
   orderRepository = defaultOrders,
   storeRepository = defaultStores,
   ownerRepository = defaultOwners,
@@ -58,15 +61,19 @@ export function App({
   alertRepository = defaultAlerts,
 }: {
   repository?: AdminRepository;
+  admin?: AuthAdmin;
+  onLogout?(): void;
   orderRepository?: OrderRepository | null;
   storeRepository?: StoreRepository | null;
   ownerRepository?: OwnerRepository | null;
   deviceRepository?: DeviceRepository | null;
   alertRepository?: AlertRepository | null;
 }) {
+  const [fallbackRepository] = useState(() => new MockAdminRepository());
+  const adminRepository = repository ?? fallbackRepository;
   const [page, setPage] = useState<Page>("dashboard"),
     [unlinked, setUnlinked] = useState(false);
-  const load = useCallback(() => repository.load(), [repository]);
+  const load = useCallback(() => adminRepository.load(), [adminRepository]);
   const result = useAsync(load);
   // Share one order snapshot across dashboard and order list screens.
   const loadOrders = useCallback(
@@ -103,8 +110,8 @@ export function App({
     setUnlinked(onlyUnlinked);
   }
   async function acknowledge(id: string) {
-    await repository.acknowledgeAlert(id);
-    result.setData(await repository.load());
+    await adminRepository.acknowledgeAlert(id);
+    result.setData(await adminRepository.load());
   }
   if (result.loading)
     return (
@@ -124,6 +131,8 @@ export function App({
   const data = result.data;
   return (
     <AdminShell
+      admin={admin}
+      onLogout={onLogout}
       page={page}
       onNavigate={navigate}
       liveOrders={orderRepository !== null}

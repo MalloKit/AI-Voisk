@@ -1,3 +1,4 @@
+import { adminRequest } from "./apiSession.ts";
 import type { ApiAlert } from "./models";
 
 export interface AlertRepository {
@@ -69,7 +70,7 @@ export class ApiAlertRepository implements AlertRepository {
     if (signal?.aborted) cancel();
     const timer = setTimeout(cancel, this.timeoutMs);
     try {
-      const response = await this.transport(
+      const response = await adminRequest(this.transport, 
         base.origin + base.pathname.replace(/\/$/, "") + path,
         { method: "GET", signal: controller.signal },
       );

@@ -6,6 +6,9 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Path as ApiPath
 from pydantic import BaseModel, Field
 from fastapi import Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
+import admin_auth
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from order_service import OrderInput, save_order, list_orders, order_detail
@@ -33,18 +36,58 @@ class Menu(BaseModel):
 
 
 app = FastAPI(title="AI 보이스크 · 연습용 메뉴 API", version="0.1.0")
-app.add_middleware(CORSMiddleware,
-    allow_origins=['http://localhost:8080', 'http://127.0.0.1:8080'],
-    allow_methods=['GET', 'POST'], allow_headers=['Content-Type'])
 
 
 @app.middleware('http')
 async def local_demo_only(request: Request, call_next):
-    if (request.url.path.startswith('/admin/') or request.url.path == '/orders') and (
+    path = request.url.path
+    admin_path = path == '/admin' or path.startswith('/admin/')
+    auth_path = path == '/auth/admin' or path.startswith('/auth/admin/')
+    if (admin_path or auth_path or path == '/orders') and (
         request.client is None or request.client.host not in {'127.0.0.1', '::1', 'testclient'}
     ):
         return JSONResponse(status_code=403, content={'detail': '인증 전에는 로컬 시연만 허용합니다.'})
-    return await call_next(request)
+    if admin_path or auth_path:
+        try:
+            admin_auth.check_transport(request)
+            if admin_path:
+                session = admin_auth.require_admin(request)
+                if request.method not in ('GET', 'HEAD', 'OPTIONS'):
+                    admin_auth.check_csrf(request, session)
+        except HTTPException as error:
+            response = JSONResponse(status_code=error.status_code, content={'detail': error.detail},
+                                    headers=error.headers)
+            if error.status_code == 401:
+                admin_auth.clear_cookie(response)
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        if auth_path and request.method == 'POST':
+            # 검증 오류가 요청 본문이나 비밀번호를 반사하지 않도록 크기도 제한합니다.
+            if len(await request.body()) > 8192:
+                return JSONResponse(status_code=413, content={'detail': '인증 요청 크기를 확인해 주세요.'},
+                                    headers={'Cache-Control': 'no-store'})
+    response = await call_next(request)
+    if admin_path or auth_path:
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Pragma'] = 'no-cache'
+    return response
+
+
+# CORS가 인증 실패 응답과 preflight도 감싸도록 가장 바깥에 등록합니다.
+app.add_middleware(CORSMiddleware,
+    allow_origins=list(admin_auth.settings.origins),
+    allow_credentials=True,
+    allow_methods=['GET', 'POST'],
+    allow_headers=['Content-Type', 'X-CSRF-Token'])
+app.include_router(admin_auth.router)
+
+
+@app.exception_handler(RequestValidationError)
+async def safe_validation_error(request: Request, error: RequestValidationError):
+    if request.url.path.startswith('/auth/admin/'):
+        return JSONResponse(status_code=422, content={'detail': '로그인 입력 형식을 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
+    return await request_validation_exception_handler(request, error)
 
 
 def _order_call(function, *args):

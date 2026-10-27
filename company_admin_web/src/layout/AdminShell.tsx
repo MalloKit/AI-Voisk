@@ -1,3 +1,4 @@
+import type { AuthAdmin } from "../data/authRepository";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   LayoutDashboard,
@@ -21,6 +22,8 @@ export const pages = [
   { id: "alerts", label: "장애/알림", Icon: Bell },
 ] as const;
 export function AdminShell({
+  admin,
+  onLogout,
   page,
   onNavigate,
   liveOrders,
@@ -30,6 +33,8 @@ export function AdminShell({
   liveAlerts,
   children,
 }: {
+  admin?: AuthAdmin;
+  onLogout?(): void;
   page: Page;
   onNavigate(page: Page): void;
   liveOrders: boolean;
@@ -108,7 +113,8 @@ export function AdminShell({
           AI-Voisk 운영 관리
           <br />
           화면별 데이터 출처 확인
-          <a className="login-preview-link" href="/login">로그인 UI 미리보기</a>
+          {admin && <span className="signed-in-admin">{admin.name} · 관리자 #{admin.id}</span>}
+          {onLogout && <button className="logout-button" onClick={onLogout}>로그아웃</button>}
         </small>
       </aside>
       <div className="workspace">
@@ -128,7 +134,7 @@ export function AdminShell({
           </span>
           <span className="account">
             <UserCircle size={23} aria-hidden="true" />
-            회사 관리자 · 시연 모드
+            {admin ? `${admin.name} · 관리자 #${admin.id}` : "관리자 인증 확인 필요"}
           </span>
         </header>
         <main id="main" tabIndex={-1} key={page}>

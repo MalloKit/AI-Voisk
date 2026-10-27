@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from main import app
+from auth_test_support import authenticated_client
 import test_store_service as fixtures
 import store_service
 
@@ -15,6 +16,9 @@ class StoreApiTests(unittest.TestCase):
         self.no_live_db = patch('database.connect', side_effect=AssertionError('Live DB access forbidden'))
         self.no_live_db.start()
         self.client = TestClient(app)
+        self.auth_context = authenticated_client(self.client)
+        self.auth_context.__enter__()
+        self.addCleanup(self.auth_context.__exit__, None, None, None)
 
     def tearDown(self):
         self.client.close()
