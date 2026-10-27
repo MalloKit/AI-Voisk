@@ -105,7 +105,7 @@ class StoreWriteTests(unittest.TestCase):
         context = authenticated_client(self.client)
         context.__enter__(); self.addCleanup(context.__exit__, None, None, None)
         self.input = dict(store_name="새 매장", address="부산", address_detail=None,
-                          store_code="00123", phone="051-123", business_no="0000000001",
+                          store_code="00123", phone="051-123-4567", business_no="0000000001",
                           representative="새 대표", store_type="음식점")
 
     def create(self, body=None):
@@ -185,7 +185,7 @@ class StoreWriteTests(unittest.TestCase):
 
     def test_exact_boundaries_whitespace_and_leading_zeroes(self):
         body = {**self.input, 'store_name': '  ' + '가' * 100 + '  ',
-                'address': '가' * 200, 'address_detail': '', 'phone': 'x' * 50,
+                'address': '가' * 200, 'address_detail': '', 'phone': '010-1234-5678',
                 'representative': '가' * 50, 'store_type': '가' * 200}
         # Raw length is bounded as well; ordinary surrounding whitespace is normalized.
         body['store_name'] = '가' * 100

@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator, model_validator
 from pymysql.err import IntegrityError
 import store_service
+from korean_numbers import phone_number, business_number
 
 # Workbench에서 확인한 실제 컬럼. 요청 키를 SQL 식별자로 직접 사용하지 않습니다.
 COLUMNS = {
@@ -38,15 +39,21 @@ class StorePatch(BaseModel):
             if key != 'address_detail':
                 raise ValueError('필수 항목입니다.')
             return None
+        if key in ('phone', 'business_no') and any(ord(c) < 32 or ord(c) == 127 for c in value):
+            raise ValueError('입력 문자를 확인해 주세요.')
         value = value.strip()
         if not value and key != 'address_detail':
             raise ValueError('필수 항목입니다.')
+        if key == 'phone':
+            value = phone_number(value)
+        elif key == 'business_no':
+            value = business_number(value)
         if len(value) > LIMITS[key]:
             raise ValueError('허용 길이를 초과했습니다.')
         if any(ord(c) < 32 or ord(c) == 127 or 0xD800 <= ord(c) <= 0xDFFF for c in value):
             raise ValueError('입력 문자를 확인해 주세요.')
         # DB UNIQUE/CHECK가 아닌 입력 정책: 우편번호 5자리, 사업자번호 10자리.
-        if key in ('store_code', 'business_no') and not re.fullmatch(
+        if key == 'store_code' and not re.fullmatch(
                 '[0-9]{' + str(LIMITS[key]) + '}', value):
             raise ValueError('숫자 자리수를 확인해 주세요.')
         return value or None

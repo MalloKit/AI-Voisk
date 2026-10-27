@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { NumberInput } from "../components/NumberInput";
+import { numberDigits, validPhone, validBusiness, formatNumber, canonicalNumber, sameNumber } from "../data/koreanNumbers";
 import type { ApiStore } from "../data/models";
 import type { StoreInput, StoreRepository } from "../data/storeRepository";
 
@@ -18,20 +20,23 @@ export function storeValues(store?: ApiStore | null): Values {
     business_no: store?.businessNo ?? "", representative: store?.representative ?? "",
   };
 }
-function unchanged(value: string, original: string): boolean {
+function unchanged(value: string, original: string, key: Key): boolean {
   // 원본이 비표준·공백을 포함해도 자동 정정하거나 PATCH에 포함하지 않습니다.
-  return value === original || value.trim() === original;
+  return value === original || value.trim() === original ||
+    ((key === "phone" || key === "business_no") && sameNumber(value, original, key === "phone" ? "phone" : "business"));
 }
 export function validateStore(values: Values, original?: Values): Partial<Record<Key, string>> {
   const errors: Partial<Record<Key, string>> = {};
   for (const [key, label, limit] of storeFields) {
-    if (original && unchanged(values[key], original[key])) continue;
+    if (original && unchanged(values[key], original[key], key)) continue;
     const value = values[key].trim();
     if (!value && key !== "address_detail") errors[key] = label + "을(를) 입력해 주세요.";
-    else if (Array.from(value).length > limit) errors[key] = limit + "자 이하로 입력해 주세요.";
+    else if ((key === "phone" || key === "business_no") && /[\u0000-\u001f\u007f]/.test(values[key])) errors[key] = "제어 문자는 사용할 수 없습니다.";
+    else if (Array.from(key === "business_no" ? numberDigits(value) ?? value : value).length > limit) errors[key] = limit + "자 이하로 입력해 주세요.";
     else if (/[\u0000-\u001f\u007f]/.test(value)) errors[key] = "제어 문자는 사용할 수 없습니다.";
     else if (key === "store_code" && !/^[0-9]{5}$/.test(value)) errors[key] = "우편번호는 숫자 5자리로 입력해 주세요.";
-    else if (key === "business_no" && !/^[0-9]{10}$/.test(value)) errors[key] = "사업자번호는 하이픈 없이 숫자 10자리로 입력해 주세요.";
+    else if (key === "business_no" && !validBusiness(value)) errors[key] = "사업자번호는 숫자 10자리로 입력해 주세요.";
+    else if (key === "phone" && !validPhone(value)) errors[key] = "지원하는 국내 전화번호 형식과 자리수를 확인해 주세요.";
   }
   return errors;
 }
@@ -44,7 +49,12 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
   onBusy(busy: boolean): void;
 }) {
   const original = store ? storeValues(store) : undefined;
-  const [values, setValues] = useState(() => storeValues(store));
+  const [values, setValues] = useState(() => {
+    const initial = storeValues(store);
+    if (validPhone(initial.phone)) initial.phone = formatNumber(initial.phone, "phone");
+    if (validBusiness(initial.business_no)) initial.business_no = formatNumber(initial.business_no, "business");
+    return initial;
+  });
   const [errors, setErrors] = useState<Partial<Record<Key, string>>>({});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -66,9 +76,12 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
     }
     const cleaned = { ...values };
     for (const [key] of storeFields) cleaned[key] = values[key].trim();
+    // Only changed values are sent on edit; legacy values are never normalized into PATCH.
+    if (validPhone(cleaned.phone)) cleaned.phone = canonicalNumber(cleaned.phone, "phone");
+    if (validBusiness(cleaned.business_no)) cleaned.business_no = canonicalNumber(cleaned.business_no, "business");
     const input: StoreInput = { ...cleaned, address_detail: cleaned.address_detail || null };
     const changes = Object.fromEntries(storeFields
-      .filter(([key]) => original && !unchanged(values[key], original[key]))
+      .filter(([key]) => original && !unchanged(values[key], original[key], key))
       .map(([key]) => [key, input[key]])) as Partial<StoreInput>;
     if (store && !Object.keys(changes).length) { setMessage("변경된 정보가 없습니다."); return; }
     pending.current = true; setBusy(true); onBusy(true);
@@ -86,24 +99,31 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
       if (!abort.signal.aborted) { pending.current = false; setBusy(false); onBusy(false); }
     }
   }
+  function updateValue(key: Key, value: string) {
+    const next = { ...values, [key]: value };
+    setValues(next);
+    setErrors((previous) => ({ ...previous, [key]: previous[key] ? validateStore(next, original)[key] : undefined }));
+  }
   return <form id={formId} ref={form} className="store-form" onSubmit={save} noValidate aria-busy={busy}>
     <p className="form-feedback">* 필수 항목 · 우편번호와 사업자번호 중복을 허용합니다.
       {store ? " 변경한 항목만 검증·저장하며 기존 값은 자동 정정하지 않습니다. 담당 관리자·점주 연결은 유지합니다." : " 담당 관리자는 로그인한 관리자이며 점주 미연결로 등록합니다."}</p>
     <div className="store-form-grid">
       {storeFields.map(([key, label, limit]) => <label className="field form-field" key={key}>
         <span id={key + "-label"}>{label}{key !== "address_detail" && " *"}</span>
-        <input aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy}
-          required={key !== "address_detail"} aria-invalid={!!errors[key]}
-          aria-describedby={errors[key] ? key + "-error" : key === "business_no" ? "business-format" : undefined}
-          inputMode={key === "store_code" || key === "business_no" ? "numeric" : undefined}
-          onChange={(event) => {
-            const next = { ...values, [key]: event.target.value };
-            setValues(next);
-            setErrors((previous) => ({ ...previous, [key]: previous[key] ? validateStore(next, original)[key] : undefined }));
-          }} />
+        {key === "phone" || key === "business_no" ? <NumberInput
+          aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy} required
+          kind={key === "phone" ? "phone" : "business"} type="tel" inputMode={key === "phone" ? "tel" : "numeric"}
+          aria-invalid={!!errors[key]} aria-describedby={errors[key] ? key + "-error" : key + "-format"}
+          onValueChange={(value) => updateValue(key, value)} />
+          : <input aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy}
+            required={key !== "address_detail"} aria-invalid={!!errors[key]}
+            aria-describedby={errors[key] ? key + "-error" : undefined}
+            inputMode={key === "store_code" ? "numeric" : undefined}
+            onChange={(event) => updateValue(key, event.target.value)} />}
         {errors[key] && <p id={key + "-error"} className="field-error">{errors[key]}</p>}
-        <small className="field-help">최대 {limit}자</small>
-        {key === "business_no" && <small id="business-format" className="field-help">하이픈 없이 숫자 10자리</small>}
+        {key !== "phone" && key !== "business_no" && <small className="field-help">최대 {limit}자</small>}
+        {key === "business_no" && <small id="business_no-format" className="field-help">숫자 10자리 · 000-00-00000 자동 표시</small>}
+        {key === "phone" && <small id="phone-format" className="field-help">010, 02, 지역번호, 070, 080, 15xx·16xx·18xx · 하이픈 자동 표시</small>}
       </label>)}
     </div>
     {message && <p role="alert" className="form-feedback">{message}</p>}

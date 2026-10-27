@@ -7,7 +7,7 @@ import { ApiStoreRepository, parseStore, type StoreInput, type StoreRepository }
 import { SESSION_EXPIRED, AdminApiError } from "../data/apiSession";
 
 const input: StoreInput = { store_name: "등록 매장", address: "부산", address_detail: null,
-  store_code: "00123", phone: "051-123", business_no: "0000000001", representative: "대표", store_type: "카페" };
+  store_code: "00123", phone: "051-123-4567", business_no: "0000000001", representative: "대표", store_type: "카페" };
 const raw = (id = 41) => ({ ...input, store_id: id, admin_id: 1, admin_name: "실제 담당",
   owner_id: null, owner_login_id: null });
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
@@ -110,7 +110,7 @@ async function openAfterFailure(repo: ReturnType<typeof repositories>) {
 function fill() {
   const dialog = within(screen.getByRole("dialog"));
   const fields = { "매장명": "등록 매장", "주소": "부산", "우편번호": "00123", "업종": "카페",
-    "전화번호": "051-123", "사업자번호": "0000000001", "대표자명": "대표" };
+    "전화번호": "051-123-4567", "사업자번호": "0000000001", "대표자명": "대표" };
   for (const [name, value] of Object.entries(fields))
     fireEvent.change(dialog.getByRole("textbox", { name: name + " *" }), { target: { value } });
 }
@@ -272,7 +272,7 @@ describe("live store registration and editing", () => {
   });
   it.each([
     ["우편번호 *", "X0002", "우편번호는 숫자 5자리"],
-    ["사업자번호 *", "BAD-NEW", "사업자번호는 하이픈 없이 숫자 10자리"],
+    ["사업자번호 *", "BAD-NEW", "사업자번호는 숫자 10자리"],
     ["매장명 *", "", "매장명을(를) 입력해 주세요."],
     ["전화번호 *", "가".repeat(51), "50자 이하로 입력해 주세요."],
   ])("validates the changed legacy field %s without validating untouched fields", async (label, value, message) => {
@@ -319,7 +319,7 @@ describe("live store registration and editing", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "사업자번호 *" }), { target: { value: "OLD" } });
     await user.click(screen.getByRole("button", { name: "저장" }));
     expect(screen.getByText("우편번호는 숫자 5자리로 입력해 주세요.")).toBeInTheDocument();
-    expect(screen.getByText("사업자번호는 하이픈 없이 숫자 10자리로 입력해 주세요.")).toBeInTheDocument();
+    expect(screen.getByText("사업자번호는 숫자 10자리로 입력해 주세요.")).toBeInTheDocument();
     expect(repo.create).not.toHaveBeenCalled();
   });
   it("places only save and cancel outside the scrollable form with a valid form association", async () => {
