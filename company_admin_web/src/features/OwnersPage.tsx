@@ -48,9 +48,7 @@ export function OwnersPage({
   return (
     <>
       <Heading title="점주 계정">
-        점주 로그인 ID와 계정별 연결 매장을 조회합니다. · {live
-          ? "실제 점주 API · 읽기 전용"
-          : "Mock 데이터 · 명시적 시연 모드"}
+        점주 로그인 ID와 계정별 연결 매장을 조회합니다.
       </Heading>
       {live && result.loading ? <Loading text="실제 점주 계정을 불러오는 중…" /> :
         live && result.error ? (

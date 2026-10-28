@@ -88,9 +88,6 @@ hr {
   font-size: var(--title);
   color: var(--selected-ink);
 }
-.brand span {
-  font-size: var(--text-xs);
-}
 .sidebar nav {
   padding: var(--md);
   flex: 1;
@@ -114,6 +111,7 @@ hr {
 }
 .sidebar-footer {
   padding: var(--xl);
+  font-size: var(--text-xs);
 }
 .workspace {
   flex: 1;
@@ -121,27 +119,24 @@ hr {
   margin-left: var(--sidebar);
 }
 .topbar {
-  min-height: var(--topbar);
+  min-height: 56px;
   height: auto;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   gap: var(--lg);
-  padding: var(--sm) var(--xl);
-}
-.topbar strong {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: var(--text-lg);
+  padding: var(--xs) var(--xl);
 }
 .account {
   display: flex;
   align-items: center;
   gap: var(--sm);
-  white-space: nowrap;
+  margin-left: auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
+.account svg { flex-shrink: 0; }
 main {
   padding: var(--xl);
 }
@@ -492,9 +487,6 @@ dd {
   }
 }
 @media (max-width: 599px) {
-  .account {
-    display: none;
-  }
   .topbar,
   main {
     padding-left: var(--lg);
@@ -637,9 +629,6 @@ dd {
   .topbar {
     gap: var(--sm);
   }
-  .topbar .source {
-    max-width: 42%;
-  }
   .field input, .field select {
     font-size: var(--text-lg);
   }
@@ -661,14 +650,8 @@ dd {
   }
 }
 
-.signed-in-admin {
-  display: block;
-  margin-top: var(--md);
-  overflow-wrap: anywhere;
-}
 .logout-button {
   width: 100%;
-  margin-top: var(--md);
 }
 .session-retry {
   margin-top: var(--lg);

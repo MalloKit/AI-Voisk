@@ -5,7 +5,7 @@ import type { OwnerRepository } from "../data/ownerRepository";
 import type { StoreRepository } from "../data/storeRepository";
 import type { OrderRepository } from "../data/orderRepository";
 import type { AsyncResult } from "../hooks/useAsync";
-import { dateLabel, filterOrders, mockOrders } from "../data/selectors";
+import { filterOrders, mockOrders } from "../data/selectors";
 import { Badge, Card, ErrorState, Heading, Loading, Modal, Section, Table } from "../components/ui";
 import { OrderDetails, StoreDetails } from "./details";
 import { LiveDetail, OrderTable } from "./OrdersPage";
@@ -67,20 +67,17 @@ export function DashboardPage({
     {
       label: "등록 매장",
       value: storeValue(stores.length),
-      caption: liveStores ? "전체 매장 · 실제 API" : "전체 매장 · Mock",
       Icon: StoreIcon,
     },
     {
       label: "점주 계정",
       value: liveOwners && ownersResult.loading ? "조회 중"
         : liveOwners && ownersResult.error ? "조회 실패" : `${ownerCount}개`,
-      caption: liveOwners ? "점주 계정 · 실제 API" : "등록 계정 · Mock",
       Icon: Users,
     },
     {
       label: "점주 미연결 매장",
       value: storeValue(unlinked.length),
-      caption: liveStores ? "점주 연결 여부 · 실제 API" : "점주 연결 여부 · Mock",
       Icon: Unlink,
     },
     {
@@ -90,7 +87,6 @@ export function DashboardPage({
         : live && result.error
           ? "조회 실패"
           : `${recentCount}건`,
-      caption: live ? "실제 주문 API" : "시연 기준일 포함 · Mock",
       Icon: ReceiptText,
     },
   ];
@@ -99,12 +95,6 @@ export function DashboardPage({
       <Heading title="운영 요약">
         등록 매장과 점주 연결, 최근 주문 현황을 한눈에 확인합니다.
       </Heading>
-      <p className="muted">
-        매장: {liveStores ? "실제 API" : "Mock"} · 점주: {liveOwners ? "실제 API" : "Mock"}
-        {" · "}주문: {live ? "실제 API" : `Mock (시연 기준일 ${dateLabel(data.referenceDate)})`}
-        {" · "}기기: {liveDevices ? "실제 API" : "Mock"}
-        {" · "}알림: {liveAlerts ? "실제 API" : "Mock"}
-      </p>
       <div className="metrics">
         {metrics.map((m) => (
           <Card key={m.label}>
@@ -114,7 +104,6 @@ export function DashboardPage({
               <m.Icon aria-hidden="true" size={22} />
             </div>
             <strong className="metric-value">{m.value}</strong>
-            <small>{m.caption}</small>
             </section>
           </Card>
         ))}
@@ -137,7 +126,6 @@ export function DashboardPage({
       <Card>
         <Section title="기기 및 알림 현황" />
         <section aria-label="기기 현황">
-          <p className="muted">기기: {liveDevices ? "실제 API" : `Mock · 관측 기준 ${dateLabel(data.observedAt, true)}`}</p>
           {liveDevices ? (
             <>
               <p>
@@ -157,7 +145,6 @@ export function DashboardPage({
           )}
         </section>
         <section aria-label="알림 현황">
-          <p className="muted">알림: {liveAlerts ? "실제 API" : `Mock · 관측 기준 ${dateLabel(data.observedAt, true)}`}</p>
           {liveAlerts ? (
             <>
               <p>
@@ -179,7 +166,7 @@ export function DashboardPage({
           <button onClick={() => onNavigate("alerts")}>알림 목록 보기</button>
         </div>
       </Card>
-      <Section title={live ? "최근 주문 · 실제 API" : "최근 주문 · Mock"}>
+      <Section title="최근 주문">
         <button onClick={() => onNavigate("orders")}>주문 전체 보기</button>
         {live && (
           <button onClick={result.reload} disabled={result.loading}>
@@ -246,7 +233,7 @@ export function DashboardPage({
       )}
       {order && (
         <Modal
-          title={`${live ? "실제" : "Mock"} 주문 #${order.order_id}`}
+          title={`주문 #${order.order_id}`}
           onClose={() => setOrder(undefined)}
         >
           {live && orderRepository ? (

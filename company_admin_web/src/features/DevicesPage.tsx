@@ -21,8 +21,6 @@ import { useAsync, type AsyncResult } from "../hooks/useAsync";
 export function FutureNotice({ data }: { data: AdminSnapshot }) {
   return (
     <Card className="notice">
-      향후 기능 · 기기 상태/알림의 Mock 데이터입니다.
-      <br />
       상태 관측 기준: {dateLabel(data.observedAt, true)} · 실시간 모니터링이
       아닙니다.
     </Card>
@@ -161,7 +159,7 @@ function LiveDevicesPage({
   const moment = (value: string | null) => value === null ? "미수집" : dateLabel(value, true);
   return (
     <>
-      <Heading title="기기 관리">실제 기기 API · 등록 정보 읽기 전용</Heading>
+      <Heading title="기기 관리">등록된 기기와 설치 매장 정보를 확인합니다.</Heading>
       <Card className="notice">
         활성화는 주문 허용 상태이며 온라인 상태가 아닙니다. 연결 상태는 미확인입니다.
         시각은 브라우저 현지 시간이며 마지막 확인·동기화 시각은 DB 기록입니다.

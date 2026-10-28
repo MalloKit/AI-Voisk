@@ -124,9 +124,7 @@ export function OrdersPage({
   return (
     <>
       <Heading title="주문 조회">
-        {live
-          ? "실제 주문 API · 읽기 전용 조회입니다. 각 화면에서 데이터 출처를 확인해 주세요."
-          : "Mock 주문 데이터 · 명시적으로 선택한 시연 모드입니다."}
+        주문 내역을 검색하고 상세 정보를 확인합니다.
       </Heading>
       {live && ordersResult.loading ? (
         <Loading />
@@ -212,8 +210,8 @@ export function OrdersPage({
             </button>
             {!live && (
               <p className="filter-note">
-                시연 기준일 {dateLabel(data.referenceDate)} · 기간은 기준일을
-                포함합니다. Mock 주문에는 기기 ID가 없습니다.
+                기간 기준일 {dateLabel(data.referenceDate)} · 기간은 기준일을
+                포함합니다. 이 데이터에는 기기 ID가 없습니다.
               </p>
             )}
             {invalidRange && (
@@ -223,14 +221,14 @@ export function OrdersPage({
             )}
           </Filters>
           <Section
-            title={`${live ? "실제 " : ""}주문 목록 · ${rows.length}건`}
+            title={`주문 목록 · ${rows.length}건`}
           />
           {!invalidRange && <OrderTable orders={rows} onDetail={setDetail} />}
         </>
       )}
       {detail && (
         <Modal
-          title={`${live ? "실제 " : ""}주문 #${detail.order_id}`}
+          title={`주문 #${detail.order_id}`}
           onClose={() => setDetail(undefined)}
         >
           {repository ? (

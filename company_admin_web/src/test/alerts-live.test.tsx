@@ -23,7 +23,7 @@ async function open(repository: AlertRepository, admin = new MockAdminRepository
   render(<App repository={admin} orderRepository={null} storeRepository={null}
     ownerRepository={null} deviceRepository={null} alertRepository={repository} />);
   await screen.findByRole("heading", { name: "운영 요약", level: 1 });
-  expect(screen.getByText(/기기: Mock · 알림: 실제 API/)).toBeInTheDocument();
+  expect(screen.queryByText(/기기: Mock · 알림: 실제 API/)).not.toBeInTheDocument();
   await user.click(nav("장애/알림"));
   return user;
 }
@@ -44,7 +44,7 @@ describe("실제 알림 조회", () => {
     expect(screen.getByRole("table")).toHaveTextContent("DB-1");
     expect(screen.getByRole("table")).toHaveTextContent("DB-2");
     expect(screen.getByRole("table")).toHaveTextContent("WAITING_REVIEW");
-    expect(screen.getByText("실제 알림 API")).toBeInTheDocument();
+    expect(screen.queryByText("실제 알림 API")).not.toBeInTheDocument();
   });
 
   it("검색과 원본 유형·심각도·상태 필터를 결합하고 초기화한다", async () => {

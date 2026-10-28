@@ -22,7 +22,7 @@ async function open(repository: OwnerRepository) {
   render(<App alertRepository={null} deviceRepository={null} repository={new MockAdminRepository()} orderRepository={null}
     storeRepository={null} ownerRepository={repository} />);
   await screen.findByRole("heading", { name: "운영 요약", level: 1 });
-  expect(screen.getByText("점주 계정 · 실제 API")).toBeInTheDocument();
+  expect(screen.queryByText("점주 계정 · 실제 API")).not.toBeInTheDocument();
   await user.click(within(screen.getByRole("navigation", { name: "주요 화면" }))
     .getByRole("button", { name: "점주 계정" }));
   return user;
@@ -36,7 +36,7 @@ describe("live owner accounts without Mock store joins", () => {
     };
     const user = await open(repository);
     await screen.findByText("점주 계정 목록 · 3개");
-    expect(screen.getByText("실제 점주 API")).toBeInTheDocument();
+    expect(screen.queryByText("실제 점주 API")).not.toBeInTheDocument();
     const search = screen.getByRole("textbox");
     await user.type(search, "db_owner_3");
     expect(screen.getByText("점주 계정 목록 · 1개")).toBeInTheDocument();

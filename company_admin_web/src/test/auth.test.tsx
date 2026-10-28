@@ -149,7 +149,8 @@ describe("server validated admin entry and lifecycle", () => {
     render(<AppEntry authRepository={a} {...mockSources} />);
     await dashboard();
     expect(window.location.pathname).toBe("/");
-    expect(screen.getAllByText(/격리 관리자 · 관리자 #12/)).toHaveLength(2);
+    expect(screen.getAllByText(/격리 관리자 · 관리자 #12/)).toHaveLength(1);
+    expect(screen.getByText("격리 관리자 · 관리자 #12").closest("header")).toHaveClass("topbar");
     expect(a.me).toHaveBeenCalledTimes(1);
   });
 
@@ -212,7 +213,7 @@ describe("server validated admin entry and lifecycle", () => {
     await dashboard();
     const user = userEvent.setup();
     await user.click(within(screen.getByRole("navigation")).getByRole("button", { name: "주문 조회" }));
-    await screen.findByRole("heading", { name: "실제 주문 목록 · 0건" });
+    await screen.findByRole("heading", { name: "주문 목록 · 0건" });
     await user.click(screen.getByRole("button", { name: "로그아웃" }));
     await loginHeading();
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();

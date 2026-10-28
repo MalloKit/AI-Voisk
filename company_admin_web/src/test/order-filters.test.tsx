@@ -23,7 +23,7 @@ async function open(orders: Order[], live = true) {
   render(<App alertRepository={null} deviceRepository={null} ownerRepository={null} storeRepository={null} repository={new MockAdminRepository()} orderRepository={live ? repo : null} />);
   await screen.findByRole("heading", { name: "운영 요약" });
   await user.click(within(screen.getByRole("navigation", { name: "주요 화면" })).getByRole("button", { name: "주문 조회" }));
-  if (live) await screen.findByText(`실제 주문 목록 · ${orders.length}건`);
+  if (live) await screen.findByText(`주문 목록 · ${orders.length}건`);
   else await screen.findByText("주문 목록 · 6건");
   return { user, repo };
 }
@@ -36,9 +36,9 @@ describe("order type, device and custom-date filters", () => {
       row(4, null, null, null),
     ]);
     await user.selectOptions(screen.getByLabelText("주문 유형"), "takeaway");
-    expect(screen.getByText("실제 주문 목록 · 2건")).toBeInTheDocument();
+    expect(screen.getByText("주문 목록 · 2건")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("기기"), "1");
-    expect(screen.getByText("실제 주문 목록 · 1건")).toBeInTheDocument();
+    expect(screen.getByText("주문 목록 · 1건")).toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveTextContent("#1");
     await user.selectOptions(screen.getByLabelText("기기"), "unknown");
     expect(screen.getByRole("table")).toHaveTextContent("#3");
@@ -48,7 +48,7 @@ describe("order type, device and custom-date filters", () => {
     await user.click(screen.getByRole("button", { name: "초기화" }));
     expect(screen.getByLabelText("주문 유형")).toHaveValue("all");
     expect(screen.getByLabelText("기기")).toHaveValue("all");
-    expect(screen.getByText("실제 주문 목록 · 4건")).toBeInTheDocument();
+    expect(screen.getByText("주문 목록 · 4건")).toBeInTheDocument();
   });
   it("custom date range includes both ends and supports one-sided bounds", async () => {
     const now = new Date();
@@ -62,12 +62,12 @@ describe("order type, device and custom-date filters", () => {
     ]);
     await user.selectOptions(screen.getByLabelText("조회 기간"), "-1");
     fireEvent.change(screen.getByLabelText("시작일"), { target: { value: dateLabel(today) } });
-    expect(screen.getByText("실제 주문 목록 · 2건")).toBeInTheDocument();
+    expect(screen.getByText("주문 목록 · 2건")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("종료일"), { target: { value: dateLabel(today) } });
-    expect(screen.getByText("실제 주문 목록 · 1건")).toBeInTheDocument();
+    expect(screen.getByText("주문 목록 · 1건")).toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveTextContent("#12");
     fireEvent.change(screen.getByLabelText("시작일"), { target: { value: "" } });
-    expect(screen.getByText("실제 주문 목록 · 2건")).toBeInTheDocument();
+    expect(screen.getByText("주문 목록 · 2건")).toBeInTheDocument();
     expect(repo.load).toHaveBeenCalledTimes(1);
   });
   it("invalid date range is explained, and reset restores presets", async () => {
@@ -80,7 +80,7 @@ describe("order type, device and custom-date filters", () => {
     await user.click(screen.getByRole("button", { name: "초기화" }));
     expect(screen.getByLabelText("조회 기간")).toHaveValue("7");
     expect(screen.queryByLabelText("시작일")).not.toBeInTheDocument();
-    expect(screen.getByText("실제 주문 목록 · 1건")).toBeInTheDocument();
+    expect(screen.getByText("주문 목록 · 1건")).toBeInTheDocument();
   });
   it("supports unknown explicit types, NULL devices, and custom day selection", () => {
     expect(getOrderKind(row(3, null, 0, null))).toBe("takeaway");
@@ -100,7 +100,7 @@ describe("order type, device and custom-date filters", () => {
   });
   it("retains fixed Mock periods and honestly reports missing device IDs", async () => {
     const { user } = await open([], false);
-    expect(screen.getByText(/Mock 주문에는 기기 ID가 없습니다/)).toBeInTheDocument();
+    expect(screen.getByText(/이 데이터에는 기기 ID가 없습니다/)).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("기기"), "unknown");
     expect(screen.getByText("주문 목록 · 6건")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("조회 기간"), "1");

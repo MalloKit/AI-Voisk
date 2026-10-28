@@ -54,13 +54,13 @@ function deferred<T>() {
 }
 
 describe("dashboard shared device and alert API data", () => {
-  it("shows successful empty counts, independently labeled actual sources", async () => {
+  it("shows successful empty counts without source labels", async () => {
     await open();
     await waitFor(() => expect(devices()).toHaveTextContent("등록 기기 0대"));
     expect(devices()).toHaveTextContent("활성 기기 0대 · 비활성 기기 0대");
     expect(alerts()).toHaveTextContent("전체 등록 알림 0건 · 미열람 알림 (UNREAD) 0건");
-    expect(devices()).toHaveTextContent("기기: 실제 API");
-    expect(alerts()).toHaveTextContent("알림: 실제 API");
+    expect(devices()).not.toHaveTextContent("기기: 실제 API");
+    expect(alerts()).not.toHaveTextContent("알림: 실제 API");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -214,9 +214,9 @@ describe("dashboard shared device and alert API data", () => {
   it("keeps explicit Mock devices independent from real alerts", async () => {
     const s = sources([device()], [alert()]);
     const { user } = await open(s, true, false);
-    expect(devices()).toHaveTextContent("기기: Mock");
+    expect(devices()).not.toHaveTextContent("기기: Mock");
     expect(devices()).toHaveTextContent("등록 기기 6대 · 온라인 3대 · 오프라인 3대");
-    expect(alerts()).toHaveTextContent("알림: 실제 API");
+    expect(alerts()).not.toHaveTextContent("알림: 실제 API");
     expect(alerts()).toHaveTextContent("전체 등록 알림 1건");
     expect(s.deviceHttp).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "기기 목록 보기" }));
@@ -228,9 +228,9 @@ describe("dashboard shared device and alert API data", () => {
   it("keeps Mock acknowledgement counts separate from actual device activation", async () => {
     const s = sources([device(1, false)]);
     const { user, acknowledge } = await open(s, false, true);
-    expect(devices()).toHaveTextContent("기기: 실제 API");
+    expect(devices()).not.toHaveTextContent("기기: 실제 API");
     expect(devices()).toHaveTextContent("등록 기기 1대 · 활성 기기 0대 · 비활성 기기 1대");
-    expect(alerts()).toHaveTextContent("알림: Mock");
+    expect(alerts()).not.toHaveTextContent("알림: Mock");
     const mock = await new MockAdminRepository().load();
     const before = mock.alerts.filter((a) => a.status === "unconfirmed").length;
     expect(alerts()).toHaveTextContent("미확인 알림 " + before + "건");

@@ -48,15 +48,15 @@ describe("live orders on company dashboard", () => {
     );
     await screen.findByRole("heading", { name: "운영 요약" });
     await waitFor(() => expect(screen.getByText("2건")).toBeInTheDocument());
-    expect(screen.getByText("실제 주문 API")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "최근 주문 · 실제 API" })).toBeInTheDocument();
+    expect(screen.queryByText("실제 주문 API")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "최근 주문" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "주문 상세: #12" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "주문 상세: #5" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "주문 상세: #1008" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "주문 상세: #12" }));
     await screen.findByText("옵션: 밥 추가");
     expect(repository.detail).toHaveBeenCalledWith(12, expect.any(AbortSignal));
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("실제 주문 #12");
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("주문 #12");
   });
 
   it("shows an error instead of pretending Mock orders are real and can retry", async () => {
@@ -94,11 +94,11 @@ describe("live orders on company dashboard", () => {
     expect(repository.load).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("navigation", { name: "주요 화면" }).querySelectorAll("button")[3]);
-    await screen.findByText("실제 주문 목록 · 1건");
+    await screen.findByText("주문 목록 · 1건");
     expect(repository.load).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: "새로고침" }));
-    await screen.findByText("실제 주문 목록 · 2건");
+    await screen.findByText("주문 목록 · 2건");
     expect(repository.load).toHaveBeenCalledTimes(2);
 
     await user.click(screen.getByRole("navigation", { name: "주요 화면" }).querySelectorAll("button")[0]);

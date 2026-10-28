@@ -71,7 +71,7 @@ export function StoresPage({
   return (
     <>
       <Heading title="매장 관리">
-        등록 매장의 기본 정보와 담당자, 점주 연결 현황을 확인합니다. · {live ? "실제 매장 API" : "Mock 데이터 · 시연 모드"}
+        등록 매장의 기본 정보와 담당자, 점주 연결 현황을 확인합니다.
       </Heading>
       {writable && <div className="store-page-actions"><button className="button-primary" onClick={() => { setNotice(""); setFocusEdit(false); setEditing(null); }}>매장 등록</button></div>}
       {notice && <p role="status" className="form-feedback">{notice} 목록과 운영 요약은 최신 조회 결과로 갱신합니다.</p>}

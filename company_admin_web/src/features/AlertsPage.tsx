@@ -244,7 +244,7 @@ function ApiAlertDetails({ alert: a }: { alert: ApiAlert }) {
         <Field label="장애 해소 시각">{moment(a.resolved_at)}</Field>
       </dl>
       <p className="muted">
-        실제 알림 API · 읽기 전용. 시각은 브라우저 현지 시간입니다.
+        시각은 브라우저 현지 시간입니다.
         관리자 확인과 장애 해소는 별개 기록이며 원본 상태를 임의로 변경하지 않습니다.
       </p>
     </>
@@ -304,7 +304,7 @@ function LiveAlertsPage({
   );
   return (
     <>
-      <Heading title="장애/알림">실제 알림 API · 목록·상세 읽기 전용</Heading>
+      <Heading title="장애/알림">장애·알림 내역을 조회합니다.</Heading>
       <Card className="notice">
         유형·심각도·상태는 DB 원본 값을 보존합니다.
         관리자 확인과 장애 해소 기록을 구분하며, 확인 처리나 자동 장애 감지는 수행하지 않습니다.

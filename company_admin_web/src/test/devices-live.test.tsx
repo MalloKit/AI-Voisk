@@ -21,7 +21,7 @@ async function open(repository: DeviceRepository, admin = new MockAdminRepositor
   render(<App alertRepository={null} repository={admin} orderRepository={null} storeRepository={null}
     ownerRepository={null} deviceRepository={repository} />);
   await screen.findByRole("heading", { name: "운영 요약", level: 1 });
-  expect(screen.getByText(/기기: 실제 API · 알림: Mock/)).toBeInTheDocument();
+  expect(screen.queryByText(/기기: 실제 API · 알림: Mock/)).not.toBeInTheDocument();
   await user.click(nav("기기 관리"));
   return user;
 }
@@ -64,7 +64,7 @@ describe("실제 기기 관리", () => {
     };
     const user = await open(repository);
     await screen.findByText("기기 목록 · 3대");
-    expect(screen.getByText("실제 기기 API")).toBeInTheDocument();
+    expect(screen.queryByText("실제 기기 API")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("연결 상태")).not.toBeInTheDocument();
     const search = screen.getByRole("textbox");
     await user.type(search, "103");

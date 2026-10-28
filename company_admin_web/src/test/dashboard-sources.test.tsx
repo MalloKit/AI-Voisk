@@ -64,7 +64,7 @@ describe("shared live dashboard sources", () => {
     expect(metric("최근 7일 주문")).toHaveTextContent("0건");
     expect(screen.getByText("등록된 매장이 없습니다.")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByText(/기기: Mock · 알림: Mock/)).toHaveTextContent("매장: 실제 API");
+    expect(screen.queryByText(/기기: Mock · 알림: Mock/)).not.toBeInTheDocument();
   });
 
   it("shows one actual unlinked store and zero owners, including real store detail", async () => {
@@ -226,12 +226,13 @@ describe("shared live dashboard sources", () => {
       ownerRepository={null} orderRepository={null} />);
     await screen.findByRole("heading", { name: "운영 요약", level: 1 });
     expect(metric("등록 매장")).toHaveTextContent("6곳");
-    expect(metric("점주 계정")).toHaveTextContent("등록 계정 · Mock");
-    expect(metric("점주 계정")).toHaveTextContent("Mock");
+    expect(metric("점주 계정")).toHaveTextContent("4개");
+    expect(metric("점주 계정")).not.toHaveTextContent("Mock");
     await user.click(screen.getByRole("button", { name: "미연결 매장 보기" }));
     await screen.findByText("매장 목록 · 2곳");
     await user.click(nav("점주 계정"));
     expect(screen.getByRole("heading", { name: "점주 계정", level: 1 })).toHaveTextContent("점주 계정");
-    expect(screen.getByText(/명시적 시연 모드/)).toBeInTheDocument();
+    expect(screen.getByText("점주 계정 목록 · 4개")).toBeInTheDocument();
+    expect(screen.queryByText(/명시적 시연 모드/)).not.toBeInTheDocument();
   });
 });

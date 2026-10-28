@@ -18,7 +18,7 @@ async function open(repository: StoreRepository) {
   const user = userEvent.setup();
   render(<App alertRepository={null} deviceRepository={null} ownerRepository={null} repository={new MockAdminRepository()} orderRepository={null} storeRepository={repository} />);
   await screen.findByRole("heading", { level: 1, name: "운영 요약" });
-  expect(screen.getByText(/매장: 실제 API/)).toHaveTextContent("기기: Mock · 알림: Mock");
+  expect(screen.queryByText(/매장: 실제 API/)).not.toBeInTheDocument();
   await user.click(nav());
   return user;
 }
@@ -93,7 +93,7 @@ describe("live store management", () => {
     };
     const user = await open(repository);
     await screen.findByText("매장 목록 · 2곳");
-    expect(screen.getByText("실제 매장 API")).toBeInTheDocument();
+    expect(screen.queryByText("실제 매장 API")).not.toBeInTheDocument();
     expect(screen.queryByText("말로 카페 성수")).not.toBeInTheDocument();
     const search = screen.getByRole("textbox");
     for (const term of ["실제 매장 41", "실제 대표", "0000000041"]) {
