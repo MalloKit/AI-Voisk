@@ -117,7 +117,7 @@ class OwnerWriteTests(unittest.TestCase):
         bodies = [{}, {'login_id':'owner001'}, {'login_id':'UPPERCASE','password':_PASSWORD},
             {'login_id':'abc','password':_PASSWORD}, {'login_id':'a'*101,'password':_PASSWORD},
             {'login_id':'owner001\n','password':_PASSWORD}, {'login_id':42,'password':_PASSWORD},
-            {'login_id':'owner001','password':_PASSWORD[:14]}, {'login_id':'owner001','password':_PASSWORD*8},
+            {'login_id':'owner001','password':_PASSWORD[:7]}, {'login_id':'owner001','password':_PASSWORD[:1]*129},
             {'login_id':'owner001','password':_PASSWORD+'\n'}, {'login_id':'owner001','password':42}, {'login_id':'owner001','password':' '*15},
             {'login_id':'owner001','password':'\u0085'*15}, {'login_id':'owner001','password':'\ufeff '*15},
             {'login_id':'owner001','password':_PASSWORD,'secret':_PASSWORD},
@@ -132,7 +132,7 @@ class OwnerWriteTests(unittest.TestCase):
         self.assertEqual(response.status_code,413)
 
     def test_id_and_password_boundaries_and_unchanged_whitespace(self):
-        for login,length in [('a._-',15),('a'*100,128)]:
+        for login,length in [('a._-',8),('a'*100,128)]:
             password = ' ' + secrets.token_urlsafe(100)[:length-2] + ' '
             response = self.create(login,password=password)
             self.assertEqual(response.status_code,201)

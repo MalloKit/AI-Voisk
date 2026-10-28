@@ -1,5 +1,5 @@
 // Creation policy; future owner login must agree on the same rules without rewriting existing IDs.
-export const ownerPasswordMin = 15, ownerPasswordMax = 128;
+export const ownerPasswordMin = 8, ownerPasswordMax = 128;
 export function validOwnerLogin(value: string) {
   return value.length >= 4 && value.length <= 100 && !/[^a-z0-9._-]/.test(value);
 }

@@ -10,7 +10,7 @@ import store_service
 
 LOGIN_ID_MIN = 4
 LOGIN_ID_MAX = 100
-PASSWORD_MIN = 15
+PASSWORD_MIN = 8
 PASSWORD_MAX = 128
 LOGIN_ID = re.compile(r"[a-z0-9._-]{4,100}")
 Identifier = Annotated[StrictInt, Field(ge=1, le=2147483647)]

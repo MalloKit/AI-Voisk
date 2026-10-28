@@ -79,8 +79,8 @@ describe("owner account and store connection writes", () => {
     for (const value of ["abcd", "a._-", "a".repeat(100)]) expect(validOwnerLogin(value)).toBe(true);
     for (const value of ["abc", "Upper", "owner ", "owner\n", "한글아이디", "a".repeat(101)]) expect(validOwnerLogin(value)).toBe(false);
     for (const value of [" ".repeat(15), "\u0085".repeat(15), "\ufeff ".repeat(15)]) expect(validOwnerPassword(value)).toBe(false);
-    expect(validOwnerPassword("🙂".repeat(15))).toBe(true);
-    for (const value of ["x".repeat(14), "x".repeat(129), password + "\n", password + "\ud800"]) expect(validOwnerPassword(value)).toBe(false);
+    for (const value of ["🙂".repeat(8), "x".repeat(8), "x".repeat(128)]) expect(validOwnerPassword(value)).toBe(true);
+    for (const value of ["x".repeat(7), "x".repeat(129), password + "\n", password + "\ud800"]) expect(validOwnerPassword(value)).toBe(false);
   });
 
   it("validates required inputs, matching values and password visibility before sending anything", async () => {

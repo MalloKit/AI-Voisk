@@ -18,7 +18,7 @@ export function OwnerCreateForm({ repository, formId, onBusy, onSaved }: {
     if (pending.current) return;
     const next: Record<string, string> = {};
     if (!validOwnerLogin(loginId)) next.login = "소문자 영문·숫자·마침표·밑줄·하이픈으로 4~100자를 입력해 주세요.";
-    if (!validOwnerPassword(password)) next.password = "15~128자를 입력해 주세요. 제어 문자는 사용할 수 없습니다.";
+    if (!validOwnerPassword(password)) next.password = "8~128자를 입력해 주세요. 제어 문자는 사용할 수 없습니다.";
     if (!confirm || password !== confirm) next.confirm = "비밀번호 확인 값이 일치하지 않습니다.";
     setErrors(next); setMessage("");
     if (Object.keys(next).length) { queueMicrotask(() => form.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus()); return; }
@@ -46,7 +46,7 @@ export function OwnerCreateForm({ repository, formId, onBusy, onSaved }: {
         aria-describedby={formId + field.key + "-help"} onChange={(e) => field.change(e.target.value)} />
         <button type="button" className="icon-button" disabled={busy} aria-label={field.label + (field.show ? " 숨기기" : " 표시")}
           aria-pressed={field.show} onClick={field.toggle}>{field.show ? <EyeOff size={19} /> : <Eye size={19} />}</button>
-      </div><small id={formId + field.key + "-help"}>{errors[field.key] || (field.key === "password" ? "15~128자 · 앞뒤 공백도 비밀번호에 포함됩니다." : "초기 비밀번호를 다시 입력해 주세요.")}</small>
+      </div><small id={formId + field.key + "-help"}>{errors[field.key] || (field.key === "password" ? "8~128자 · 앞뒤 공백도 비밀번호에 포함됩니다." : "초기 비밀번호를 다시 입력해 주세요.")}</small>
     </label>)}
     {message && <p role="alert" className="form-feedback">{message}</p>}
     {busy && <p role="status">등록 중… 창을 닫지 마세요.</p>}
