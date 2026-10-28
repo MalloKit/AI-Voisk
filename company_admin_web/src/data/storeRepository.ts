@@ -11,7 +11,9 @@ export interface StoreInput {
   representative: string;
   store_type: string;
 }
+export interface OwnerConnectionInput { owner_id: number | null; expected_owner_id: number | null; }
 export interface StoreRepository {
+  setOwner?(id: number, input: OwnerConnectionInput, signal?: AbortSignal): Promise<ApiStore>;
   create?(input: StoreInput, signal?: AbortSignal): Promise<ApiStore>;
   update?(id: number, input: Partial<StoreInput>, signal?: AbortSignal): Promise<ApiStore>;
   load(signal?: AbortSignal): Promise<ApiStore[]>;
@@ -106,6 +108,19 @@ export class ApiStoreRepository implements StoreRepository {
     id(storeId);
     const store = await this.save("/admin/stores/" + storeId, "PATCH", input, signal);
     if (store.id !== storeId) throw invalid();
+    return store;
+  }
+  async setOwner(storeId: number, input: OwnerConnectionInput, signal?: AbortSignal): Promise<ApiStore> {
+    id(storeId);
+    if (input.owner_id !== null) id(input.owner_id);
+    if (input.expected_owner_id !== null) id(input.expected_owner_id);
+    const token = record(await this.get("/auth/admin/csrf", signal)).csrf_token;
+    if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("보안 요청 정보를 확인할 수 없습니다.");
+    const store = parseStore(await this.get("/admin/stores/" + storeId + "/owner", signal, {
+      method: "PATCH", headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+      body: JSON.stringify({ owner_id: input.owner_id, expected_owner_id: input.expected_owner_id }),
+    }));
+    if (store.id !== storeId || store.ownerId !== input.owner_id) throw invalid();
     return store;
   }
   async load(signal?: AbortSignal): Promise<ApiStore[]> {

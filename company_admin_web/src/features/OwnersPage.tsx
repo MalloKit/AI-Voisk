@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import type { AdminSnapshot, ApiOwner } from "../data/models";
 import type { OwnerRepository } from "../data/ownerRepository";
 import { useAsync, type AsyncResult } from "../hooks/useAsync";
@@ -6,6 +6,7 @@ import {
   Badge, ErrorState, Filter, Filters, Heading, Loading,
   Modal, Search, Section, Table,
 } from "../components/ui";
+import { OwnerCreateForm } from "./OwnerCreateForm";
 import { OwnerDetails } from "./details";
 
 function LiveOwnerDetail({ id, repository }: { id: number; repository: OwnerRepository }) {
@@ -33,6 +34,8 @@ export function OwnersPage({
   ownersResult: AsyncResult<ApiOwner[]>;
 }) {
   const live = repository !== null;
+  const formId = useId();
+  const [creating, setCreating] = useState(false), [saving, setSaving] = useState(false), [notice, setNotice] = useState("");
   const all: ApiOwner[] = live ? (result.data ?? []) : data.owners.map((o) => ({
     ...o, storeCount: data.stores.filter((s) => s.ownerId === o.id).length,
   }));
@@ -50,6 +53,8 @@ export function OwnersPage({
       <Heading title="점주 계정">
         점주 로그인 ID와 계정별 연결 매장을 조회합니다.
       </Heading>
+      {repository?.create && <div className="store-page-actions"><button className="button-primary" onClick={() => { setNotice(""); setCreating(true); }}>점주 계정 생성</button></div>}
+      {notice && <p role="status" className="form-feedback">{notice}</p>}
       {live && result.loading ? <Loading text="실제 점주 계정을 불러오는 중…" /> :
         live && result.error ? (
           <ErrorState
@@ -95,6 +100,13 @@ export function OwnersPage({
             />
           </>
         )}
+      {creating && repository && <Modal title="점주 계정 생성" closeDisabled={saving} onClose={() => { if (!saving) setCreating(false); }}
+        footer={<div className="store-form-actions"><button disabled={saving} onClick={() => setCreating(false)}>취소</button>
+          <button type="submit" form={formId} disabled={saving} className="button-primary">{saving ? "등록 중…" : "등록"}</button></div>}>
+        <OwnerCreateForm repository={repository} formId={formId} onBusy={setSaving} onSaved={() => {
+          setSaving(false); setCreating(false); setNotice("점주 계정을 생성했습니다. 목록에서 연결 매장과 상세 정보를 확인할 수 있습니다."); result.reload();
+        }} />
+      </Modal>}
       {detail && (
         <Modal title="점주 계정 상세" onClose={() => setDetail(undefined)}>
           {repository

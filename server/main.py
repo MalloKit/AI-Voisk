@@ -15,6 +15,7 @@ from order_service import OrderInput, save_order, list_orders, order_detail
 from store_service import StoreNotFound, list_stores, store_detail
 from store_write_service import StoreCreate, StorePatch, create_store, update_store
 from owner_service import OwnerNotFound, list_owners, owner_detail
+from owner_write_service import OwnerCreate, StoreOwnerPatch, create_owner, update_store_owner
 from device_service import DeviceNotFound, list_devices, device_detail
 from alert_service import AlertNotFound, list_alerts, alert_detail
 
@@ -62,7 +63,7 @@ async def local_demo_only(request: Request, call_next):
                 admin_auth.clear_cookie(response)
             response.headers['Cache-Control'] = 'no-store'
             return response
-        if auth_path and request.method == 'POST':
+        if request.method == 'POST' and (auth_path or path.rstrip('/') == '/admin/owners'):
             # 검증 오류가 요청 본문이나 비밀번호를 반사하지 않도록 크기도 제한합니다.
             if len(await request.body()) > 8192:
                 return JSONResponse(status_code=413, content={'detail': '인증 요청 크기를 확인해 주세요.'},
@@ -87,6 +88,9 @@ app.include_router(admin_auth.router)
 async def safe_validation_error(request: Request, error: RequestValidationError):
     if request.url.path.startswith('/auth/admin/'):
         return JSONResponse(status_code=422, content={'detail': '로그인 입력 형식을 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
+    if request.url.path.rstrip('/') == '/admin/owners' and request.method == 'POST':
+        return JSONResponse(status_code=422, content={'detail': '계정 입력 형식과 허용 길이를 확인해 주세요.'},
                             headers={'Cache-Control': 'no-store'})
     if request.url.path.startswith('/admin/stores') and request.method in ('POST', 'PATCH'):
         return JSONResponse(status_code=422, content={'detail': '매장 입력 형식과 허용 길이를 확인해 주세요.'},
@@ -232,6 +236,11 @@ def admin_update_store(payload: StorePatch, store_id: int = ApiPath(ge=1)):
     return _store_write_call(update_store, store_id, payload)
 
 
+@app.patch('/admin/stores/{store_id}/owner', response_model=AdminStoreView)
+def admin_update_store_owner(payload: StoreOwnerPatch, store_id: int = ApiPath(ge=1, le=2147483647)):
+    return _store_write_call(update_store_owner, store_id, payload)
+
+
 @app.get('/admin/stores', response_model=AdminStoreList)
 def admin_stores():
     return _store_call(list_stores)
@@ -273,6 +282,16 @@ def _owner_call(function, *args):
         raise HTTPException(404, '점주 계정이 없습니다.') from None
     except Exception:
         raise HTTPException(503, '점주 계정 조회 실패. 서버 연결과 DB 설정을 확인해 주세요.') from None
+
+
+@app.post('/admin/owners', response_model=AdminOwnerView, status_code=201)
+def admin_create_owner(payload: OwnerCreate):
+    try:
+        return create_owner(payload)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(503, '계정 생성 결과를 확인할 수 없습니다. 목록을 새로고침해 확인한 뒤 다시 시도해 주세요.') from None
 
 
 @app.get('/admin/owners', response_model=AdminOwnerList)

@@ -696,3 +696,11 @@ dd {
   text-decoration: none; white-space: nowrap;
 }
 .dashboard-list-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.owner-manage-button { margin: var(--md) 0 0 var(--sm); }
+.owner-confirm { display: flex; align-items: flex-start; gap: var(--sm); overflow-wrap: anywhere; }
+.owner-confirm input { flex-shrink: 0; width: 20px; height: 20px; margin: 0; }
+.store-form select { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius); padding: var(--md); background: var(--surface); }
+@media (max-width: 599px) { .owner-manage-button { margin-left: 0; } }
+
+.owner-connection-form { overflow-wrap: anywhere; }

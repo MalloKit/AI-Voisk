@@ -164,6 +164,9 @@ export function App({
           initiallyUnlinked={unlinked}
           repository={storeRepository}
           storesResult={storesResult}
+          ownersResult={ownersResult}
+          liveOwners={ownerRepository !== null}
+          onOwnerChanged={() => { storesResult.reload(); ownersResult.reload(); }}
         />
       )}
       {page === "owners" && <OwnersPage data={data} repository={ownerRepository} ownersResult={ownersResult} />}

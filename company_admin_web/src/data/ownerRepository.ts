@@ -1,7 +1,9 @@
-import { adminRequest } from "./apiSession.ts";
+import { adminRequest, AdminApiError } from "./apiSession.ts";
 import type { ApiOwner, ApiOwnerDetail, OwnerStore } from "./models";
 
+export interface OwnerCreateInput { login_id: string; password: string; }
 export interface OwnerRepository {
+  create?(input: OwnerCreateInput, signal?: AbortSignal): Promise<ApiOwner>;
   load(signal?: AbortSignal): Promise<ApiOwner[]>;
   detail(id: number, signal?: AbortSignal): Promise<ApiOwnerDetail>;
 }
@@ -54,7 +56,7 @@ export class ApiOwnerRepository implements OwnerRepository {
     private transport: typeof fetch = (input, init) => fetch(input, init),
     private timeoutMs = 20_000,
   ) {}
-  private async get(path: string, signal?: AbortSignal): Promise<unknown> {
+  private async get(path: string, signal?: AbortSignal, init: RequestInit = { method: "GET" }): Promise<unknown> {
     const base = new URL(this.baseUrl);
     if (!["http:", "https:"].includes(base.protocol) || base.username || base.password)
       throw new Error("점주 API 주소를 확인해 주세요.");
@@ -66,15 +68,29 @@ export class ApiOwnerRepository implements OwnerRepository {
     try {
       const response = await adminRequest(this.transport, 
         base.origin + base.pathname.replace(/\/$/, "") + path,
-        { method: "GET", signal: controller.signal },
+        { ...init, signal: controller.signal },
       );
       if (!response.ok)
-        throw new Error(response.status === 404 ? "점주 계정이 없습니다." : "실제 점주 조회에 실패했습니다.");
+        throw new AdminApiError(response.status, response.status === 404 ? "점주 계정이 없습니다."
+          : response.status === 409 ? "이미 사용 중인 로그인 ID입니다."
+          : response.status === 422 || response.status === 413 ? "로그인 ID와 비밀번호의 형식·길이를 확인해 주세요."
+          : init.method === "GET" ? "실제 점주 조회에 실패했습니다."
+          : "계정 생성 결과를 확인할 수 없습니다. 목록을 새로고침해 확인한 뒤 다시 시도해 주세요.");
       return await response.json();
     } finally {
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
     }
+  }
+  async create(input: OwnerCreateInput, signal?: AbortSignal): Promise<ApiOwner> {
+    const token = record(await this.get("/auth/admin/csrf", signal)).csrf_token;
+    if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("보안 요청 정보를 확인할 수 없습니다.");
+    const owner = parseOwner(await this.get("/admin/owners", signal, {
+      method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+      body: JSON.stringify({ login_id: input.login_id, password: input.password }),
+    }));
+    if (owner.loginId !== input.login_id || owner.storeCount !== 0) throw invalid();
+    return owner;
   }
   async load(signal?: AbortSignal): Promise<ApiOwner[]> {
     const result = record(await this.get("/admin/owners", signal));

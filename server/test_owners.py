@@ -48,12 +48,12 @@ class OwnerApiTests(fixtures.OwnerFixture, unittest.TestCase):
         for path in ('/admin/owners/0', '/admin/owners/-1', '/admin/owners/invalid'):
             self.assertEqual(self.client.get(path).status_code, 422)
 
-    def test_remote_access_is_blocked_and_no_writes_exist(self):
+    def test_remote_access_is_blocked_and_unsupported_writes_stay_unavailable(self):
         with TestClient(app, client=('203.0.113.1', 1234)) as remote:
             for path in ('/admin/owners', '/admin/owners/1'):
                 self.assertEqual(remote.get(path).status_code, 403)
         for method, path in (
-            ('POST', '/admin/owners'), ('PUT', '/admin/owners/1'),
+            ('PUT', '/admin/owners/1'),
             ('PATCH', '/admin/owners/1'), ('DELETE', '/admin/owners/1'),
         ):
             self.assertEqual(self.client.request(method, path).status_code, 405)
