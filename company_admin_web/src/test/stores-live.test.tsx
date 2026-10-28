@@ -158,7 +158,7 @@ describe("live store management", () => {
     };
     const user = userEvent.setup();
     render(<App alertRepository={null} deviceRepository={null} ownerRepository={null} repository={new MockAdminRepository()} orderRepository={null} storeRepository={repository} />);
-    await user.click(await screen.findByRole("button", { name: "미연결 매장 보기" }));
+    await user.click(await screen.findByRole("link", { name: "점주 미연결 매장 전체 보기" }));
     await screen.findByText("매장 목록 · 1곳");
     expect(screen.getByRole("table")).toHaveTextContent("실제 매장 42");
     expect(screen.getByRole("table")).not.toHaveTextContent("실제 매장 41");

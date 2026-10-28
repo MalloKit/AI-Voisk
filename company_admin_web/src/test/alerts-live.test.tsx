@@ -161,10 +161,12 @@ describe("실제 알림 조회", () => {
       deviceRepository={{load:async()=>[],detail:vi.fn()}} alertRepository={repository} />);
     await screen.findByRole("heading",{name:"운영 요약",level:1});
     await waitFor(() => expect(screen.getByRole("region",{name:"등록 매장"})).toHaveTextContent("0곳"));
-    expect(screen.getByRole("region",{name:"점주 계정"})).toHaveTextContent("0개");
+
     expect(screen.getByRole("region",{name:"최근 7일 주문"})).toHaveTextContent("0건");
     await user.click(nav("장애/알림"));
     await screen.findByRole("alert");
+    await user.click(nav("점주 계정"));
+    await screen.findByText("점주 계정 목록 · 0개");
     await user.click(nav("기기 관리"));
     await screen.findByText("기기 목록 · 0대");
     await user.click(nav("장애/알림"));

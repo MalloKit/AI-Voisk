@@ -84,15 +84,15 @@ describe("clean admin shell presentation", () => {
     render(<App repository={new MockAdminRepository()} orderRepository={null} storeRepository={null}
       ownerRepository={null} deviceRepository={null} alertRepository={null} />);
     await screen.findByRole("heading", { name: "운영 요약", level: 1 });
-    for (const [name, value] of [["등록 매장", "6곳"], ["점주 계정", "4개"]]) {
+    for (const [name, value] of [["등록 매장", "6곳"], ["점주 미연결 매장", "2곳"]]) {
       const metric = screen.getByRole("region", { name });
       expect(metric).toHaveTextContent(value);
       expect(metric.querySelector("svg")).not.toBeNull();
       expect(metric.querySelector("small")).toBeNull();
     }
-    expect(screen.getByRole("heading", { name: "최근 주문" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "최근 주문 내역" })).toBeInTheDocument();
     expect(screen.queryByText(/매장:.*API|점주:.*Mock|기기:.*Mock|알림:.*Mock/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "기기 목록 보기" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "알림 목록 보기" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "기기 관리" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "장애/알림" })).toBeInTheDocument();
   });
 });

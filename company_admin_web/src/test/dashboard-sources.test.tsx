@@ -49,6 +49,12 @@ async function open(repos = repositories()) {
   await screen.findByRole("heading", { name: "운영 요약", level: 1 });
   return { user, ...repos };
 }
+async function expectOwnerCount(count: number) {
+  const user = userEvent.setup();
+  await user.click(nav("점주 계정"));
+  await screen.findByText(`점주 계정 목록 · ${count}개`);
+  await user.click(nav("운영 요약"));
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((finish) => { resolve = finish; });
@@ -59,7 +65,7 @@ describe("shared live dashboard sources", () => {
   it("shows successful zero store and owner counts without using Mock metrics", async () => {
     await open();
     await waitFor(() => expect(metric("등록 매장")).toHaveTextContent("0곳"));
-    expect(metric("점주 계정")).toHaveTextContent("0개");
+    await expectOwnerCount(0);
     expect(metric("점주 미연결 매장")).toHaveTextContent("0곳");
     expect(metric("최근 7일 주문")).toHaveTextContent("0건");
     expect(screen.getByText("등록된 매장이 없습니다.")).toBeInTheDocument();
@@ -72,7 +78,7 @@ describe("shared live dashboard sources", () => {
     repos.stores.load.mockResolvedValue([store(1)]);
     const { user } = await open(repos);
     await waitFor(() => expect(metric("등록 매장")).toHaveTextContent("1곳"));
-    expect(metric("점주 계정")).toHaveTextContent("0개");
+    await expectOwnerCount(0);
     expect(metric("점주 미연결 매장")).toHaveTextContent("1곳");
     await user.click(screen.getByRole("button", { name: "매장 상세: DB 매장 1" }));
     const dialog = screen.getByRole("dialog");
@@ -91,8 +97,8 @@ describe("shared live dashboard sources", () => {
     const { user } = await open(repos);
     await waitFor(() => expect(metric("등록 매장")).toHaveTextContent("3곳"));
     expect(metric("점주 미연결 매장")).toHaveTextContent("2곳");
-    expect(metric("점주 계정")).toHaveTextContent("1개");
-    await user.click(screen.getByRole("button", { name: "미연결 매장 보기" }));
+    await expectOwnerCount(1);
+    await user.click(screen.getByRole("link", { name: "점주 미연결 매장 전체 보기" }));
     await screen.findByText("매장 목록 · 2곳");
     expect(screen.getByLabelText("점주 연결")).toHaveValue("미연결");
     expect(screen.getByRole("table")).not.toHaveTextContent("DB 매장 2");
@@ -109,13 +115,13 @@ describe("shared live dashboard sources", () => {
     repos.owners.load.mockReturnValue(owners.promise);
     repos.orders.load.mockReturnValue(orders.promise);
     await open(repos);
-    for (const label of ["등록 매장", "점주 계정", "점주 미연결 매장", "최근 7일 주문"])
+    for (const label of ["등록 매장", "점주 미연결 매장", "최근 7일 주문"])
       expect(metric(label)).toHaveTextContent("조회 중");
     await act(async () => { stores.resolve([]); });
     expect(metric("등록 매장")).toHaveTextContent("0곳");
-    expect(metric("점주 계정")).toHaveTextContent("조회 중");
+    expect(screen.getByRole("button", { name: "새로고침 중…" })).toBeDisabled();
     await act(async () => { owners.resolve([]); orders.resolve([]); });
-    expect(metric("점주 계정")).toHaveTextContent("0개");
+    await expectOwnerCount(0);
     expect(metric("최근 7일 주문")).toHaveTextContent("0건");
   });
 
@@ -127,7 +133,7 @@ describe("shared live dashboard sources", () => {
     const { user } = await open(repos);
     await waitFor(() => expect(metric("등록 매장")).toHaveTextContent("조회 실패"));
     expect(metric("점주 미연결 매장")).toHaveTextContent("조회 실패");
-    expect(metric("점주 계정")).toHaveTextContent("2개");
+    await expectOwnerCount(2);
     expect(metric("최근 7일 주문")).toHaveTextContent("1건");
     expect(screen.queryByRole("button", { name: "매장 상세: 말로 카페 성수" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "매장 다시 시도" }));
@@ -143,12 +149,13 @@ describe("shared live dashboard sources", () => {
     repos.owners.load.mockRejectedValueOnce(new Error("owner unavailable")).mockResolvedValueOnce([]);
     repos.orders.load.mockResolvedValue([order()]);
     const { user } = await open(repos);
-    await waitFor(() => expect(metric("점주 계정")).toHaveTextContent("조회 실패"));
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert")).toHaveTextContent("실제 점주 조회 실패");
     expect(metric("등록 매장")).toHaveTextContent("1곳");
     expect(metric("점주 미연결 매장")).toHaveTextContent("1곳");
     expect(metric("최근 7일 주문")).toHaveTextContent("1건");
     await user.click(screen.getByRole("button", { name: "점주 다시 시도" }));
-    await waitFor(() => expect(metric("점주 계정")).toHaveTextContent("0개"));
+    await expectOwnerCount(0);
     expect(repos.stores.load).toHaveBeenCalledTimes(1);
     expect(repos.orders.load).toHaveBeenCalledTimes(1);
   });
@@ -161,7 +168,7 @@ describe("shared live dashboard sources", () => {
     await open(repos);
     await waitFor(() => expect(metric("최근 7일 주문")).toHaveTextContent("조회 실패"));
     expect(metric("등록 매장")).toHaveTextContent("1곳");
-    expect(metric("점주 계정")).toHaveTextContent("1개");
+    await expectOwnerCount(1);
     expect(screen.getByRole("alert")).toHaveTextContent("Mock 주문으로 대체하지 않습니다");
   });
 
@@ -192,9 +199,9 @@ describe("shared live dashboard sources", () => {
     repos.owners.load.mockResolvedValueOnce([]).mockResolvedValueOnce([owner()])
       .mockResolvedValueOnce([owner(), owner(2)]);
     const { user } = await open(repos);
-    await waitFor(() => expect(metric("점주 계정")).toHaveTextContent("0개"));
+    await expectOwnerCount(0);
     await user.click(screen.getByRole("button", { name: "전체 새로고침" }));
-    await waitFor(() => expect(metric("점주 계정")).toHaveTextContent("1개"));
+    await expectOwnerCount(1);
     await user.click(nav("점주 계정"));
     await screen.findByText("점주 계정 목록 · 1개");
     expect(repos.owners.load).toHaveBeenCalledTimes(2);
@@ -203,7 +210,7 @@ describe("shared live dashboard sources", () => {
     await user.click(nav("매장 관리"));
     await screen.findByText("매장 목록 · 0곳");
     await user.click(nav("운영 요약"));
-    expect(metric("점주 계정")).toHaveTextContent("2개");
+    await expectOwnerCount(2);
     expect(repos.owners.load).toHaveBeenCalledTimes(3);
     expect(repos.stores.load).toHaveBeenCalledTimes(2);
     expect(repos.orders.load).toHaveBeenCalledTimes(2);
@@ -217,7 +224,7 @@ describe("shared live dashboard sources", () => {
     await user.click(screen.getByRole("button", { name: "전체 새로고침" }));
     await waitFor(() => expect(metric("등록 매장")).toHaveTextContent("조회 실패"));
     expect(screen.queryByRole("button", { name: "매장 상세: DB 매장 1" })).not.toBeInTheDocument();
-    expect(metric("점주 계정")).toHaveTextContent("0개");
+    await expectOwnerCount(0);
   });
 
   it("retains explicit Mock demo mode for store and owner navigation", async () => {
@@ -226,9 +233,9 @@ describe("shared live dashboard sources", () => {
       ownerRepository={null} orderRepository={null} />);
     await screen.findByRole("heading", { name: "운영 요약", level: 1 });
     expect(metric("등록 매장")).toHaveTextContent("6곳");
-    expect(metric("점주 계정")).toHaveTextContent("4개");
-    expect(metric("점주 계정")).not.toHaveTextContent("Mock");
-    await user.click(screen.getByRole("button", { name: "미연결 매장 보기" }));
+    await expectOwnerCount(4);
+    expect(screen.queryByRole("region", { name: "점주 계정" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "점주 미연결 매장 전체 보기" }));
     await screen.findByText("매장 목록 · 2곳");
     await user.click(nav("점주 계정"));
     expect(screen.getByRole("heading", { name: "점주 계정", level: 1 })).toHaveTextContent("점주 계정");

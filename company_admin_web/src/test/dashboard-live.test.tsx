@@ -49,7 +49,7 @@ describe("live orders on company dashboard", () => {
     await screen.findByRole("heading", { name: "운영 요약" });
     await waitFor(() => expect(screen.getByText("2건")).toBeInTheDocument());
     expect(screen.queryByText("실제 주문 API")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "최근 주문" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "최근 주문 내역" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "주문 상세: #12" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "주문 상세: #5" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "주문 상세: #1008" })).not.toBeInTheDocument();

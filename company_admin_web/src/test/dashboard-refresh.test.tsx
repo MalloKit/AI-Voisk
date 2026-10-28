@@ -56,15 +56,17 @@ describe("dashboard whole refresh", () => {
     await user.click(refresh());
     await waitFor(() => expect(metric("최근 7일 주문")).toHaveTextContent("1건"));
     expect(metric("등록 매장")).toHaveTextContent("1곳");
-    expect(metric("점주 계정")).toHaveTextContent("1개");
+    await expect(s.owners.load.mock.results.at(-1)!.value).resolves.toEqual([owner]);
     expect(metric("점주 미연결 매장")).toHaveTextContent("1곳");
-    expect(metric("기기 현황")).toHaveTextContent("등록 기기 1대 · 활성 기기 0대 · 비활성 기기 1대");
-    expect(metric("알림 현황")).toHaveTextContent("전체 등록 알림 1건 · 미열람 알림 (UNREAD) 1건");
+    expect(metric("기기 현황")).toHaveTextContent("등록 기기1대활성 기기0대비활성 기기1대");
+    expect(metric("미열람 알림")).toHaveTextContent("미열람 알림1건");
     expect(screen.getByRole("button", { name: "주문 상세: #99" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "매장 상세: 갱신 매장" })).toBeInTheDocument();
     loaders(s).forEach((load) => expect(load).toHaveBeenCalledTimes(2));
     for (const name of ["기기 목록 보기", "알림 목록 보기", "주문 전체 보기", "미연결 매장 보기", "등록 매장 전체 보기"])
-      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "최근 주문 내역 전체 보기" })).toHaveTextContent("전체 보기");
+    expect(screen.getByRole("link", { name: "점주 미연결 매장 전체 보기" })).toHaveTextContent("전체 보기");
   });
 
   it("starts all requests independently, blocks duplicate clicks until the slowest request settles, and retries a failure alone", async () => {
@@ -77,18 +79,18 @@ describe("dashboard whole refresh", () => {
     expect(button).toHaveTextContent("새로고침 중");
     await act(async () => { pending.slice(0, 4).forEach((p, i) => p.resolve(records[i])); });
     expect(metric("등록 매장")).toHaveTextContent("1곳");
-    expect(metric("기기 현황")).toHaveTextContent("등록 기기 1대");
-    expect(metric("알림 현황")).toHaveTextContent("조회 중");
+    expect(metric("기기 현황")).toHaveTextContent("등록 기기1대");
+    expect(metric("미열람 알림")).toHaveTextContent("조회 중");
     expect(button).toBeDisabled();
     fireEvent.click(button);
     loaders(s).forEach((load) => expect(load).toHaveBeenCalledTimes(2));
     await act(async () => { pending[4].reject(new Error("unavailable")); });
     expect(button).toBeEnabled();
-    expect(metric("알림 현황")).toHaveTextContent("조회 실패");
+    expect(metric("미열람 알림")).toHaveTextContent("조회 실패");
     expect(metric("최근 7일 주문")).toHaveTextContent("1건");
     s.alerts.load.mockResolvedValueOnce([alert]);
-    await user.click(screen.getByRole("button", { name: "알림 다시 시도" }));
-    await waitFor(() => expect(metric("알림 현황")).toHaveTextContent("전체 등록 알림 1건"));
+    await user.click(screen.getByRole("button", { name: "다시 시도" }));
+    await waitFor(() => expect(metric("미열람 알림")).toHaveTextContent("미열람 알림1건"));
     loaders(s).slice(0, 4).forEach((load) => expect(load).toHaveBeenCalledTimes(2));
     expect(s.alerts.load).toHaveBeenCalledTimes(3);
     await user.click(refresh());
@@ -102,14 +104,15 @@ describe("dashboard whole refresh", () => {
     loaders(s).forEach((load, i) => i === index ? load.mockRejectedValueOnce(new Error("failed")) : load.mockResolvedValueOnce(records[i]));
     await user.click(refresh());
     await waitFor(() => expect(refresh()).toBeEnabled());
-    const regions = ["등록 매장", "점주 계정", "최근 7일 주문", "기기 현황", "알림 현황"];
-    regions.forEach((name, i) => expect(metric(name)).toHaveTextContent(i === index ? "조회 실패" : ["1곳", "1개", "1건", "등록 기기 1대", "전체 등록 알림 1건"][i]));
+    const regions = ["등록 매장", "점주 계정", "최근 7일 주문", "기기 현황", "미열람 알림"];
+    regions.forEach((name, i) => i !== 1 && expect(metric(name)).toHaveTextContent(i === index ? "조회 실패" : ["1곳", "1개", "1건", "등록 기기1대", "미열람 알림1건"][i]));
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     loaders(s)[index].mockResolvedValueOnce(records[index]);
-    await user.click(screen.getByRole("button", { name: ["매장 다시 시도", "점주 다시 시도", "다시 시도", "기기 다시 시도", "알림 다시 시도"][index] }));
+    await user.click(screen.getByRole("button", { name: ["매장 다시 시도", "점주 다시 시도", "다시 시도", "다시 시도", "다시 시도"][index] }));
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
     loaders(s).forEach((load, i) => expect(load).toHaveBeenCalledTimes(i === index ? 3 : 2));
-    expect(metric(regions[index])).not.toHaveTextContent("조회 실패");
+    if (index !== 1) expect(metric(regions[index])).not.toHaveTextContent("조회 실패");
+    else await expect(s.owners.load.mock.results.at(-1)!.value).resolves.toEqual([owner]);
   });
 
   it.each([0, 1, 2, 3, 4])("shares refreshes with management page %i and allows navigation while pending", async (index) => {
@@ -127,8 +130,12 @@ describe("dashboard whole refresh", () => {
     await user.click(nav("운영 요약"));
     await waitFor(() => expect(refresh()).toBeEnabled());
     loaders(s).forEach((load, i) => expect(load).toHaveBeenCalledTimes(i === index ? 3 : 2));
-    const namesToCheck = ["등록 매장", "점주 계정", "최근 7일 주문", "기기 현황", "알림 현황"];
-    expect(metric(namesToCheck[index])).toHaveTextContent(["0곳", "0개", "0건", "등록 기기 0대", "전체 등록 알림 0건"][index]);
+    const namesToCheck = ["등록 매장", "점주 계정", "최근 7일 주문", "기기 현황", "미열람 알림"];
+    if (index !== 1) expect(metric(namesToCheck[index])).toHaveTextContent(["0곳", "0개", "0건", "등록 기기0대", "미열람 알림0건"][index]);
+    else {
+      await user.click(nav("점주 계정"));
+      await screen.findByText("점주 계정 목록 · 0개");
+    }
   });
 
   it.each([[true, false], [false, true]])("preserves independent Mock device=%s / Mock alert=%s sources", async (mockDevices, mockAlerts) => {
@@ -137,8 +144,8 @@ describe("dashboard whole refresh", () => {
     await waitFor(() => expect(refresh()).toBeEnabled());
     expect(s.devices.load).toHaveBeenCalledTimes(mockDevices ? 0 : 2);
     expect(s.alerts.load).toHaveBeenCalledTimes(mockAlerts ? 0 : 2);
-    expect(metric("기기 현황")).toHaveTextContent(mockDevices ? "등록 기기 6대 · 온라인 3대" : "등록 기기 0대");
-    expect(metric("알림 현황")).toHaveTextContent(mockAlerts ? "미확인 알림" : "전체 등록 알림 0건");
+    expect(metric("기기 현황")).toHaveTextContent(mockDevices ? "등록 기기6대" : "등록 기기0대");
+    expect(metric("미열람 알림")).toHaveTextContent(mockAlerts ? "미열람 알림미제공" : "미열람 알림0건");
   });
 
   it("allows repeated refresh in explicit all-Mock mode without API requests or metric changes", async () => {
@@ -150,8 +157,83 @@ describe("dashboard whole refresh", () => {
       await user.click(refresh());
       await waitFor(() => expect(refresh()).toBeEnabled());
       expect(metric("등록 매장")).toHaveTextContent("6곳");
-      expect(metric("점주 계정")).toHaveTextContent("4개");
-      expect(metric("기기 현황")).toHaveTextContent("등록 기기 6대");
+      expect(metric("미열람 알림")).toHaveTextContent("미제공");
+      expect(metric("기기 현황")).toHaveTextContent("등록 기기6대");
     }
+  });
+});
+
+
+describe("operational dashboard presentation", () => {
+  it("shows the four requested metrics in order, compact device facts and only two view-all links", async () => {
+    await open();
+    const metrics = document.querySelector(".metrics")!;
+    expect(Array.from(metrics.querySelectorAll("section")).map((node) => node.getAttribute("aria-label")))
+      .toEqual(["등록 매장", "점주 미연결 매장", "최근 7일 주문", "미열람 알림"]);
+    expect(screen.queryByRole("region", { name: "점주 계정" })).not.toBeInTheDocument();
+    expect(metric("미열람 알림").querySelector("svg")).not.toBeNull();
+    expect(Array.from(metric("기기 현황").querySelectorAll("dt")).map((node) => node.textContent))
+      .toEqual(["등록 기기", "활성 기기", "비활성 기기"]);
+    expect(metric("기기 현황")).toHaveTextContent("활성·비활성은 기기의 온라인 연결 상태를 의미하지 않습니다.");
+    expect(screen.queryByRole("heading", { name: "기기 및 알림 현황" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "알림 현황" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/UNREAD 이외 상태|전체 등록 알림/)).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".dashboard-list-link")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /새로고침/ })).toHaveLength(1);
+  });
+
+  it("supports keyboard links, real details, unlinked filter and default sidebar filtering without extra loads", async () => {
+    const s = sources();
+    s.stores.load.mockResolvedValue([store, { ...store, id: 100, name: "연결 매장", ownerId: 99, ownerLoginId: "refresh-owner" }]);
+    s.orders.load.mockResolvedValue([order]);
+    s.stores.detail.mockResolvedValue(store);
+    s.orders.detail.mockResolvedValue({ ...order, items: [] });
+    const user = await open(s), before = window.location.href;
+    await user.click(screen.getByRole("button", { name: "주문 상세: #99" }));
+    await waitFor(() => expect(s.orders.detail).toHaveBeenCalledWith(99, expect.any(AbortSignal)));
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "매장 상세: 갱신 매장" }));
+    await waitFor(() => expect(s.stores.detail).toHaveBeenCalledWith(99, expect.any(AbortSignal)));
+    await user.keyboard("{Escape}");
+    const orderLink = screen.getByRole("link", { name: "최근 주문 내역 전체 보기" });
+    orderLink.focus(); await user.keyboard("{Enter}");
+    await screen.findByRole("heading", { name: "주문 조회", level: 1 });
+    await user.click(nav("운영 요약"));
+    screen.getByRole("link", { name: "점주 미연결 매장 전체 보기" }).focus();
+    await user.keyboard("{Enter}");
+    await screen.findByText("매장 목록 · 1곳");
+    expect(screen.getByLabelText("점주 연결")).toHaveValue("미연결");
+    expect(screen.getByRole("table")).not.toHaveTextContent("연결 매장");
+    await user.click(nav("매장 관리"));
+    await screen.findByText("매장 목록 · 2곳");
+    expect(screen.getByLabelText("점주 연결")).toHaveValue("전체");
+    expect(window.location.href).toBe(before);
+    loaders(s).forEach((load) => expect(load).toHaveBeenCalledTimes(1));
+  });
+
+  it.each([0, 3, 7])("keeps recent-seven-day count separate from the latest maximum five older orders: %i rows", async (count) => {
+    const s = sources(), old = new Date(Date.now() - 30 * 86400000).toISOString();
+    s.orders.load.mockResolvedValue(Array.from({ length: count }, (_, index) => ({ ...order, order_id: index + 1, ordered_at: old })));
+    await open(s);
+    expect(metric("최근 7일 주문")).toHaveTextContent("0건");
+    expect(screen.getByRole("heading", { name: "최근 주문 내역" })).toBeInTheDocument();
+    const details = screen.queryAllByRole("button", { name: /주문 상세:/ });
+    expect(details).toHaveLength(Math.min(5, count));
+    expect(details.map((node) => node.getAttribute("aria-label")))
+      .toEqual(Array.from({ length: Math.min(5, count) }, (_, index) => `주문 상세: #${count - index}`));
+  });
+
+  it("recovers a failed alert source through whole refresh without interpreting unknown states as unread", async () => {
+    const s = sources();
+    s.alerts.load.mockRejectedValueOnce(new Error("unavailable")).mockResolvedValueOnce([alert, { ...alert, alert_id: 100, alert_status: "FUTURE_STATE" }]);
+    const user = await open(s);
+    expect(metric("미열람 알림")).toHaveTextContent("조회 실패");
+    expect(metric("미열람 알림")).not.toHaveTextContent("0건");
+    expect(screen.getByRole("alert")).toHaveTextContent("실제 알림 조회 실패");
+    await user.click(refresh());
+    await waitFor(() => expect(refresh()).toBeEnabled());
+    expect(metric("미열람 알림")).toHaveTextContent("1건");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    loaders(s).forEach((load) => expect(load).toHaveBeenCalledTimes(2));
   });
 });

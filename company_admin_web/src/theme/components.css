@@ -686,3 +686,13 @@ dd {
   .dashboard-heading { grid-template-columns: minmax(0, 1fr); gap: var(--md); }
   .dashboard-refresh { justify-self: start; }
 }
+
+.device-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--lg); }
+.device-summary dt { font-size: var(--text-sm); }
+.device-summary dd { font-size: var(--title); font-weight: 600; }
+.dashboard-list-link {
+  display: inline-flex; align-items: center; gap: var(--xs);
+  min-height: 44px; color: var(--selected-ink); font-size: var(--text-sm);
+  text-decoration: none; white-space: nowrap;
+}
+.dashboard-list-link:hover { text-decoration: underline; text-underline-offset: 3px; }

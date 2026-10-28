@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Store as StoreIcon, Users, Unlink, ReceiptText, RefreshCw } from "lucide-react";
+import { Store as StoreIcon, Bell, ArrowRight, Unlink, ReceiptText, RefreshCw } from "lucide-react";
 import type { AdminSnapshot, ApiAlert, ApiDevice, ApiOwner, ApiStore, Order, Page, Store } from "../data/models";
 import type { OwnerRepository } from "../data/ownerRepository";
 import type { StoreRepository } from "../data/storeRepository";
@@ -62,7 +62,6 @@ export function DashboardPage({
   const liveOwners = ownerRepository !== null;
   const stores: (Store | ApiStore)[] = liveStores ? (storesResult.data ?? []) : data.stores;
   const unlinked = stores.filter((s) => s.ownerId === null);
-  const ownerCount = liveOwners ? (ownersResult.data?.length ?? 0) : data.owners.length;
   const storeValue = (count: number) =>
     liveStores && storesResult.loading ? "조회 중"
       : liveStores && storesResult.error ? "조회 실패" : `${count}곳`;
@@ -85,12 +84,6 @@ export function DashboardPage({
       Icon: StoreIcon,
     },
     {
-      label: "점주 계정",
-      value: liveOwners && ownersResult.loading ? "조회 중"
-        : liveOwners && ownersResult.error ? "조회 실패" : `${ownerCount}개`,
-      Icon: Users,
-    },
-    {
       label: "점주 미연결 매장",
       value: storeValue(unlinked.length),
       Icon: Unlink,
@@ -103,6 +96,11 @@ export function DashboardPage({
           ? "조회 실패"
           : `${recentCount}건`,
       Icon: ReceiptText,
+    },
+    {
+      label: "미열람 알림",
+      value: liveAlerts ? alertValue(alertsResult.data?.filter((a) => a.alert_status === "UNREAD").length ?? 0) : "미제공",
+      Icon: Bell,
     },
   ];
   return (
@@ -144,47 +142,27 @@ export function DashboardPage({
       {liveOwners && ownersResult.error && (
         <ErrorState message="실제 점주 조회 실패. Mock 계정 수로 대체하지 않습니다." />
       )}
+      {liveAlerts && alertsResult.error && (
+        <ErrorState message="실제 알림 조회 실패. Mock 수치로 대체하지 않습니다." onRetry={alertsResult.reload} />
+      )}
       <Card>
-        <Section title="기기 및 알림 현황" />
         <section aria-label="기기 현황">
-          {liveDevices ? (
-            <>
-              <p>
-                등록 기기 {deviceValue(devicesResult.data?.length ?? 0)} ·
-                활성 기기 {deviceValue(devicesResult.data?.filter((d) => d.is_active === true).length ?? 0)} ·
-                비활성 기기 {deviceValue(devicesResult.data?.filter((d) => d.is_active === false).length ?? 0)}
-              </p>
-              <p className="muted">활성·비활성은 온라인·오프라인 상태가 아닙니다. 하트비트 관측이 없어 연결 상태는 미확인입니다.</p>
-              {devicesResult.error && <button onClick={devicesResult.reload} disabled={devicesResult.loading}>기기 다시 시도</button>}
-              {devicesResult.error && <ErrorState message="실제 기기 조회 실패. Mock 수치로 대체하지 않습니다." />}
-            </>
-          ) : (
-            <p>등록 기기 {data.devices.length}대 · 온라인 {data.devices.filter((d) => d.connection === "online").length}대 ·
-              오프라인 {data.devices.filter((d) => d.connection === "offline").length}대</p>
-          )}
+          <Section title="기기 현황" />
+          <dl className="device-summary">
+            <div><dt>등록 기기</dt><dd>{liveDevices ? deviceValue(devicesResult.data?.length ?? 0) : `${data.devices.length}대`}</dd></div>
+            <div><dt>활성 기기</dt><dd>{liveDevices ? deviceValue(devicesResult.data?.filter((d) => d.is_active === true).length ?? 0) : "미제공"}</dd></div>
+            <div><dt>비활성 기기</dt><dd>{liveDevices ? deviceValue(devicesResult.data?.filter((d) => d.is_active === false).length ?? 0) : "미제공"}</dd></div>
+          </dl>
+          <p className="muted">활성·비활성은 기기의 온라인 연결 상태를 의미하지 않습니다.</p>
+          {!liveDevices && <p className="muted">시연 데이터에는 활성·비활성 정보가 없습니다.</p>}
+          {devicesResult.error && liveDevices && <ErrorState message="실제 기기 조회 실패. Mock 수치로 대체하지 않습니다." onRetry={devicesResult.reload} />}
         </section>
-        <section aria-label="알림 현황">
-          {liveAlerts ? (
-            <>
-              <p>
-                전체 등록 알림 {alertValue(alertsResult.data?.length ?? 0)} ·
-                미열람 알림 (UNREAD) {alertValue(alertsResult.data?.filter((a) => a.alert_status === "UNREAD").length ?? 0)}
-              </p>
-              <p className="muted">UNREAD 이외 상태의 의미는 추정하지 않습니다. 관리자 확인과 장애 해소는 별도 기록입니다.</p>
-              {alertsResult.error && <button onClick={alertsResult.reload} disabled={alertsResult.loading}>알림 다시 시도</button>}
-              {alertsResult.error && <ErrorState message="실제 알림 조회 실패. Mock 수치로 대체하지 않습니다." />}
-            </>
-          ) : (
-            <p>전체 등록 알림 {data.alerts.length}건 · 미확인 알림 {data.alerts.filter((a) => a.status === "unconfirmed").length}건</p>
-          )}
-        </section>
-        <div className="actions">
-          <button onClick={() => onNavigate("devices")}>기기 목록 보기</button>
-          <button onClick={() => onNavigate("alerts")}>알림 목록 보기</button>
-        </div>
       </Card>
-      <Section title="최근 주문">
-        <button onClick={() => onNavigate("orders")}>주문 전체 보기</button>
+      <Section title="최근 주문 내역">
+        <a className="dashboard-list-link" href="#orders" aria-label="최근 주문 내역 전체 보기"
+          onClick={(event) => { event.preventDefault(); onNavigate("orders"); }}>
+          전체 보기 <ArrowRight size={16} aria-hidden="true" />
+        </a>
       </Section>
       {live && result.loading ? (
         <Loading text="실제 주문을 불러오는 중…" />
@@ -197,9 +175,10 @@ export function DashboardPage({
         <OrderTable orders={latestOrders} onDetail={setOrder} />
       )}
       <Section title="점주 미연결 매장">
-        <button onClick={() => onNavigate("stores", true)}>
-          미연결 매장 보기
-        </button>
+        <a className="dashboard-list-link" href="#stores" aria-label="점주 미연결 매장 전체 보기"
+          onClick={(event) => { event.preventDefault(); onNavigate("stores", true); }}>
+          전체 보기 <ArrowRight size={16} aria-hidden="true" />
+        </a>
       </Section>
       {liveStores && storesResult.loading ? (
         <Loading text="실제 매장을 불러오는 중…" />
@@ -231,11 +210,6 @@ export function DashboardPage({
           },
         ]}
       />}
-      <div className="actions">
-        <button onClick={() => onNavigate("stores")}>
-          등록 매장 전체 보기
-        </button>
-      </div>
       {store && (
         <Modal title={store.name} onClose={() => setStore(undefined)}>
           {storeRepository

@@ -67,7 +67,7 @@ describe("six screens and Flutter behaviour parity", () => {
     );
     expect(screen.getByRole("dialog")).toHaveTextContent("담당자 및 점주 연결");
     await user.click(screen.getByRole("button", { name: "닫기" }));
-    await user.click(screen.getByRole("button", { name: "미연결 매장 보기" }));
+    await user.click(screen.getByRole("link", { name: "점주 미연결 매장 전체 보기" }));
     expect(
       screen.getByRole("heading", { name: "매장 목록 · 2곳" }),
     ).toBeInTheDocument();
