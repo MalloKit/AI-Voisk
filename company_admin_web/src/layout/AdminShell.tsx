@@ -63,7 +63,13 @@ export function AdminShell({
           }}
         />
       )}
-      <aside className="sidebar" aria-label="회사 관리자 메뉴">
+      <aside className="sidebar" aria-label="회사 관리자 메뉴"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setOpen(false);
+            trigger.current?.focus();
+          }
+        }}>
         <div className="brand">
           <strong>AI-Voisk</strong>
           <button
@@ -77,16 +83,13 @@ export function AdminShell({
             <X />
           </button>
         </div>
-        <nav
-          ref={nav}
-          aria-label="주요 화면"
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              setOpen(false);
-              trigger.current?.focus();
-            }
-          }}
-        >
+        <div className="sidebar-account">
+          <UserCircle size={23} aria-hidden="true" />
+          <div>
+            {admin ? <><strong>{admin.name}</strong><span>관리자 #{admin.id}</span></> : <span>관리자 세션 확인 필요</span>}
+          </div>
+        </div>
+        <nav ref={nav} aria-label="주요 화면">
           {pages.map((p) => (
             <button
               key={p.id}
@@ -107,21 +110,15 @@ export function AdminShell({
         </div>}
       </aside>
       <div className="workspace">
-        <header className="topbar">
-          <button
-            ref={trigger}
-            className="menu-toggle icon-button"
-            aria-label="메뉴 열기"
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-          >
-            <Menu />
-          </button>
-          <span className="account">
-            <UserCircle size={23} aria-hidden="true" />
-            {admin ? `${admin.name} · 관리자 #${admin.id}` : "관리자 인증 확인 필요"}
-          </span>
-        </header>
+        <button
+          ref={trigger}
+          className="menu-toggle icon-button"
+          aria-label="메뉴 열기"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          <Menu />
+        </button>
         <main id="main" tabIndex={-1} key={page}>
           <div className="content">{children}</div>
         </main>

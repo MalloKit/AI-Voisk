@@ -149,8 +149,9 @@ describe("server validated admin entry and lifecycle", () => {
     render(<AppEntry authRepository={a} {...mockSources} />);
     await dashboard();
     expect(window.location.pathname).toBe("/");
-    expect(screen.getAllByText(/격리 관리자 · 관리자 #12/)).toHaveLength(1);
-    expect(screen.getByText("격리 관리자 · 관리자 #12").closest("header")).toHaveClass("topbar");
+    expect(screen.getAllByText("격리 관리자")).toHaveLength(1);
+    expect(screen.getByText("격리 관리자").closest(".sidebar-account")).toHaveTextContent("관리자 #12");
+    expect(screen.getByText("격리 관리자").closest("aside")).toBeInTheDocument();
     expect(a.me).toHaveBeenCalledTimes(1);
   });
 

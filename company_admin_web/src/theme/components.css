@@ -89,6 +89,7 @@ hr {
   color: var(--selected-ink);
 }
 .sidebar nav {
+  min-height: 0;
   padding: var(--md);
   flex: 1;
   overflow-y: auto;
@@ -110,6 +111,7 @@ hr {
   color: var(--selected-ink);
 }
 .sidebar-footer {
+  flex-shrink: 0;
   padding: var(--xl);
   font-size: var(--text-xs);
 }
@@ -118,25 +120,17 @@ hr {
   min-width: 0;
   margin-left: var(--sidebar);
 }
-.topbar {
-  min-height: 56px;
-  height: auto;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+.sidebar-account {
   display: flex;
-  align-items: center;
-  gap: var(--lg);
-  padding: var(--xs) var(--xl);
-}
-.account {
-  display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--sm);
-  margin-left: auto;
-  min-width: 0;
-  overflow-wrap: anywhere;
+  padding: var(--lg) var(--xl);
+  border-bottom: 1px solid var(--border);
 }
-.account svg { flex-shrink: 0; }
+.sidebar-account svg { flex-shrink: 0; margin-top: 2px; }
+.sidebar-account > div { min-width: 0; overflow-wrap: anywhere; }
+.sidebar-account strong, .sidebar-account span { display: block; }
+.sidebar-account span { color: var(--muted); font-size: var(--text-xs); }
 main {
   padding: var(--xl);
 }
@@ -468,6 +462,16 @@ dd {
   .mobile-close {
     display: inline-flex;
   }
+  .menu-toggle {
+    position: fixed;
+    top: var(--lg);
+    left: var(--lg);
+    z-index: 18;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .workspace > main { padding-top: 80px; }
   .mobile-close {
     position: absolute;
     right: var(--sm);
@@ -487,7 +491,6 @@ dd {
   }
 }
 @media (max-width: 599px) {
-  .topbar,
   main {
     padding-left: var(--lg);
     padding-right: var(--lg);
@@ -625,9 +628,6 @@ dd {
 @media (max-width: 599px) {
   .card {
     padding: var(--lg);
-  }
-  .topbar {
-    gap: var(--sm);
   }
   .field input, .field select {
     font-size: var(--text-lg);

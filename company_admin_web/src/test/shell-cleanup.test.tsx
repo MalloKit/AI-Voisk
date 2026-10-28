@@ -6,22 +6,25 @@ import { App } from "../App";
 import { MockAdminRepository } from "../data/adminRepository";
 
 describe("clean admin shell presentation", () => {
-  it.each(pages)("keeps main heading, navigation and only the top-right account on $label", async (page) => {
+  it.each(pages)("keeps main heading and navigation with the account only below the sidebar logo on $label", async (page) => {
     const user = userEvent.setup(), onNavigate = vi.fn(), onLogout = vi.fn();
     const admin = { id: 87, name: "표시 확인" };
     const { container } = render(<AdminShell admin={admin} onLogout={onLogout} page={page.id}
       onNavigate={onNavigate} liveOrders liveStores={false} liveOwners liveDevices={false} liveAlerts>
       <h1>{page.label}</h1>
     </AdminShell>);
-    const header = container.querySelector(".topbar")!;
     const sidebar = container.querySelector("aside")!;
     expect(screen.getByRole("heading", { name: page.label, level: 1 })).toBeInTheDocument();
-    expect(header).not.toHaveTextContent(page.label);
-    expect(header.querySelector(".source")).toBeNull();
-    expect(header.querySelector(".account svg")).not.toBeNull();
-    expect(header).toHaveTextContent("표시 확인 · 관리자 #87");
-    expect(screen.getAllByText("표시 확인 · 관리자 #87")).toHaveLength(1);
-    expect(sidebar).not.toHaveTextContent(/표시 확인|관리자 #87|AI-Voisk 운영 관리|화면별 데이터 출처 확인/);
+    expect(container.querySelector(".topbar")).toBeNull();
+    expect(container.querySelector(".workspace > header")).toBeNull();
+    const account = sidebar.querySelector<HTMLElement>(".sidebar-account")!;
+    expect(account.querySelector("svg")).not.toBeNull();
+    expect(within(account).getByText(admin.name)).toBeInTheDocument();
+    expect(within(account).getByText("관리자 #87")).toBeInTheDocument();
+    expect(screen.getAllByText(admin.name)).toHaveLength(1);
+    expect(account.previousElementSibling).toHaveClass("brand");
+    expect(account.nextElementSibling?.tagName).toBe("NAV");
+    expect(sidebar).not.toHaveTextContent(/AI-Voisk 운영 관리|화면별 데이터 출처 확인/);
     expect(within(sidebar).getByText("AI-Voisk")).toBeInTheDocument();
     expect(within(sidebar).queryByText("회사 관리자")).not.toBeInTheDocument();
     expect(sidebar.querySelector(".signed-in-admin")).toBeNull();
@@ -41,15 +44,41 @@ describe("clean admin shell presentation", () => {
     await user.click(within(footer).getByRole("button", { name: "로그아웃" }));
     expect(onLogout).toHaveBeenCalledTimes(1);
   });
-  it("updates the visible account from props without creating a sidebar copy", () => {
+  it("updates the single sidebar account from session props", () => {
     const props = { page: "dashboard" as const, onNavigate: vi.fn(), onLogout: vi.fn(),
       liveOrders: false, liveStores: false, liveOwners: false, liveDevices: false, liveAlerts: false };
     const { rerender, container } = render(<AdminShell {...props} admin={{ id: 1, name: "첫 계정" }}><h1>운영 요약</h1></AdminShell>);
     rerender(<AdminShell {...props} admin={{ id: 2147483647, name: "다른관리자계정이름" }}><h1>운영 요약</h1></AdminShell>);
-    expect(container.querySelector(".account")).toHaveTextContent("다른관리자계정이름 · 관리자 #2147483647");
+    expect(container.querySelector(".sidebar-account")).toHaveTextContent("다른관리자계정이름관리자 #2147483647");
+    expect(screen.getAllByText("다른관리자계정이름")).toHaveLength(1);
     expect(screen.queryByText(/첫 계정/)).not.toBeInTheDocument();
-    expect(container.querySelector("aside")).not.toHaveTextContent("다른관리자계정이름");
-    expect(container.querySelector(".topbar")).not.toHaveTextContent(/출처별 요약|Mock 데이터|실제.*API/);
+    expect(container.querySelector(".workspace")).not.toHaveTextContent(/다른관리자계정이름|관리자 #2147483647/);
+    expect(container.querySelector(".topbar")).toBeNull();
+  });
+  it.each(["close", "overlay", "escape-from-logout"])("closes the mobile sidebar and restores menu focus: %s", async (method) => {
+    const user = userEvent.setup();
+    const { container } = render(<AdminShell page="dashboard" admin={{ id: 9, name: "세션 관리자" }}
+      onLogout={vi.fn()} onNavigate={vi.fn()} liveOrders liveStores liveOwners liveDevices liveAlerts><h1>운영 요약</h1></AdminShell>);
+    const trigger = screen.getByRole("button", { name: "메뉴 열기" });
+    await user.click(trigger);
+    expect(screen.getByRole("button", { name: "운영 요약" })).toHaveFocus();
+    if (method === "escape-from-logout") {
+      screen.getByRole("button", { name: "로그아웃" }).focus();
+      await user.keyboard("{Escape}");
+    } else await user.click(container.querySelector<HTMLElement>(method === "overlay" ? ".nav-overlay" : ".mobile-close")!);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveFocus();
+    expect(container.querySelector(".nav-overlay")).toBeNull();
+  });
+  it("returns focus after choosing a page in the mobile menu", async () => {
+    const user = userEvent.setup(), onNavigate = vi.fn();
+    render(<AdminShell page="dashboard" onNavigate={onNavigate} liveOrders liveStores liveOwners liveDevices liveAlerts><h1>운영 요약</h1></AdminShell>);
+    const trigger = screen.getByRole("button", { name: "메뉴 열기" });
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "매장 관리" }));
+    expect(onNavigate).toHaveBeenCalledWith("stores");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveFocus();
   });
   it("retains Mock metrics, icons and actions without source captions", async () => {
     render(<App repository={new MockAdminRepository()} orderRepository={null} storeRepository={null}
