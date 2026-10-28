@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
-import { Card, Heading } from "../components/ui";
+import { Card } from "../components/ui";
 
 export interface AdminLoginInput {
   adminId: number;
@@ -52,14 +52,13 @@ export function AdminLoginForm({
   return (
     <form aria-busy={busy} className="login-form" onSubmit={submit} noValidate aria-label="관리자 로그인 입력">
       <label className="field form-field" htmlFor="admin-id">
-        <span>관리자 ID</span>
+        <span>ID</span>
         <input id="admin-id" ref={idRef} name="admin_id" type="text" inputMode="numeric"
           autoComplete="username" required disabled={busy} value={adminId}
           aria-invalid={!!errors.adminId}
-          aria-describedby={errors.adminId ? "admin-id-help admin-id-error" : "admin-id-help"}
+          aria-describedby={errors.adminId ? "admin-id-error" : undefined}
           onChange={(e) => { setAdminId(e.target.value); setErrors((prev) => ({ ...prev, adminId: undefined })); }} />
       </label>
-      <p id="admin-id-help" className="field-help">현재 관리자 ID는 숫자형 admin_id를 사용합니다.</p>
       {errors.adminId && <p id="admin-id-error" className="field-error" role="alert">{errors.adminId}</p>}
       <label className="field form-field" htmlFor="admin-password">
         <span>비밀번호</span>
@@ -96,14 +95,13 @@ export function LoginPage({
       <div className="login-panel">
         <a className="login-brand" href="/login" aria-label="AI-Voisk 관리자 로그인">
           <ShieldCheck size={30} aria-hidden="true" />
-          <span>AI-Voisk<small>회사 관리자 웹</small></span>
+          <span>AI-Voisk</span>
         </a>
         <Card>
-          <Heading title="관리자 로그인">회사 관리자 계정으로 로그인해 주세요.</Heading>
+          <header className="page-heading"><h1>관리자 로그인</h1></header>
           <AdminLoginForm onSubmit={onLogin} busy={busy} feedback={feedback} />
           {onRetrySession && <button className="session-retry" onClick={onRetrySession} disabled={busy}>세션 다시 확인</button>}
         </Card>
-        <p className="login-caption">AI-Voisk · 회사 관리자 전용</p>
       </div>
     </main>
   );

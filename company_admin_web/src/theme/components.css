@@ -570,15 +570,9 @@ dd {
   font-size: var(--title);
   font-weight: 700;
 }
-.login-brand small {
-  font-weight: 400;
-  color: var(--muted);
-}
-.login-panel .card {
-  margin-bottom: var(--lg);
-}
 .login-panel .page-heading h1 {
   font-size: 24px;
+  margin-bottom: 0;
 }
 .login-form {
   display: flex;
@@ -635,12 +629,6 @@ dd {
   text-underline-offset: 3px;
   margin-top: var(--md);
   overflow-wrap: anywhere;
-}
-.login-caption {
-  text-align: center;
-  color: var(--muted);
-  font-size: var(--text-xs);
-  margin-bottom: 0;
 }
 @media (max-width: 599px) {
   .card {

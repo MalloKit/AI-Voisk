@@ -26,7 +26,7 @@ describe("login UI connected to server authentication", () => {
     render(<AppEntry authRepository={auth} />);
     await screen.findByRole("heading", { name: "관리자 로그인" });
     expect(auth.me).toHaveBeenCalledTimes(1);
-    expect(screen.getByLabelText("관리자 ID")).toHaveAttribute("inputmode", "numeric");
+    expect(screen.getByLabelText("ID", { exact: true })).toHaveAttribute("inputmode", "numeric");
     expect(screen.getByLabelText("비밀번호", { exact: true })).toHaveAttribute("type", "password");
     expect(screen.queryByRole("link", { name: /기존 관리자 화면 보기/ })).not.toBeInTheDocument();
     expect(transport).not.toHaveBeenCalled();
@@ -55,8 +55,8 @@ describe("login UI connected to server authentication", () => {
     render(<AdminLoginForm onSubmit={submit} />);
     await user.click(screen.getByRole("button", { name: "로그인" }));
     expect(screen.getAllByRole("alert")).toHaveLength(2);
-    expect(screen.getByLabelText("관리자 ID")).toHaveFocus();
-    expect(screen.getByLabelText("관리자 ID")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("ID", { exact: true })).toHaveFocus();
+    expect(screen.getByLabelText("ID", { exact: true })).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText("비밀번호", { exact: true })).toHaveAttribute("aria-invalid", "true");
     expect(submit).not.toHaveBeenCalled();
   });
@@ -66,7 +66,7 @@ describe("login UI connected to server authentication", () => {
       const submit = vi.fn();
       const user = userEvent.setup();
       render(<AdminLoginForm onSubmit={submit} />);
-      await user.type(screen.getByLabelText("관리자 ID"), value);
+      await user.type(screen.getByLabelText("ID", { exact: true }), value);
       await user.type(screen.getByLabelText("비밀번호", { exact: true }), crypto.randomUUID());
       await user.click(screen.getByRole("button", { name: "로그인" }));
       expect(screen.getByRole("alert")).toHaveTextContent("정수로 입력");
@@ -81,7 +81,7 @@ describe("login UI connected to server authentication", () => {
     const user = userEvent.setup();
     const generatedInput = crypto.randomUUID();
     render(<AdminLoginForm onSubmit={submit} />);
-    await user.type(screen.getByLabelText("관리자 ID"), " 12 ");
+    await user.type(screen.getByLabelText("ID", { exact: true }), " 12 ");
     await user.type(screen.getByLabelText("비밀번호", { exact: true }), generatedInput);
     await user.keyboard("{Enter}");
     expect(submit).toHaveBeenCalledTimes(1);
@@ -94,7 +94,7 @@ describe("login UI connected to server authentication", () => {
   it("focuses the missing password and clears its field error on editing", async () => {
     const user = userEvent.setup();
     render(<LoginPage onLogin={vi.fn()} />);
-    await user.type(screen.getByLabelText("관리자 ID"), "12");
+    await user.type(screen.getByLabelText("ID", { exact: true }), "12");
     await user.click(screen.getByRole("button", { name: "로그인" }));
     const field = screen.getByLabelText("비밀번호", { exact: true });
     expect(field).toHaveFocus();
@@ -131,7 +131,7 @@ describe("login UI connected to server authentication", () => {
     await screen.findByRole("heading", { name: "관리자 로그인" });
     const user = userEvent.setup();
     const generatedInput = crypto.randomUUID();
-    await user.type(screen.getByLabelText("관리자 ID"), "12");
+    await user.type(screen.getByLabelText("ID", { exact: true }), "12");
     await user.type(screen.getByLabelText("비밀번호", { exact: true }), generatedInput);
     await user.click(screen.getByRole("button", { name: "로그인" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("ID 또는 비밀번호");
@@ -152,4 +152,26 @@ describe("login UI connected to server authentication", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("<b>인증 요청에 실패했습니다.</b>");
     expect(screen.getByRole("alert").querySelector("b")).toBeNull();
   });
+});
+
+
+it("keeps a visible ID label and only the requested login content without dangling descriptions", async () => {
+  render(<LoginPage onLogin={vi.fn()} />);
+  for (const text of ["회사 관리자 웹", "회사 관리자 계정으로 로그인해 주세요.",
+    "현재 관리자 ID는 숫자형 admin_id를 사용합니다.", "AI-Voisk · 회사 관리자 전용"])
+    expect(screen.queryByText(text)).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "관리자 로그인", level: 1 })).toBeInTheDocument();
+  const id = screen.getByLabelText("ID", { exact: true }) as HTMLInputElement;
+  expect(id.labels).toHaveLength(1);
+  const label = id.labels![0];
+  expect(label.htmlFor).toBe(id.id);
+  expect(label.firstElementChild?.textContent).toBe("ID");
+  expect(label.firstElementChild?.compareDocumentPosition(id)! & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(id).not.toHaveAttribute("placeholder");
+  expect(id).not.toHaveAttribute("aria-describedby");
+  expect(id).toHaveAttribute("name", "admin_id");
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "로그인" }));
+  expect(id).toHaveAttribute("aria-describedby", "admin-id-error");
+  expect(id).toHaveAccessibleDescription("관리자 ID는 1~2147483647 범위의 정수로 입력해 주세요.");
 });

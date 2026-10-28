@@ -31,7 +31,7 @@ const mockSources = {
   deviceRepository: null, alertRepository: null,
 };
 async function credentials(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("관리자 ID"), "12");
+  await user.type(screen.getByLabelText("ID", { exact: true }), "12");
   await user.type(screen.getByLabelText("비밀번호", { exact: true }), crypto.randomUUID());
 }
 const dashboard = () => screen.findByRole("heading", { name: "운영 요약", level: 1 });
@@ -162,7 +162,7 @@ describe("server validated admin entry and lifecycle", () => {
     await credentials(user);
     await user.click(screen.getByRole("button", { name: "로그인" }));
     expect(screen.getByRole("button", { name: "로그인 중…" })).toBeDisabled();
-    expect(screen.getByLabelText("관리자 ID")).toBeDisabled();
+    expect(screen.getByLabelText("ID", { exact: true })).toBeDisabled();
     expect(screen.queryByRole("heading", { name: "운영 요약" })).not.toBeInTheDocument();
     await act(async () => pending.resolve(identity));
     await dashboard();
