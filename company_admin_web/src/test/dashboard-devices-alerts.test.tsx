@@ -95,7 +95,7 @@ describe("dashboard shared device and alert API data", () => {
     await open(s);
     expect(devices()).toHaveTextContent("등록 기기 조회 중");
     expect(alerts()).toHaveTextContent("전체 등록 알림 조회 중");
-    expect(within(devices()).getByRole("button", { name: "기기 새로고침" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "새로고침 중…" })).toBeDisabled();
     expect(region("등록 매장")).toHaveTextContent("0곳");
     await act(async () => { d.resolve(new Response(JSON.stringify({ devices: [], total: 0 }))); });
     expect(devices()).toHaveTextContent("등록 기기 0대");
@@ -158,7 +158,7 @@ describe("dashboard shared device and alert API data", () => {
     const { user } = await open(s);
     await waitFor(() => expect(devices()).toHaveTextContent("등록 기기 1대"));
     s.deviceHttp.mockResolvedValueOnce(new Response(JSON.stringify({ devices: [device(), device(2, false)], total: 2 })));
-    await user.click(screen.getByRole("button", { name: "기기 새로고침" }));
+    await user.click(screen.getByRole("button", { name: "전체 새로고침" }));
     await waitFor(() => expect(devices()).toHaveTextContent("등록 기기 2대"));
     await user.click(screen.getByRole("button", { name: "기기 목록 보기" }));
     await screen.findByRole("heading", { name: "기기 목록 · 2대" });
@@ -169,8 +169,8 @@ describe("dashboard shared device and alert API data", () => {
     await user.click(nav("운영 요약"));
     expect(devices()).toHaveTextContent("등록 기기 0대");
     expect(s.deviceHttp).toHaveBeenCalledTimes(3);
-    expect(s.alertHttp).toHaveBeenCalledTimes(1);
-    expect(s.orders.load).toHaveBeenCalledTimes(1);
+    expect(s.alertHttp).toHaveBeenCalledTimes(2);
+    expect(s.orders.load).toHaveBeenCalledTimes(2);
   });
 
   it("shares alert refreshes both ways and makes only GET list requests", async () => {
@@ -178,7 +178,7 @@ describe("dashboard shared device and alert API data", () => {
     const { user, acknowledge } = await open(s);
     await waitFor(() => expect(alerts()).toHaveTextContent("전체 등록 알림 1건"));
     s.alertHttp.mockResolvedValueOnce(new Response(JSON.stringify({ alerts: [alert(), alert(2, "NEW")], total: 2 })));
-    await user.click(screen.getByRole("button", { name: "알림 새로고침" }));
+    await user.click(screen.getByRole("button", { name: "전체 새로고침" }));
     await waitFor(() => expect(alerts()).toHaveTextContent("전체 등록 알림 2건"));
     expect(alerts()).toHaveTextContent("미열람 알림 (UNREAD) 1건");
     await user.click(screen.getByRole("button", { name: "알림 목록 보기" }));
@@ -190,7 +190,7 @@ describe("dashboard shared device and alert API data", () => {
     await user.click(nav("운영 요약"));
     expect(alerts()).toHaveTextContent("전체 등록 알림 0건");
     expect(s.alertHttp).toHaveBeenCalledTimes(3);
-    expect(s.deviceHttp).toHaveBeenCalledTimes(1);
+    expect(s.deviceHttp).toHaveBeenCalledTimes(2);
     for (const [url, init] of s.alertHttp.mock.calls) {
       expect(url).toBe("http://localhost:8001/admin/alerts");
       expect(init?.method).toBe("GET");
@@ -204,7 +204,7 @@ describe("dashboard shared device and alert API data", () => {
     await waitFor(() => expect(devices()).toHaveTextContent("등록 기기 1대"));
     const http = source === "device" ? s.deviceHttp : s.alertHttp;
     http.mockRejectedValueOnce(new Error("refresh failed"));
-    await user.click(screen.getByRole("button", { name: source === "device" ? "기기 새로고침" : "알림 새로고침" }));
+    await user.click(screen.getByRole("button", { name: "전체 새로고침" }));
     const failed = source === "device" ? devices : alerts;
     await waitFor(() => expect(failed()).toHaveTextContent("조회 실패"));
     expect(failed()).not.toHaveTextContent(source === "device" ? "등록 기기 1대" : "전체 등록 알림 1건");

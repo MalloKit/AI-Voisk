@@ -165,13 +165,13 @@ describe("shared live dashboard sources", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Mock 주문으로 대체하지 않습니다");
   });
 
-  it("shares store refreshes in both directions without reloading owners or orders", async () => {
+  it("shares whole refresh results and keeps management store refresh independent", async () => {
     const repos = repositories();
     repos.stores.load.mockResolvedValueOnce([store()])
       .mockResolvedValueOnce([store(), store(2, 1)]).mockResolvedValueOnce([]);
     const { user } = await open(repos);
     await waitFor(() => expect(metric("등록 매장")).toHaveTextContent("1곳"));
-    await user.click(screen.getByRole("button", { name: "매장 새로고침" }));
+    await user.click(screen.getByRole("button", { name: "전체 새로고침" }));
     await waitFor(() => expect(metric("등록 매장")).toHaveTextContent("2곳"));
     expect(metric("점주 미연결 매장")).toHaveTextContent("1곳");
     await user.click(nav("매장 관리"));
@@ -183,17 +183,17 @@ describe("shared live dashboard sources", () => {
     expect(metric("등록 매장")).toHaveTextContent("0곳");
     expect(metric("점주 미연결 매장")).toHaveTextContent("0곳");
     expect(repos.stores.load).toHaveBeenCalledTimes(3);
-    expect(repos.owners.load).toHaveBeenCalledTimes(1);
-    expect(repos.orders.load).toHaveBeenCalledTimes(1);
+    expect(repos.owners.load).toHaveBeenCalledTimes(2);
+    expect(repos.orders.load).toHaveBeenCalledTimes(2);
   });
 
-  it("shares owner refreshes and navigation without changing store or order snapshots", async () => {
+  it("shares whole refresh results and keeps management owner refresh independent", async () => {
     const repos = repositories();
     repos.owners.load.mockResolvedValueOnce([]).mockResolvedValueOnce([owner()])
       .mockResolvedValueOnce([owner(), owner(2)]);
     const { user } = await open(repos);
     await waitFor(() => expect(metric("점주 계정")).toHaveTextContent("0개"));
-    await user.click(screen.getByRole("button", { name: "점주 새로고침" }));
+    await user.click(screen.getByRole("button", { name: "전체 새로고침" }));
     await waitFor(() => expect(metric("점주 계정")).toHaveTextContent("1개"));
     await user.click(nav("점주 계정"));
     await screen.findByText("점주 계정 목록 · 1개");
@@ -205,8 +205,8 @@ describe("shared live dashboard sources", () => {
     await user.click(nav("운영 요약"));
     expect(metric("점주 계정")).toHaveTextContent("2개");
     expect(repos.owners.load).toHaveBeenCalledTimes(3);
-    expect(repos.stores.load).toHaveBeenCalledTimes(1);
-    expect(repos.orders.load).toHaveBeenCalledTimes(1);
+    expect(repos.stores.load).toHaveBeenCalledTimes(2);
+    expect(repos.orders.load).toHaveBeenCalledTimes(2);
   });
 
   it("hides a stale store snapshot on refresh failure instead of showing zero or Mock rows", async () => {
@@ -214,7 +214,7 @@ describe("shared live dashboard sources", () => {
     repos.stores.load.mockResolvedValueOnce([store()]).mockRejectedValueOnce(new Error("refresh failed"));
     const { user } = await open(repos);
     await screen.findByRole("button", { name: "매장 상세: DB 매장 1" });
-    await user.click(screen.getByRole("button", { name: "매장 새로고침" }));
+    await user.click(screen.getByRole("button", { name: "전체 새로고침" }));
     await waitFor(() => expect(metric("등록 매장")).toHaveTextContent("조회 실패"));
     expect(screen.queryByRole("button", { name: "매장 상세: DB 매장 1" })).not.toBeInTheDocument();
     expect(metric("점주 계정")).toHaveTextContent("0개");

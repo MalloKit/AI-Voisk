@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Store as StoreIcon, Users, Unlink, ReceiptText } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Store as StoreIcon, Users, Unlink, ReceiptText, RefreshCw } from "lucide-react";
 import type { AdminSnapshot, ApiAlert, ApiDevice, ApiOwner, ApiStore, Order, Page, Store } from "../data/models";
 import type { OwnerRepository } from "../data/ownerRepository";
 import type { StoreRepository } from "../data/storeRepository";
@@ -38,6 +38,21 @@ export function DashboardPage({
   liveAlerts: boolean;
   alertsResult: AsyncResult<ApiAlert[]>;
 }) {
+  const refreshing = [storesResult, ownersResult, result, devicesResult, alertsResult].some((source) => source.loading);
+  const refreshLock = useRef(false);
+  useEffect(() => {
+    if (!refreshing) refreshLock.current = false;
+  }, [refreshing, storesResult.data, ownersResult.data, result.data, devicesResult.data, alertsResult.data]);
+  function refreshAll() {
+    if (refreshing || refreshLock.current) return;
+    refreshLock.current = true;
+    // Existing App hooks keep each source's loading, errors and shared data independent.
+    storesResult.reload();
+    ownersResult.reload();
+    result.reload();
+    devicesResult.reload();
+    alertsResult.reload();
+  }
   const deviceValue = (count: number) => devicesResult.loading ? "조회 중"
     : devicesResult.error ? "조회 실패" : `${count}대`;
   const alertValue = (count: number) => alertsResult.loading ? "조회 중"
@@ -92,9 +107,15 @@ export function DashboardPage({
   ];
   return (
     <>
-      <Heading title="운영 요약">
-        등록 매장과 점주 연결, 최근 주문 현황을 한눈에 확인합니다.
-      </Heading>
+      <div className="dashboard-heading">
+        <Heading title="운영 요약">
+          등록 매장과 점주 연결, 최근 주문 현황을 한눈에 확인합니다.
+        </Heading>
+        <button className="dashboard-refresh" onClick={refreshAll} disabled={refreshing} aria-busy={refreshing}>
+          <RefreshCw size={18} aria-hidden="true" />
+          {refreshing ? "새로고침 중…" : "전체 새로고침"}
+        </button>
+      </div>
       <div className="metrics">
         {metrics.map((m) => (
           <Card key={m.label}>
@@ -108,18 +129,18 @@ export function DashboardPage({
           </Card>
         ))}
       </div>
-      <div className="actions">
-        {liveStores && (
+      {((liveStores && storesResult.error) || (liveOwners && ownersResult.error)) && <div className="actions">
+        {liveStores && storesResult.error && (
           <button onClick={storesResult.reload} disabled={storesResult.loading}>
-            {storesResult.error ? "매장 다시 시도" : "매장 새로고침"}
+            매장 다시 시도
           </button>
         )}
-        {liveOwners && (
+        {liveOwners && ownersResult.error && (
           <button onClick={ownersResult.reload} disabled={ownersResult.loading}>
-            {ownersResult.error ? "점주 다시 시도" : "점주 새로고침"}
+            점주 다시 시도
           </button>
         )}
-      </div>
+      </div>}
       {liveOwners && ownersResult.error && (
         <ErrorState message="실제 점주 조회 실패. Mock 계정 수로 대체하지 않습니다." />
       )}
@@ -134,9 +155,7 @@ export function DashboardPage({
                 비활성 기기 {deviceValue(devicesResult.data?.filter((d) => d.is_active === false).length ?? 0)}
               </p>
               <p className="muted">활성·비활성은 온라인·오프라인 상태가 아닙니다. 하트비트 관측이 없어 연결 상태는 미확인입니다.</p>
-              <button onClick={devicesResult.reload} disabled={devicesResult.loading}>
-                {devicesResult.error ? "기기 다시 시도" : "기기 새로고침"}
-              </button>
+              {devicesResult.error && <button onClick={devicesResult.reload} disabled={devicesResult.loading}>기기 다시 시도</button>}
               {devicesResult.error && <ErrorState message="실제 기기 조회 실패. Mock 수치로 대체하지 않습니다." />}
             </>
           ) : (
@@ -152,9 +171,7 @@ export function DashboardPage({
                 미열람 알림 (UNREAD) {alertValue(alertsResult.data?.filter((a) => a.alert_status === "UNREAD").length ?? 0)}
               </p>
               <p className="muted">UNREAD 이외 상태의 의미는 추정하지 않습니다. 관리자 확인과 장애 해소는 별도 기록입니다.</p>
-              <button onClick={alertsResult.reload} disabled={alertsResult.loading}>
-                {alertsResult.error ? "알림 다시 시도" : "알림 새로고침"}
-              </button>
+              {alertsResult.error && <button onClick={alertsResult.reload} disabled={alertsResult.loading}>알림 다시 시도</button>}
               {alertsResult.error && <ErrorState message="실제 알림 조회 실패. Mock 수치로 대체하지 않습니다." />}
             </>
           ) : (
@@ -168,11 +185,6 @@ export function DashboardPage({
       </Card>
       <Section title="최근 주문">
         <button onClick={() => onNavigate("orders")}>주문 전체 보기</button>
-        {live && (
-          <button onClick={result.reload} disabled={result.loading}>
-            새로고침
-          </button>
-        )}
       </Section>
       {live && result.loading ? (
         <Loading text="실제 주문을 불러오는 중…" />

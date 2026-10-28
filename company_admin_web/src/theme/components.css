@@ -671,3 +671,18 @@ dd {
 /* Store editor actions live in Modal's non-scrolling footer. */
 .modal footer:has(.store-form-actions) { padding-top: var(--md); border-top: 1px solid var(--border); }
 .store-form-actions { width: 100%; }
+
+/* Dashboard controls use the existing page heading, without a topbar. */
+.dashboard-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--lg);
+  margin-bottom: var(--xl);
+}
+.dashboard-heading .page-heading { margin-bottom: 0; }
+.dashboard-refresh { display: inline-flex; align-items: center; justify-content: center; gap: var(--sm); white-space: nowrap; }
+@media (max-width: 599px) {
+  .dashboard-heading { grid-template-columns: minmax(0, 1fr); gap: var(--md); }
+  .dashboard-refresh { justify-self: start; }
+}

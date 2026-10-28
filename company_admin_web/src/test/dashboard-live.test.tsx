@@ -116,7 +116,7 @@ describe("live orders on company dashboard", () => {
     );
     await screen.findByText("0건");
     expect(screen.getByText("6곳")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "새로고침" }));
+    await user.click(screen.getByRole("button", { name: "전체 새로고침" }));
     await screen.findByRole("button", { name: "주문 상세: #20" });
     expect(screen.getByText("1건")).toBeInTheDocument();
     expect(repository.load).toHaveBeenCalledTimes(2);
