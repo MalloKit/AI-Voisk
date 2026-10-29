@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import type { AdminSnapshot, ApiDevice, Device } from "../data/models";
+import { useCallback, useId, useState } from "react";
+import type { AdminSnapshot, ApiDevice, ApiStore, Device } from "../data/models";
 import { connectionLabel, dateLabel } from "../data/selectors";
 import {
   Badge,
@@ -14,6 +14,8 @@ import {
   Section,
   Table,
 } from "../components/ui";
+import { DeviceCreateForm } from "./DeviceCreateForm";
+import { DeviceStatusForm } from "./DeviceStatusForm";
 import { ApiDeviceDetails, DeviceDetails } from "./details";
 import type { DeviceRepository } from "../data/deviceRepository";
 import { useAsync, type AsyncResult } from "../hooks/useAsync";
@@ -127,27 +129,36 @@ function MockDevicesPage({ data }: { data: AdminSnapshot }) {
 }
 
 
-function LiveDeviceDetail({ id, repository }: { id: number; repository: DeviceRepository }) {
+function LiveDeviceDetail({ id, repository, onStatus, focusStatus }: { id: number; repository: DeviceRepository; onStatus?(device: ApiDevice): void; focusStatus?: boolean }) {
   const load = useCallback((signal: AbortSignal) => repository.detail(id, signal), [id, repository]);
   const result = useAsync(load);
   if (result.loading) return <Loading text="실제 기기 상세를 불러오는 중…" />;
   if (result.error || !result.data) return (
     <ErrorState message="실제 기기 상세 조회 실패. Mock 데이터로 대체하지 않습니다." onRetry={result.reload} />
   );
-  return <ApiDeviceDetails device={result.data} />;
+  return <><ApiDeviceDetails device={result.data} />{onStatus && <button autoFocus={focusStatus} onClick={() => onStatus(result.data!)}>{result.data.is_active ? "비활성화" : "활성화"}</button>}</>;
 }
 
 function LiveDevicesPage({
   repository,
-  result,
+  result, storesResult, liveStores,
 }: {
   repository: DeviceRepository;
   result: AsyncResult<ApiDevice[]>;
+  storesResult?: AsyncResult<ApiStore[]>; liveStores?: boolean;
 }) {
   const [search, setSearch] = useState(""),
     [store, setStore] = useState(0),
     [active, setActive] = useState("전체"),
     [detail, setDetail] = useState<ApiDevice>();
+  const [creating, setCreating] = useState(false), [changing, setChanging] = useState<ApiDevice>();
+  const [saving, setSaving] = useState(false), [notice, setNotice] = useState(""), [focusStatus, setFocusStatus] = useState(false);
+  const formId = useId();
+  function saved(device: ApiDevice) {
+    setNotice(creating ? "기기를 비활성 상태로 등록했습니다." : "기기 활성화 상태를 저장했습니다.");
+    setSaving(false); setCreating(false); setChanging(undefined); setDetail(device); setFocusStatus(true); result.reload();
+  }
+  function close() { if (!saving) { setCreating(false); setChanging(undefined); setDetail(undefined); } }
   const all = result.data ?? [];
   const stores = [...new Map(all.map((d) => [d.store_id, d.store_name])).entries()];
   const query = search.trim().toLowerCase();
@@ -160,6 +171,8 @@ function LiveDevicesPage({
   return (
     <>
       <Heading title="기기 관리">등록된 기기와 설치 매장 정보를 확인합니다.</Heading>
+      {repository.create && liveStores && storesResult && <div className="store-page-actions"><button className="button-primary" onClick={() => { setNotice(""); setCreating(true); }}>기기 등록</button></div>}
+      {notice && <p role="status" className="form-feedback">{notice}</p>}
       <Card className="notice">
         활성화는 주문 허용 상태이며 온라인 상태가 아닙니다. 연결 상태는 미확인입니다.
         시각은 브라우저 현지 시간이며 마지막 확인·동기화 시각은 DB 기록입니다.
@@ -193,14 +206,21 @@ function LiveDevicesPage({
               { label: "마지막 확인 (DB 기록)", render: (d) => moment(d.last_seen_at) },
               { label: "마지막 동기화 (DB 기록)", render: (d) => moment(d.last_synced_at) },
               { label: "", render: (d) => (
-                <button aria-label={`기기 상세: ${d.device_code}`} onClick={() => setDetail(d)}>상세</button>
+                <button aria-label={`기기 상세: ${d.device_code}`} onClick={() => { setFocusStatus(false); setDetail(d); }}>상세</button>
               ) },
             ]} />
         </>
       )}
-      {detail && (
-        <Modal title={`기기 ${detail.device_code}`} onClose={() => setDetail(undefined)}>
-          <LiveDeviceDetail id={detail.device_id} repository={repository} />
+      {(creating || detail) && (
+        <Modal title={creating ? "기기 등록" : changing ? "기기 활성화 상태 변경" : `기기 ${detail!.device_code}`}
+          onClose={close} closeDisabled={saving}
+          footer={creating || changing ? <div className="store-form-actions">
+            <button disabled={saving} onClick={() => { if (creating) close(); else { setChanging(undefined); setFocusStatus(true); } }}>취소</button>
+            <button type="submit" form={formId} disabled={saving || (creating && (!!storesResult?.loading || !!storesResult?.error))} className="button-primary">{saving ? "저장 중…" : creating ? "등록" : "변경 저장"}</button>
+          </div> : undefined}>
+          {creating && storesResult ? <DeviceCreateForm repository={repository} storesResult={storesResult} formId={formId} onBusy={setSaving} onSaved={saved} />
+            : changing ? <DeviceStatusForm device={changing} repository={repository} formId={formId} onBusy={setSaving} onSaved={saved} />
+            : <LiveDeviceDetail id={detail!.device_id} repository={repository} onStatus={repository.setStatus ? setChanging : undefined} focusStatus={focusStatus} />}
         </Modal>
       )}
     </>
@@ -210,13 +230,14 @@ function LiveDevicesPage({
 export function DevicesPage({
   data,
   repository,
-  devicesResult,
+  devicesResult, storesResult, liveStores = false,
 }: {
   data: AdminSnapshot;
   repository: DeviceRepository | null;
   devicesResult: AsyncResult<ApiDevice[]>;
+  storesResult?: AsyncResult<ApiStore[]>; liveStores?: boolean;
 }) {
   return repository
-    ? <LiveDevicesPage repository={repository} result={devicesResult} />
+    ? <LiveDevicesPage repository={repository} result={devicesResult} storesResult={storesResult} liveStores={liveStores} />
     : <MockDevicesPage data={data} />;
 }

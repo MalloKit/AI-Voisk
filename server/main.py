@@ -17,6 +17,7 @@ from store_write_service import StoreCreate, StorePatch, create_store, update_st
 from owner_service import OwnerNotFound, list_owners, owner_detail
 from owner_write_service import OwnerCreate, StoreOwnerPatch, create_owner, update_store_owner
 from device_service import DeviceNotFound, list_devices, device_detail
+from device_write_service import DeviceCreate, DeviceStatusPatch, create_device, update_device_status
 from alert_service import AlertNotFound, list_alerts, alert_detail
 
 
@@ -91,6 +92,9 @@ async def safe_validation_error(request: Request, error: RequestValidationError)
                             headers={'Cache-Control': 'no-store'})
     if request.url.path.rstrip('/') == '/admin/owners' and request.method == 'POST':
         return JSONResponse(status_code=422, content={'detail': '계정 입력 형식과 허용 길이를 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
+    if request.url.path.startswith('/admin/devices') and request.method in ('POST', 'PATCH'):
+        return JSONResponse(status_code=422, content={'detail': '기기 입력 형식과 허용 길이를 확인해 주세요.'},
                             headers={'Cache-Control': 'no-store'})
     if request.url.path.startswith('/admin/stores') and request.method in ('POST', 'PATCH'):
         return JSONResponse(status_code=422, content={'detail': '매장 입력 형식과 허용 길이를 확인해 주세요.'},
@@ -330,6 +334,27 @@ def _device_call(function, *args):
         raise HTTPException(404, '기기가 없습니다.') from None
     except Exception:
         raise HTTPException(503, '기기 조회 실패. 서버 연결과 DB 설정을 확인해 주세요.') from None
+
+
+def _device_write_call(function, *args):
+    try:
+        return function(*args)
+    except DeviceNotFound:
+        raise HTTPException(404, '기기가 없습니다.') from None
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(503, '기기 저장 결과를 확인할 수 없습니다. 목록과 상세를 새로 조회한 뒤 확인해 주세요.') from None
+
+
+@app.post('/admin/devices', response_model=AdminDeviceView, status_code=201)
+def admin_create_device(payload: DeviceCreate):
+    return _device_write_call(create_device, payload)
+
+
+@app.patch('/admin/devices/{device_id}/status', response_model=AdminDeviceView)
+def admin_update_device_status(payload: DeviceStatusPatch, device_id: int = ApiPath(ge=1, le=2147483647)):
+    return _device_write_call(update_device_status, device_id, payload)
 
 
 @app.get('/admin/devices', response_model=AdminDeviceList)

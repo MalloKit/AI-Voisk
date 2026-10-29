@@ -48,11 +48,10 @@ class DeviceApiTests(fixtures.DeviceFixture, unittest.TestCase):
             for path in ('/admin/devices', '/admin/devices/1'):
                 self.assertEqual(remote.get(path).status_code, 403)
         for method, path in (
-            ('POST','/admin/devices'), ('PATCH','/admin/devices/1'),
+            ('PATCH','/admin/devices/1'),
             ('DELETE','/admin/devices/1'),
         ):
             self.assertEqual(self.client.request(method, path).status_code, 405)
-        self.assertEqual(self.client.patch('/admin/devices/1/status').status_code, 404)
 
     def test_db_errors_are_sanitized(self):
         with patch('device_service.connection_factory', side_effect=RuntimeError('fixture-private-error')):

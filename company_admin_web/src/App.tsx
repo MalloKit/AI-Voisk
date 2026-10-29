@@ -173,7 +173,7 @@ export function App({
       {page === "orders" && (
         <OrdersPage data={data} repository={orderRepository} ordersResult={ordersResult} />
       )}
-      {page === "devices" && <DevicesPage data={data} repository={deviceRepository} devicesResult={devicesResult} />}
+      {page === "devices" && <DevicesPage data={data} repository={deviceRepository} devicesResult={devicesResult} storesResult={storesResult} liveStores={storeRepository !== null} />}
       {page === "alerts" && (
         <AlertsPage data={data} onAcknowledge={acknowledge} repository={alertRepository} alertsResult={alertsResult} />
       )}
