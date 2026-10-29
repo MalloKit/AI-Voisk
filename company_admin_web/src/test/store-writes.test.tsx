@@ -121,13 +121,18 @@ describe("live store registration and editing", () => {
     await user.click(screen.getByRole("button", { name: "매장 등록" }));
     const dialog = within(screen.getByRole("dialog"));
     expect(dialog.queryByText(/우편번호와 사업자번호 중복을 허용합니다/)).not.toBeInTheDocument();
-    expect(dialog.getByText("010·02·070 등 · 하이픈 자동 표시")).toBeInTheDocument();
+    expect(screen.getByRole("dialog").querySelector(".field-help")).toBeNull();
+    for (const field of dialog.getAllByRole("textbox")) expect(field).not.toHaveAttribute("aria-describedby");
     for (const label of ["매장명", "우편번호", "업종", "주소", "전화번호", "사업자번호", "대표자명"])
       expect(dialog.getByRole("textbox", { name: label + " *" })).toBeRequired();
     await user.click(screen.getByRole("button", { name: "저장" }));
     expect(repo.create).not.toHaveBeenCalled();
     expect(screen.getByRole("textbox", { name: "매장명 *" })).toHaveFocus();
     expect(screen.getByText("매장명을(를) 입력해 주세요.")).toBeInTheDocument();
+    for (const field of dialog.getAllByRole("textbox")) {
+      const id = field.getAttribute("aria-describedby");
+      if (id) expect(document.getElementById(id)).toBeInTheDocument();
+    }
     fill();
     fireEvent.change(screen.getByRole("textbox", { name: "우편번호 *" }), { target: { value: "abcde" } });
     fireEvent.change(screen.getByRole("textbox", { name: "사업자번호 *" }), { target: { value: "123-456" } });
@@ -162,6 +167,8 @@ describe("live store registration and editing", () => {
     await user.click(await screen.findByRole("button", { name: "매장 정보 수정" }));
     expect(screen.getByRole("textbox", { name: "매장명 *" })).toHaveValue("등록 매장");
     expect(within(screen.getByRole("dialog")).getAllByRole("textbox")).toHaveLength(8);
+    expect(screen.getByText("010·02·070 등 · 하이픈 자동 표시")).toHaveAttribute("id", "phone-format");
+    expect(screen.getByRole("textbox", { name: "전화번호 *" })).toHaveAttribute("aria-describedby", "phone-format");
     fireEvent.change(screen.getByRole("textbox", { name: "매장명 *" }), { target: { value: "등록 수정" } });
     await user.click(screen.getByRole("button", { name: "저장" }));
     await screen.findByText(/매장 정보를 저장했습니다/);

@@ -709,3 +709,9 @@ dd {
 @media (max-width: 599px) { .owner-manage-button { margin-left: 0; } }
 
 .owner-connection-form { overflow-wrap: anywhere; }
+
+/* Store detail hierarchy stays local to the shared store detail view. */
+.store-details > dl > .detail-field:last-child,
+.store-details-connection .detail-field:last-child { margin-bottom: 0; }
+.store-details-connection { border-top: 1px solid var(--border); margin-top: var(--lg); padding-top: var(--md); margin-bottom: var(--lg); }
+.store-details-connection h3 { font-size: var(--text-md); font-weight: 600; margin: 0 0 var(--md); }

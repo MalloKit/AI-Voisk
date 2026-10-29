@@ -113,7 +113,7 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
         {key === "phone" || key === "business_no" ? <NumberInput
           aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy} required
           kind={key === "phone" ? "phone" : "business"} type="tel" inputMode={key === "phone" ? "tel" : "numeric"}
-          aria-invalid={!!errors[key]} aria-describedby={errors[key] ? key + "-error" : key + "-format"}
+          aria-invalid={!!errors[key]} aria-describedby={errors[key] ? key + "-error" : store ? key + "-format" : undefined}
           onValueChange={(value) => updateValue(key, value)} />
           : <input aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy}
             required={key !== "address_detail"} aria-invalid={!!errors[key]}
@@ -121,9 +121,9 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
             inputMode={key === "store_code" ? "numeric" : undefined}
             onChange={(event) => updateValue(key, event.target.value)} />}
         {errors[key] && <p id={key + "-error"} className="field-error">{errors[key]}</p>}
-        {key !== "phone" && key !== "business_no" && <small className="field-help">최대 {limit}자</small>}
-        {key === "business_no" && <small id="business_no-format" className="field-help">숫자 10자리 · 000-00-00000 자동 표시</small>}
-        {key === "phone" && <small id="phone-format" className="field-help">010·02·070 등 · 하이픈 자동 표시</small>}
+        {store && key !== "phone" && key !== "business_no" && <small className="field-help">최대 {limit}자</small>}
+        {store && key === "business_no" && <small id="business_no-format" className="field-help">숫자 10자리 · 000-00-00000 자동 표시</small>}
+        {store && key === "phone" && <small id="phone-format" className="field-help">010·02·070 등 · 하이픈 자동 표시</small>}
       </label>)}
     </div>
     {message && <p role="alert" className="form-feedback">{message}</p>}

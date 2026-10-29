@@ -25,8 +25,7 @@ export function StoreDetails({
   store: Store | ApiStore;
 }) {
   return (
-    <>
-      <Section title="매장 기본 정보" />
+    <div className="store-details">
       <dl>
         <Field label="매장 ID">{s.id}</Field>
         <Field label="매장명">{s.name}</Field>
@@ -39,17 +38,18 @@ export function StoreDetails({
         ) : <Field label="우편번호">{s.postcode}</Field>}
         <Field label="전화번호">{s.phone}</Field>
       </dl>
-      <hr />
-      <Section title="담당자 및 점주 연결" />
-      <dl>
-        <Field label="담당 관리자">
-          {"adminName" in s ? (s.adminName ?? "정보 없음") : data.admins.find((a) => a.id === s.adminId)?.name}
-        </Field>
-        <Field label="점주 로그인 ID">
-          {s.ownerId === null ? "미연결" : "ownerLoginId" in s ? (s.ownerLoginId ?? "연결됨 · 계정 정보 없음") : (data.owners.find((o) => o.id === s.ownerId)?.loginId ?? "연결됨 · 계정 정보 없음")}
-        </Field>
-      </dl>
-    </>
+      <section className="store-details-connection" aria-label="담당자·점주 연결">
+        <h3>담당자·점주 연결</h3>
+        <dl>
+          <Field label="담당 관리자">
+            {"adminName" in s ? (s.adminName ?? "정보 없음") : data.admins.find((a) => a.id === s.adminId)?.name}
+          </Field>
+          <Field label="점주 로그인 ID">
+            {s.ownerId === null ? "미연결" : "ownerLoginId" in s ? (s.ownerLoginId ?? "연결됨 · 계정 정보 없음") : (data.owners.find((o) => o.id === s.ownerId)?.loginId ?? "연결됨 · 계정 정보 없음")}
+          </Field>
+        </dl>
+      </section>
+    </div>
   );
 }
 export function OwnerDetails(
