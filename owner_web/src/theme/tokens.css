@@ -1,0 +1,60 @@
+/* 점주 웹 전용 토큰. 다른 웹 프로젝트를 import하지 않는다. */
+:root {
+  /* 바탕: 흰색과 밝은 회색 */
+  --canvas: #f4f6f5;
+  --surface: #fff;
+  --ink: #1f2a28;
+  --muted: #61706c;
+  --border: #e1e6e4;
+  --table-head: #f4f6f5;
+  /* 초록: 버튼, 선택된 메뉴, 강조에만 쓴다 */
+  --brand: #00695c;
+  --brand-hover: #00574c;
+  --on-brand: #fff;
+  --selected: #eaf1ed;
+  --selected-ink: #1d5c4b;
+  /* 상태 색 */
+  --error: #b3261e;
+  --error-surface: #fde8e6;
+  --unsaved: #9a4a00;
+  --unsaved-surface: #fff1e0;
+  --unsaved-line: #e8890c;
+  --ok: #1d5c4b;
+  --ok-surface: #eaf1ed;
+  /* 키오스크 미리보기 전용 (kiosk_app order_screen.dart의 색) */
+  --kiosk-rail: #153e39;
+  --kiosk-rail-selected: #bce9d8;
+  --kiosk-canvas: #f5f7f5;
+  --kiosk-primary: #00695c;
+  --kiosk-price: #246b58;
+  --kiosk-line: #cbdad2;
+  --kiosk-sold-out-card: #eeeeee;
+  --kiosk-sold-out: #b3261e;
+  --kiosk-icon-surface: #fff0dc;
+  --kiosk-icon: #bb743a;
+  --font: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --title: 20px;
+  --headline: 28px;
+  --xs: 4px;
+  --sm: 8px;
+  --md: 12px;
+  --lg: 16px;
+  --xl: 24px;
+  --xxl: 32px;
+  --radius: 12px;
+  --sidebar: 232px;
+  --content: 1440px;
+  --field: 280px;
+  --filter: 200px;
+  --table-min: 760px;
+  --row: 64px;
+  --header: 48px;
+  --dialog: 620px;
+  --topbar: 64px;
+  --modal-shadow: 0 12px 48px #1f2a2833;
+  --overlay: #1f2a2866;
+}
