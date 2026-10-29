@@ -29,7 +29,82 @@ npm test        # 실제 서버·DB 없는 자동 검증
 - 주문은 시연 기준 시각(`src/data/demoClock.ts`의 `DEMO_NOW`, 2026-10-29 12:00 한국 시간) 전 30일 동안 20건이고, 그중 4건이 오늘 주문입니다. 서버와 같이 `order_type`은 `takeaway` | `dine_in`, 신규 주문처럼 `table_no`는 NULL이며 한 품목에 옵션 여러 개(`order_item_option`)를 둡니다.
 - '오늘'은 브라우저 시간대가 아니라 매장 시간대(Asia/Seoul) 기준입니다.
 - 키오스크 연결 상태(`connection`, `lastSeenAt`)는 아직 DB에 없는 Mock 계약입니다.
-- 로그인은 아직 없습니다. 회사 관리자 웹의 인증이 main에 합쳐지면 그것을 씁니다.
+- 로그인은 아래 [점주 로그인](#점주-로그인)을 보세요. 서버에 점주 인증 API가 없어 지금은 Mock 인증으로 동작합니다.
+
+## 점주 로그인
+
+- 진입점은 `AppEntry`입니다. 처음 열면 `me`로 로그인 여부를 확인하고, 로그인하지 않았으면 로그인 화면만 보여 줍니다.
+- 로그인 ID(소문자 영문·숫자·`.`·`_`·`-` 4~100자)와 비밀번호(8~128자) 형식을 먼저 검사합니다. 정책은 `feature/company-admin-v2`의 `company_admin_web/OWNER_WRITES.md`와 같습니다(`src/data/ownerAuth.ts`).
+- 실패 문구는 ID가 틀렸는지 비밀번호가 틀렸는지 구분하지 않습니다: "로그인 ID 또는 비밀번호가 올바르지 않습니다."
+- 로그인 후 연결된 매장이 1개면 바로 들어가고, 여러 개면 매장 선택 화면, 0개면 "연결된 매장이 없습니다. 회사 관리자에게 문의해 주세요."를 보여 줍니다. 열 수 있는 매장은 `me`가 돌려준 목록뿐입니다.
+- 사이드바 아래에 로그인 ID와 로그아웃, 매장이 여러 개면 매장 바꾸기가 있습니다. 메뉴 관리에 저장 안 한 변경이 있으면 로그아웃·매장 바꾸기 전에도 [계속 편집] [버리고 …] [저장하고 …]를 묻습니다.
+- 60초마다, 그리고 창으로 돌아올 때 `me`로 세션을 다시 확인합니다. 401이면 로그인 화면으로 보내고 "로그인이 만료되었습니다. 다시 로그인해 주세요."를 보여 줍니다. 점주 데이터 API를 붙일 때 401을 받으면 `notifySessionExpired()`(이벤트 `voisk:owner-session-expired`)를 호출하면 같은 처리가 됩니다.
+- 비밀번호·토큰·로그인 상태를 localStorage·sessionStorage에 저장하지 않습니다. 비밀번호 입력칸은 제출 뒤 비웁니다.
+- 화면은 `OwnerAuthRepository`만 씁니다. 인증 출처는 `.env.local`의 `VITE_OWNER_AUTH_SOURCE`로 고릅니다(`.env.example` 참고).
+
+| 값            | 구현체                    | 설명                                                                                                                                        |
+| ------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mock` (기본) | `MockOwnerAuthRepository` | 개발용 Mock 계정. 세션이 메모리에만 있어 새로고침하면 로그아웃됩니다.                                                                       |
+| `api`         | `ApiOwnerAuthRepository`  | 아래 서버 API를 `VITE_OWNER_API_BASE_URL`(기본 `http://127.0.0.1:8001`)로 호출합니다. 서버 API가 아직 없어 실제 연결은 검증하지 않았습니다. |
+
+메뉴·주문 데이터는 점주용 서버 API가 없어 두 경우 모두 매장별 `MockOwnerRepository`를 씁니다.
+
+### 개발용 Mock 계정
+
+**실제 운영 계정이 아닙니다.** `mock` 모드에서만 로그인되고, 로그인 화면에도 "개발용 Mock 계정"으로 표시합니다. 운영 DB에 이 값을 넣지 않습니다. 정의는 `src/data/mock/mockOwnerAccounts.ts`입니다.
+
+| 로그인 ID     | 비밀번호             | 연결 매장                                                          |
+| ------------- | -------------------- | ------------------------------------------------------------------ |
+| `mock.single` | `mock-only-password` | 매장 1 보이스크 테스트 매장(T0001, 시드와 같은 메뉴)               |
+| `mock.multi`  | `mock-only-password` | 매장 2 보이스크 Mock 카페(T0002), 매장 3 보이스크 Mock 분식(T0003) |
+
+`store.owner_id`는 매장마다 점주 한 명이라 매장 2·3은 이 계정을 위한 작은 Mock 매장입니다.
+
+## 서버에 필요한 점주 인증 API
+
+회사 관리자 인증(`feature/company-admin-v2`의 `server/AUTH.md`)과 같은 방식을 가정합니다. 세션은 서버 메모리 + HttpOnly 쿠키, 브라우저는 `credentials: "include"`로 요청합니다. **서버에는 아직 없습니다.** 클라이언트 구현은 `src/data/ownerAuthRepository.ts`의 `ApiOwnerAuthRepository`입니다.
+
+| 메서드 | 경로                 | 요청                                                                    | 성공 응답                                                          |
+| ------ | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| GET    | `/auth/owner/csrf`   | 없음                                                                    | `200 { "csrf_token": "…" }` (익명 세션 또는 현재 세션에 묶인 토큰) |
+| POST   | `/auth/owner/login`  | 헤더 `X-CSRF-Token`, 본문 `{ "login_id": "…", "password": "…" }`만 허용 | `200` 아래 점주 객체. 세션·CSRF를 새로 발급                        |
+| GET    | `/auth/owner/me`     | 세션 쿠키                                                               | `200` 아래 점주 객체                                               |
+| POST   | `/auth/owner/logout` | 헤더 `X-CSRF-Token`(로그아웃 직전에 csrf를 다시 받음)                   | `204`, 세션 폐기·쿠키 삭제                                         |
+
+login·me의 점주 객체:
+
+```json
+{
+  "owner": {
+    "owner_id": 1,
+    "login_id": "kim.owner",
+    "role": "owner",
+    "stores": [{ "store_id": 1, "store_name": "보이스크 테스트 매장" }]
+  }
+}
+```
+
+- `stores`는 `store.owner_id = owner_id`인 매장입니다. 없으면 빈 배열입니다. 비밀번호 해시·세션 ID는 응답에 넣지 않습니다.
+- 클라이언트는 `role`이 `"owner"`일 때만 받아들입니다.
+
+오류 응답(클라이언트가 보여 주는 문구):
+
+| 상태    | 경우                                                               | 화면 문구                                                               |
+| ------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| 401     | 로그인 실패(없는 ID·틀린 비밀번호를 구분하지 않음), 세션 없음·만료 | "로그인 ID 또는 비밀번호가 올바르지 않습니다." / 만료면 로그인 화면으로 |
+| 403     | Origin·CSRF·역할 오류                                              | "인증 요청을 확인할 수 없습니다…"                                       |
+| 413·422 | 입력 형식·길이                                                     | "로그인 입력 형식과 길이를 확인해 주세요."                              |
+| 429     | 로그인 시도 제한                                                   | "로그인 시도가 많습니다. 잠시 후 다시 시도해 주세요."                   |
+| 그 밖   | 서버·DB 오류                                                       | "인증 서버에 연결하지 못했습니다…"                                      |
+
+### 권한 조건
+
+- **점주는 자기 매장만 조회·수정할 수 있어야 합니다.** 점주 업무 API(메뉴 조회·저장, 품절, 주문 조회, 매장 정보 등)는 요청마다 세션의 `owner_id`와 대상 매장의 `store.owner_id`가 같은지 서버에서 확인해야 합니다. 화면의 매장 목록이나 요청에 들어 있는 `store_id`를 그대로 믿으면 안 됩니다.
+- 메뉴·옵션·카테고리·주문을 id로 바꾸거나 읽을 때도 그 행이 속한 매장(`category.store_id`, `orders.store_id`)이 점주의 매장인지 확인합니다. 다른 매장 것이면 403 또는 404입니다.
+- 점주 세션은 회사 관리자 세션과 분리합니다. 점주 세션으로 `/admin/*`을 쓸 수 없고, 반대도 마찬가지입니다. 클라이언트가 보낸 역할은 받지 않습니다.
+- 매장 연결이 바뀌면(회사 관리자가 `store.owner_id` 변경) 다음 요청부터 바로 반영되어야 합니다. 클라이언트도 60초마다·창 복귀 때 `me`를 다시 읽고, 열려 있던 매장이 목록에서 빠지면 매장 선택 화면으로 돌아갑니다.
+- 비밀번호는 `owner.own_pw`의 Argon2id 해시로만 검증하고, 실패 응답·로그에 입력값을 남기지 않습니다. 계정 정책(ID 4~100자 소문자 등, 비밀번호 8~128자)은 OWNER_WRITES.md와 같아야 합니다.
+- 상태를 바꾸는 요청(POST·PATCH 등)은 Origin과 `X-CSRF-Token`을 함께 확인하고, 모든 인증·점주 응답은 `Cache-Control: no-store`로 보냅니다.
 
 ## 메뉴 관리
 
@@ -75,21 +150,25 @@ npm test        # 실제 서버·DB 없는 자동 검증
 
 ```text
 src/
-  App.tsx / main.tsx            # Repository 주입, 화면 선택
+  main.tsx / AppEntry.tsx       # 로그인 확인 → 매장 선택 → 매장별 Repository 주입
+  App.tsx                       # 로그인 뒤 화면 선택, 저장 안 한 변경 확인
   layout/OwnerShell.tsx         # 사이드바·상단 바·좁은 화면 메뉴
   components/ui.tsx             # 표·검색·필터·모달·배지 등 (회사 관리자 웹에서 복사)
-  features/                     # 오늘 현황, 주문 내역(상세 포함), 매장 정보
+  features/                     # 오늘 현황, 주문 내역(상세 포함), 매장 정보, 로그인·매장 선택
   features/menus/               # 메뉴 관리: 미리보기, 편집, 드래그(dnd.ts), 저장 바, 초안 상태
   data/
     models.ts                   # DB 행 기준 모델
-    ownerRepository.ts          # OwnerRepository와 MockOwnerRepository
+    ownerRepository.ts          # OwnerRepository와 매장별 MockOwnerRepository
+    ownerAuth.ts                # 점주 계정 정책, 인증 오류, 만료 이벤트
+    ownerAuthRepository.ts      # OwnerAuthRepository, ApiOwnerAuthRepository, MockOwnerAuthRepository
     selectors.ts                # 품절 개수, 매장 날짜 계산
     orderSelectors.ts           # 주문 금액·기간 필터·TOP 5·한국 시간 표시
     menuDraft.ts                # 메뉴 초안 순수 함수(이동·추가·번호 매기기), 키오스크 노출 규칙
     menuChanges.ts              # 저장 묶음, 변경 목록, 저장 막기 검사
     validation.ts               # 길이·가격 검증 (DB 제약 기준)
     demoClock.ts                # 시연 기준 시각
-    mock/t0001-fixture.json     # T0001 매장 Mock 데이터
+    mock/t000{1,2,3}-fixture.json  # 매장별 Mock 데이터
+    mock/mockOwnerAccounts.ts   # 개발용 Mock 계정
   theme/tokens.css              # 색·글자·간격 토큰 (점주 웹 + 키오스크 미리보기)
   theme/components.css          # 공통·반응형·편집 패널 스타일
   theme/preview.css             # 키오스크 미리보기 (--kiosk-* 토큰만 사용)

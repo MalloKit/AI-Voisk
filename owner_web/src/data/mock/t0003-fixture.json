@@ -1,0 +1,129 @@
+{
+  "owner": {
+    "id": 2,
+    "loginId": "mock.multi"
+  },
+  "store": {
+    "id": 3,
+    "name": "보이스크 Mock 분식",
+    "address1": "Mock 주소",
+    "address2": null,
+    "storeCode": "T0003",
+    "phone": "000-0000-0000",
+    "businessNo": "0000000000",
+    "representative": "Mock 점주",
+    "storeType": "분식",
+    "adminId": 1,
+    "ownerId": 2
+  },
+  "categories": [
+    {
+      "id": 301,
+      "storeId": 3,
+      "name": "분식",
+      "sort": 1
+    },
+    {
+      "id": 302,
+      "storeId": 3,
+      "name": "음료",
+      "sort": 2
+    }
+  ],
+  "menus": [
+    {
+      "id": 301,
+      "categoryId": 301,
+      "name": "김밥",
+      "price": 3500,
+      "description": "속이 꽉 찬 김밥",
+      "isActive": true,
+      "isSoldOut": false,
+      "sort": 1
+    },
+    {
+      "id": 302,
+      "categoryId": 301,
+      "name": "라면",
+      "price": 4500,
+      "description": "얼큰한 라면",
+      "isActive": true,
+      "isSoldOut": true,
+      "sort": 2
+    },
+    {
+      "id": 303,
+      "categoryId": 302,
+      "name": "콜라",
+      "price": 2000,
+      "description": "시원한 콜라",
+      "isActive": true,
+      "isSoldOut": false,
+      "sort": 1
+    }
+  ],
+  "options": [
+    {
+      "id": 301,
+      "menuId": 302,
+      "name": "치즈 추가",
+      "sort": 1,
+      "isActive": true,
+      "isSoldOut": false,
+      "extraPrice": 500
+    }
+  ],
+  "orders": [
+    {
+      "id": 301,
+      "storeId": 3,
+      "deviceId": 4,
+      "orderType": "dine_in",
+      "tableNo": null,
+      "clientOrderId": "00000000-0000-4000-8000-000000000301",
+      "orderedAt": "2026-10-28T03:20:00.000Z"
+    },
+    {
+      "id": 302,
+      "storeId": 3,
+      "deviceId": 4,
+      "orderType": "takeaway",
+      "tableNo": null,
+      "clientOrderId": "00000000-0000-4000-8000-000000000302",
+      "orderedAt": "2026-10-29T02:40:00.000Z"
+    }
+  ],
+  "items": [
+    {
+      "id": 301,
+      "orderId": 301,
+      "menuId": 301,
+      "quantity": 2,
+      "legacyOptionId": null
+    },
+    {
+      "id": 302,
+      "orderId": 301,
+      "menuId": 303,
+      "quantity": 1,
+      "legacyOptionId": null
+    },
+    {
+      "id": 303,
+      "orderId": 302,
+      "menuId": 301,
+      "quantity": 1,
+      "legacyOptionId": null
+    }
+  ],
+  "itemOptions": [],
+  "devices": [
+    {
+      "id": 4,
+      "storeId": 3,
+      "isActive": true,
+      "connection": "online",
+      "lastSeenAt": "2026-10-29T02:58:00.000Z"
+    }
+  ]
+}

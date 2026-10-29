@@ -14,20 +14,41 @@ import { MenusPage, type MenusGuard } from "./features/menus/MenusPage";
 import { OrdersPage } from "./features/OrdersPage";
 import { StorePage } from "./features/StorePage";
 
-// 실제 API 구현체가 생기면 이 한 줄만 바꾼다.
+// 로그인 뒤 화면. 실제 진입점은 AppEntry이고, 매장별 Repository를 받아 이 화면을 그린다.
+// 단독 렌더링(테스트)용 기본값만 여기 둔다.
 const defaultRepository = new MockOwnerRepository();
+
+// 저장 안 된 변경이 있을 때 확인을 받고 할 일
+type Leave =
+  { kind: "page"; page: Page } | { kind: "logout" } | { kind: "switch" };
+const LEAVE_VERB: Record<Leave["kind"], string> = {
+  page: "이동",
+  logout: "로그아웃",
+  switch: "매장 바꾸기",
+};
+
+export interface Account {
+  loginId: string;
+  storeCount: number;
+  onLogout(): void;
+  onSwitchStore(): void;
+}
+
 export function App({
   repository = defaultRepository,
   now = DEMO_NOW,
+  account,
 }: {
   repository?: OwnerRepository;
   // '오늘' 기준 시각. 시연에서는 고정 시각을 쓰고, 실제 API로 바꿀 때 현재 시각을 넘긴다.
   now?: string;
+  // 로그인한 점주. 사이드바의 로그인 ID·로그아웃·매장 바꾸기에 쓴다.
+  account?: Account;
 }) {
   const [page, setPage] = useState<Page>("today");
-  // 메뉴 관리에 저장 안 된 변경이 있으면 이동 전에 확인한다.
+  // 메뉴 관리에 저장 안 된 변경이 있으면 이동·로그아웃·매장 바꾸기 전에 확인한다.
   const menusGuard = useRef<MenusGuard | null>(null);
-  const [leavingTo, setLeavingTo] = useState<Page | null>(null);
+  const [leavingTo, setLeavingTo] = useState<Leave | null>(null);
   const [leaving, setLeaving] = useState(false);
   const load = useCallback(
     async (signal: AbortSignal) => {
@@ -59,10 +80,17 @@ export function App({
   // 메뉴판은 App이 갖고 있어서 품절 배지·오늘 현황·주문 금액이 같은 값을 본다.
   const changeBoard = (update: (b: typeof board) => typeof board) =>
     result.setData((d) => d && { ...d, board: update(d.board) });
-  function navigate(next: Page) {
-    if (next === page) return;
+  function proceed(next: Leave) {
+    if (next.kind === "page") setPage(next.page);
+    else if (next.kind === "logout") account?.onLogout();
+    else account?.onSwitchStore();
+  }
+  function request(next: Leave) {
     if (menusGuard.current?.changeCount) setLeavingTo(next);
-    else setPage(next);
+    else proceed(next);
+  }
+  function navigate(next: Page) {
+    if (next !== page) request({ kind: "page", page: next });
   }
   async function leave(save: boolean) {
     const next = leavingTo!;
@@ -76,7 +104,7 @@ export function App({
       menusGuard.current?.discard();
       setLeavingTo(null);
     }
-    setPage(next);
+    proceed(next);
   }
   return (
     <>
@@ -85,6 +113,14 @@ export function App({
         onNavigate={navigate}
         storeName={profile.store.name}
         soldOutCount={soldOutMenuCount(board)}
+        account={
+          account && {
+            loginId: account.loginId,
+            canSwitchStore: account.storeCount > 1,
+            onLogout: () => request({ kind: "logout" }),
+            onSwitchStore: () => request({ kind: "switch" }),
+          }
+        }
       >
         {page === "today" && (
           <TodayPage
@@ -119,14 +155,14 @@ export function App({
                 계속 편집
               </button>
               <button disabled={leaving} onClick={() => void leave(false)}>
-                버리고 이동
+                버리고 {LEAVE_VERB[leavingTo.kind]}
               </button>
               <button
                 className="primary"
                 disabled={leaving}
                 onClick={() => void leave(true)}
               >
-                저장하고 이동
+                저장하고 {LEAVE_VERB[leavingTo.kind]}
               </button>
             </>
           }

@@ -1,4 +1,6 @@
-import fixture from "./mock/t0001-fixture.json";
+import t0001 from "./mock/t0001-fixture.json";
+import t0002 from "./mock/t0002-fixture.json";
+import t0003 from "./mock/t0003-fixture.json";
 import type {
   Category,
   KioskDevice,
@@ -11,7 +13,8 @@ import type {
   StoreProfile,
 } from "./models";
 
-// 화면은 이 인터페이스만 쓴다. 실제 API가 생기면 구현체만 바꿔 App에 주입한다.
+// 화면은 이 인터페이스만 쓴다. 한 인스턴스는 매장 하나(store_id)만 다룬다.
+// 실제 API가 생기면 구현체만 바꿔 AppEntry에서 주입한다.
 export interface OwnerRepository {
   getStoreProfile(signal?: AbortSignal): Promise<StoreProfile>;
   getMenuBoard(signal?: AbortSignal): Promise<MenuBoard>;
@@ -29,9 +32,18 @@ type Fixture = StoreProfile &
   MenuBoard &
   OrderHistory & { devices: KioskDevice[] };
 
-// T0001 시드와 같은 메뉴·옵션을 메모리에 둔다. 새로고침하면 초기 상태로 돌아간다.
+// 매장 1(T0001)은 seed_test_menus.sql·seed_test_options.sql과 같은 메뉴·옵션이다.
+// 매장 2·3은 '매장 2개 연결' 개발용 Mock 계정을 위한 작은 Mock 매장이다.
+const FIXTURES: Record<number, unknown> = { 1: t0001, 2: t0002, 3: t0003 };
+export const MOCK_STORE_IDS = Object.keys(FIXTURES).map(Number);
+
+// 메모리에만 둔다. 새로고침하면 초기 상태로 돌아간다.
 export class MockOwnerRepository implements OwnerRepository {
-  private data = structuredClone(fixture) as Fixture;
+  private data: Fixture;
+  constructor(readonly storeId = 1) {
+    if (!FIXTURES[storeId]) throw new Error(`Mock 매장이 없습니다: ${storeId}`);
+    this.data = structuredClone(FIXTURES[storeId]) as Fixture;
+  }
   async getStoreProfile() {
     return structuredClone({ store: this.data.store, owner: this.data.owner });
   }

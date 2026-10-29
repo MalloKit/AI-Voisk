@@ -1191,3 +1191,151 @@ tr.clickable:hover td {
     display: none;
   }
 }
+
+/* ---- 로그인·매장 선택 ---- */
+.login-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--xl) var(--lg);
+}
+.login-panel {
+  width: min(460px, 100%);
+}
+.login-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sm);
+  margin-bottom: var(--lg);
+  font-size: var(--title);
+  font-weight: 700;
+  color: var(--ink);
+}
+.login-brand svg {
+  color: var(--brand);
+}
+.login-panel .card {
+  margin-bottom: 0;
+}
+.login-panel h1 {
+  font-size: var(--title);
+  margin-bottom: var(--lg);
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+}
+.password-control {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.password-control:focus-within {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.form-field .password-control input {
+  border: 0;
+  outline: none;
+}
+.password-control .icon-button {
+  margin-right: var(--xs);
+}
+.field-error {
+  margin: var(--xs) 0 0;
+  font-size: var(--text-xs);
+}
+.login-submit {
+  width: 100%;
+  min-height: var(--header);
+  margin-top: var(--sm);
+}
+.form-feedback {
+  margin: var(--md) 0;
+}
+.notice-feedback {
+  padding: var(--md);
+  border-radius: var(--radius);
+  background: var(--selected);
+  color: var(--selected-ink);
+}
+.dev-accounts {
+  margin-top: var(--xl);
+  padding: var(--lg);
+  border: 2px dashed var(--unsaved-line);
+  border-radius: var(--radius);
+  background: var(--unsaved-surface);
+}
+.dev-accounts h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--sm);
+  font-size: var(--text-md);
+  color: var(--unsaved);
+}
+.dev-accounts p {
+  margin: var(--sm) 0;
+  font-size: var(--text-xs);
+}
+.dev-accounts table {
+  min-width: 0;
+  font-size: var(--text-xs);
+}
+.dev-accounts th,
+.dev-accounts td {
+  height: auto;
+  padding: var(--xs) var(--sm);
+  background: transparent;
+}
+.store-choices {
+  list-style: none;
+  margin: var(--lg) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sm);
+}
+.store-choices button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--md);
+  text-align: left;
+  min-height: 56px;
+}
+.store-choices button:hover {
+  border-color: var(--brand);
+  background: var(--selected);
+}
+.store-choices svg {
+  color: var(--brand);
+}
+.logout-button,
+.sidebar-account button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sm);
+}
+.sidebar-account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sm);
+  padding: var(--lg);
+  border-top: 1px solid var(--border);
+}
+.sidebar-login {
+  display: flex;
+  align-items: center;
+  gap: var(--sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.sidebar-account button {
+  justify-content: flex-start;
+  padding: var(--sm) var(--md);
+  font-weight: 500;
+}

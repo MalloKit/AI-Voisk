@@ -7,6 +7,8 @@ import {
   Menu,
   UserCircle,
   X,
+  LogOut,
+  ArrowLeftRight,
 } from "lucide-react";
 import type { Page } from "../data/models";
 
@@ -21,12 +23,19 @@ export function OwnerShell({
   onNavigate,
   storeName,
   soldOutCount,
+  account,
   children,
 }: {
   page: Page;
   onNavigate(page: Page): void;
   storeName: string;
   soldOutCount: number;
+  account?: {
+    loginId: string;
+    canSwitchStore: boolean;
+    onLogout(): void;
+    onSwitchStore(): void;
+  };
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -97,11 +106,44 @@ export function OwnerShell({
             </button>
           ))}
         </nav>
-        <small className="sidebar-footer">
-          AI-Voisk 매장 관리
-          <br />
-          시연 데이터로 동작합니다
-        </small>
+        {account ? (
+          <div
+            className="sidebar-account"
+            aria-label="로그인 정보"
+            role="group"
+          >
+            <span className="sidebar-login">
+              <UserCircle size={18} aria-hidden="true" />
+              {account.loginId}
+            </span>
+            {account.canSwitchStore && (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  account.onSwitchStore();
+                }}
+              >
+                <ArrowLeftRight size={16} aria-hidden="true" />
+                매장 바꾸기
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setOpen(false);
+                account.onLogout();
+              }}
+            >
+              <LogOut size={16} aria-hidden="true" />
+              로그아웃
+            </button>
+          </div>
+        ) : (
+          <small className="sidebar-footer">
+            AI-Voisk 매장 관리
+            <br />
+            시연 데이터로 동작합니다
+          </small>
+        )}
       </aside>
       <div className="workspace">
         <header className="topbar">
@@ -118,7 +160,7 @@ export function OwnerShell({
           <span className="badge">시연 데이터</span>
           <span className="account">
             <UserCircle size={23} aria-hidden="true" />
-            시연 점주
+            {account?.loginId ?? "시연 점주"}
           </span>
         </header>
         <main id="main" tabIndex={-1} key={page}>

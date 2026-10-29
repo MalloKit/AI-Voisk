@@ -1,0 +1,163 @@
+{
+  "owner": {
+    "id": 2,
+    "loginId": "mock.multi"
+  },
+  "store": {
+    "id": 2,
+    "name": "보이스크 Mock 카페",
+    "address1": "Mock 주소",
+    "address2": null,
+    "storeCode": "T0002",
+    "phone": "000-0000-0000",
+    "businessNo": "0000000000",
+    "representative": "Mock 점주",
+    "storeType": "카페",
+    "adminId": 1,
+    "ownerId": 2
+  },
+  "categories": [
+    {
+      "id": 201,
+      "storeId": 2,
+      "name": "커피",
+      "sort": 1
+    },
+    {
+      "id": 202,
+      "storeId": 2,
+      "name": "음료",
+      "sort": 2
+    }
+  ],
+  "menus": [
+    {
+      "id": 201,
+      "categoryId": 201,
+      "name": "아메리카노",
+      "price": 3000,
+      "description": "고소한 원두 커피",
+      "isActive": true,
+      "isSoldOut": false,
+      "sort": 1
+    },
+    {
+      "id": 202,
+      "categoryId": 201,
+      "name": "카페라떼",
+      "price": 3500,
+      "description": "우유를 넣은 커피",
+      "isActive": true,
+      "isSoldOut": false,
+      "sort": 2
+    },
+    {
+      "id": 203,
+      "categoryId": 202,
+      "name": "레몬에이드",
+      "price": 4000,
+      "description": "상큼한 레몬에이드",
+      "isActive": true,
+      "isSoldOut": false,
+      "sort": 1
+    }
+  ],
+  "options": [
+    {
+      "id": 201,
+      "menuId": 201,
+      "name": "샷 추가",
+      "sort": 1,
+      "isActive": true,
+      "isSoldOut": false,
+      "extraPrice": 500
+    },
+    {
+      "id": 202,
+      "menuId": 202,
+      "name": "샷 추가",
+      "sort": 1,
+      "isActive": true,
+      "isSoldOut": false,
+      "extraPrice": 500
+    }
+  ],
+  "orders": [
+    {
+      "id": 201,
+      "storeId": 2,
+      "deviceId": 3,
+      "orderType": "takeaway",
+      "tableNo": null,
+      "clientOrderId": "00000000-0000-4000-8000-000000000201",
+      "orderedAt": "2026-10-27T01:10:00.000Z"
+    },
+    {
+      "id": 202,
+      "storeId": 2,
+      "deviceId": 3,
+      "orderType": "takeaway",
+      "tableNo": null,
+      "clientOrderId": "00000000-0000-4000-8000-000000000202",
+      "orderedAt": "2026-10-29T00:30:00.000Z"
+    },
+    {
+      "id": 203,
+      "storeId": 2,
+      "deviceId": 3,
+      "orderType": "dine_in",
+      "tableNo": null,
+      "clientOrderId": "00000000-0000-4000-8000-000000000203",
+      "orderedAt": "2026-10-29T02:05:00.000Z"
+    }
+  ],
+  "items": [
+    {
+      "id": 201,
+      "orderId": 201,
+      "menuId": 201,
+      "quantity": 2,
+      "legacyOptionId": null
+    },
+    {
+      "id": 202,
+      "orderId": 202,
+      "menuId": 201,
+      "quantity": 1,
+      "legacyOptionId": null
+    },
+    {
+      "id": 203,
+      "orderId": 202,
+      "menuId": 202,
+      "quantity": 1,
+      "legacyOptionId": null
+    },
+    {
+      "id": 204,
+      "orderId": 203,
+      "menuId": 203,
+      "quantity": 2,
+      "legacyOptionId": null
+    }
+  ],
+  "itemOptions": [
+    {
+      "itemId": 201,
+      "optionId": 201
+    },
+    {
+      "itemId": 203,
+      "optionId": 202
+    }
+  ],
+  "devices": [
+    {
+      "id": 3,
+      "storeId": 2,
+      "isActive": true,
+      "connection": "online",
+      "lastSeenAt": "2026-10-29T02:58:00.000Z"
+    }
+  ]
+}
