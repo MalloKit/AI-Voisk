@@ -19,6 +19,7 @@ from owner_write_service import OwnerCreate, StoreOwnerPatch, create_owner, upda
 from device_service import DeviceNotFound, list_devices, device_detail
 from device_write_service import DeviceCreate, DeviceStatusPatch, create_device, update_device_status
 from alert_service import AlertNotFound, list_alerts, alert_detail
+from alert_write_service import AlertAcknowledge, acknowledge_alert
 
 
 class MenuOption(BaseModel):
@@ -92,6 +93,9 @@ async def safe_validation_error(request: Request, error: RequestValidationError)
                             headers={'Cache-Control': 'no-store'})
     if request.url.path.rstrip('/') == '/admin/owners' and request.method == 'POST':
         return JSONResponse(status_code=422, content={'detail': '계정 입력 형식과 허용 길이를 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
+    if request.url.path.startswith('/admin/alerts') and request.method == 'PATCH':
+        return JSONResponse(status_code=422, content={'detail': '알림 확인 요청 형식을 확인해 주세요.'},
                             headers={'Cache-Control': 'no-store'})
     if request.url.path.startswith('/admin/devices') and request.method in ('POST', 'PATCH'):
         return JSONResponse(status_code=422, content={'detail': '기기 입력 형식과 허용 길이를 확인해 주세요.'},
@@ -396,6 +400,19 @@ def _alert_call(function, *args):
         raise HTTPException(404, '알림이 없습니다.') from None
     except Exception:
         raise HTTPException(503, '알림 조회 실패. 서버 연결과 DB 설정을 확인해 주세요.') from None
+
+
+@app.patch('/admin/alerts/{alert_id}/acknowledge', response_model=AdminAlertView)
+def admin_acknowledge_alert(payload: AlertAcknowledge, request: Request, alert_id: int = ApiPath(ge=1, le=2147483647)):
+    session = admin_auth.require_admin(request)
+    try:
+        return acknowledge_alert(alert_id, payload, session.admin.admin_id)
+    except AlertNotFound:
+        raise HTTPException(404, '알림이 없습니다.') from None
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(503, '확인 처리 결과를 확인할 수 없습니다. 목록과 상세를 새로 조회해 주세요.') from None
 
 
 @app.get('/admin/alerts', response_model=AdminAlertList)

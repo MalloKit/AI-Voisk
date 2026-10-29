@@ -20,6 +20,7 @@ import {
   Section,
   Table,
 } from "../components/ui";
+import { AdminApiError } from "../data/apiSession";
 import { FutureNotice } from "./DevicesPage";
 import { apiAlertStatusLabel, type AlertRepository } from "../data/alertRepository";
 import { useAsync, type AsyncResult } from "../hooks/useAsync";
@@ -233,7 +234,7 @@ function ApiAlertDetails({ alert: a }: { alert: ApiAlert }) {
         <Field label="알림 유형">{a.alert_type}</Field>
         <Field label="심각도">{a.severity}</Field>
         <Field label="DB 원본 상태">{a.alert_status}</Field>
-        {a.alert_status === "UNREAD" && <Field label="상태 설명">{apiAlertStatusLabel(a.alert_status)}</Field>}
+        {["UNREAD", "ACKNOWLEDGED"].includes(a.alert_status) && <Field label="상태 설명">{apiAlertStatusLabel(a.alert_status)}</Field>}
         <Field label="발생 시각">{dateLabel(a.occurred_at, true)}</Field>
         <Field label="알림 내용">{a.message}</Field>
         <Field label="기기 ID / 코드">{a.device_id} / {a.device_code}</Field>
@@ -251,14 +252,46 @@ function ApiAlertDetails({ alert: a }: { alert: ApiAlert }) {
   );
 }
 
-function LiveAlertDetail({ id, repository }: { id: number; repository: AlertRepository }) {
+function LiveAlertDetail({ id, repository, onBusy, onSaved }: {
+  id: number; repository: AlertRepository; onBusy(value: boolean): void; onSaved(): void;
+}) {
   const load = useCallback((signal: AbortSignal) => repository.detail(id, signal), [id, repository]);
   const result = useAsync(load);
-  if (result.loading) return <Loading text="실제 알림 상세를 불러오는 중…" />;
-  if (result.error || !result.data) return (
-    <ErrorState message="실제 알림 상세 조회 실패. Mock 데이터로 대체하지 않습니다." onRetry={result.reload} />
-  );
-  return <ApiAlertDetails alert={result.data} />;
+  const [saving, setSaving] = useState(false), [message, setMessage] = useState(""), [conflict, setConflict] = useState(false), [saved, setSaved] = useState(false);
+  const pending = useRef(false), controller = useRef<AbortController | null>(null);
+  useEffect(() => () => controller.current?.abort(), []);
+  function refresh() { setConflict(false); setMessage(""); result.reload(); }
+  async function acknowledge() {
+    const alert = result.data;
+    if (pending.current || conflict || !repository.acknowledge || !alert || alert.alert_status !== "UNREAD" || alert.acknowledged_at !== null || alert.acknowledged_by !== null) return;
+    pending.current = true; setSaving(true); onBusy(true); setMessage("");
+    const abort = new AbortController(); controller.current = abort;
+    try {
+      const updated = await repository.acknowledge(id, abort.signal);
+      if (!abort.signal.aborted) {
+        result.setData(updated); setSaved(true); onSaved(); result.reload();
+      }
+    } catch (error) {
+      if (!abort.signal.aborted) {
+        setConflict(error instanceof AdminApiError && [404, 409].includes(error.status));
+        setMessage(error instanceof AdminApiError ? error.message : "확인 처리 결과를 확인할 수 없습니다. 목록과 상세를 새로 조회해 주세요.");
+      }
+    } finally { if (!abort.signal.aborted) { pending.current = false; setSaving(false); onBusy(false); } }
+  }
+  const alert = result.data;
+  return <>
+    {saved && <p role="status" className="form-feedback">확인 저장이 완료되었습니다. 최초 확인 기록을 표시합니다.</p>}
+    {result.loading ? <Loading text="실제 알림 상세를 불러오는 중…" /> : result.error || !alert ?
+      <ErrorState message={saved ? "확인 저장은 완료됐지만 상세 재조회에 실패했습니다." : "실제 알림 상세 조회 실패. Mock 데이터로 대체하지 않습니다."} onRetry={refresh} /> : <>
+      <ApiAlertDetails alert={alert} />
+      {repository.acknowledge && alert.alert_status === "UNREAD" && alert.acknowledged_at === null && alert.acknowledged_by === null && <>
+        <p>확인 완료는 관리자가 알림을 검토했다는 의미이며, 실제 장애 해결을 의미하지 않습니다.</p>
+        <button disabled={saving || conflict} onClick={acknowledge}>{saving ? "확인 중…" : "확인 완료"}</button>
+      </>}
+    </>}
+    {message && <p role="alert" className="form-feedback">{message}</p>}
+    {conflict && <button onClick={refresh}>상세 다시 조회</button>}
+  </>;
 }
 
 function RawFilter({
@@ -290,6 +323,7 @@ function LiveAlertsPage({
     [severity, setSeverity] = useState<string | null>(null),
     [status, setStatus] = useState<string | null>(null),
     [detailId, setDetailId] = useState<number>();
+  const [saving, setSaving] = useState(false), [notice, setNotice] = useState("");
   const all = result.data ?? [];
   const query = search.trim().toLowerCase();
   const values = (field: "alert_type" | "severity" | "alert_status") =>
@@ -307,10 +341,11 @@ function LiveAlertsPage({
       <Heading title="장애/알림">장애·알림 내역을 조회합니다.</Heading>
       <Card className="notice">
         유형·심각도·상태는 DB 원본 값을 보존합니다.
-        관리자 확인과 장애 해소 기록을 구분하며, 확인 처리나 자동 장애 감지는 수행하지 않습니다.
+        관리자 확인과 장애 해소는 별개이며, 확인 처리로 장애가 해결되지는 않습니다.
       </Card>
+      {notice && <p role="status" className="form-feedback">{notice}</p>}
       {result.loading ? <Loading text="실제 알림을 불러오는 중…" /> : result.error ? (
-        <ErrorState message="실제 알림 조회 실패. Mock 데이터로 대체하지 않습니다." onRetry={result.reload} />
+        <ErrorState message={notice ? "확인 저장은 완료됐지만 알림 목록 재조회에 실패했습니다. 다시 시도해 주세요." : "실제 알림 조회 실패. Mock 데이터로 대체하지 않습니다."} onRetry={result.reload} />
       ) : (
         <>
           <Filters>
@@ -340,8 +375,10 @@ function LiveAlertsPage({
         </>
       )}
       {detailId !== undefined && (
-        <Modal title={`알림 #${detailId}`} onClose={() => setDetailId(undefined)}>
-          <LiveAlertDetail id={detailId} repository={repository} />
+        <Modal title={`알림 #${detailId}`} closeDisabled={saving} onClose={() => { if (!saving) setDetailId(undefined); }}>
+          <LiveAlertDetail id={detailId} repository={repository} onBusy={setSaving} onSaved={() => {
+            setNotice("알림 확인 저장이 완료되었습니다. 목록과 운영 요약은 최신 조회 결과로 갱신합니다."); result.reload();
+          }} />
         </Modal>
       )}
     </>

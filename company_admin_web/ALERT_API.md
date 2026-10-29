@@ -9,7 +9,7 @@
 - 정렬: occurred_at DESC, alert_id DESC.
 - 정상 0건은 alerts=[], total=0. 없는 상세는 404, 잘못된 ID는 422.
 - DB 내부 오류는 접속 정보·SQL 원문을 제외한 503으로 반환합니다.
-- 기존 /admin/ 로컬 접근 제한을 유지합니다. 정식 인증을 대신하지 않으므로 외부 공개용이 아닙니다.
+- 기존 로컬 접근 제한과 관리자 서버 세션·company_admin 역할 검사를 적용합니다. 확인 PATCH에는 Origin·CSRF 검사가 필요합니다.
 
 필드:
 alert_id, device_id, device_code, store_id, store_name,
@@ -27,7 +27,7 @@ device_token_hash·관리자/점주 비밀번호 등 인증 필드는 SELECT·�
 ## 원본 문자열·확인·해소
 alert_type, severity, alert_status는 문자열이며 임의 ENUM으로 제한하지 않습니다.
 원본 값을 대소문자 변환 없이 반환하고 새로운 값도 그대로 표시·필터링합니다.
-확인된 기본 상태 UNREAD만 읽지 않음 (UNREAD)으로 설명하며 나머지 값의 의미를 추측하지 않습니다.
+UNREAD는 읽지 않음 (UNREAD)으로 표시합니다. ACKNOWLEDGED는 이번 프로젝트에서 새로 정한 확인 완료 상태입니다. 그 외 값은 원문을 유지합니다.
 acknowledged_at/acknowledged_by와 resolved_at은 별개 기록입니다.
 NULL은 그대로 전달하고 상세에서 기록 없음으로 표시합니다. 상태 문자열로 날짜를 만들거나 해소 여부를 추론하지 않습니다.
 상태 기본값이 UNREAD라는 스키마 정보만으로 현재 운영 데이터의 전체 허용값을 단정하지 않습니다.
@@ -53,7 +53,7 @@ NULL은 그대로 전달하고 상세에서 기록 없음으로 표시합니다.
 - 필터 결과 0건과 조회 실패를 정상 빈 목록과 구분
 - 목록 새로고침, App의 독립 useAsync 상태로 페이지 이동 시 중복 목록 호출 방지
 
-실제 모드에는 확인 완료로 표시 버튼, 알림 쓰기 요청, 자동 감지가 없습니다.
+실제 모드의 확인 완료 버튼은 신규 PATCH API를 사용합니다. 자세한 계약과 최초 기록 보존 정책은 [ALERT_WRITES.md](ALERT_WRITES.md)를 참조합니다. 장애 해결과 자동 감지는 제공하지 않습니다.
 Mock 시연은 VITE_ALERT_SOURCE=mock으로 명시하며 기존 메모리 확인 처리를 그 모드에만 유지합니다.
 VITE_ALERT_API_BASE_URL은 공개 서버 주소이고, 생략 시 주문 API 주소, 이후 localhost:8001을 사용합니다.
 실제 API 실패에 따른 Mock 자동 전환은 없습니다.
@@ -107,7 +107,7 @@ Node 전용 verify-alert-contract.mjs는 Vitest 자동 수집 이름을 사용�
 관리자 인증·권한, 확인의 의미·허용 상태·반복 요청의 멱등성, 확인 관리자 감사 이력을 먼저 정합니다.
 장애 해소는 수동/자동 주체와 판정 근거, 재발·중복·동시 수정 정책을 별도로 결정합니다.
 확인과 해소를 단일 상태로 덮어쓰지 않도록 상태 전환 규칙과 각 기록의 관계를 합의합니다.
-하트비트·자동 장애 감지·알림 생성·확인·해소·삭제 API와 DB 변경은 이번 범위에 없습니다.
+확인 PATCH는 ALERT_WRITES.md의 정책으로 구현했습니다. 하트비트·자동 장애 감지·알림 생성·해소·삭제 API와 DB 변경은 범위에 없습니다.
 
 ## 변경 파일
 서버: main.py, alert_service.py, test_alert_service.py, test_alerts.py.

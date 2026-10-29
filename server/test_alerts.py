@@ -59,7 +59,6 @@ class AlertApiTests(fixtures.AlertFixture, unittest.TestCase):
             self.assertEqual(remote.get('/admin/alerts/101').status_code, 403)
         for method,path in (('POST','/admin/alerts'),('PATCH','/admin/alerts/101'),('DELETE','/admin/alerts/101')):
             self.assertEqual(self.client.request(method,path).status_code, 405)
-        self.assertEqual(self.client.patch('/admin/alerts/101/acknowledge').status_code, 404)
 
 
 if __name__ == '__main__':
