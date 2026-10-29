@@ -119,6 +119,11 @@ describe("live store registration and editing", () => {
   it("validates required fields and focuses the first failure before sending", async () => {
     const { user, repo } = await open();
     await user.click(screen.getByRole("button", { name: "매장 등록" }));
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.queryByText(/우편번호와 사업자번호 중복을 허용합니다/)).not.toBeInTheDocument();
+    expect(dialog.getByText("010·02·070 등 · 하이픈 자동 표시")).toBeInTheDocument();
+    for (const label of ["매장명", "우편번호", "업종", "주소", "전화번호", "사업자번호", "대표자명"])
+      expect(dialog.getByRole("textbox", { name: label + " *" })).toBeRequired();
     await user.click(screen.getByRole("button", { name: "저장" }));
     expect(repo.create).not.toHaveBeenCalled();
     expect(screen.getByRole("textbox", { name: "매장명 *" })).toHaveFocus();
