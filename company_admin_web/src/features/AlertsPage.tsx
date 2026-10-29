@@ -303,9 +303,11 @@ function RawFilter({
   onChange(value: string | null): void;
   display?(value: string): string;
 }) {
+  // Keep the selected filter visible even when a refresh removes its last matching row.
+  const options = value !== null && !values.includes(value) ? [...values, value].sort() : values;
   // 원본이 '전체' 또는 '*'여도 전체 선택과 충돌하지 않도록 인코딩합니다.
   return <Filter label={label} value={value === null ? "*" : JSON.stringify(value)}
-    options={[{ value: "*", label: "전체" }, ...values.map((raw) => ({
+    options={[{ value: "*", label: "전체" }, ...options.map((raw) => ({
       value: JSON.stringify(raw), label: display(raw),
     }))]}
     onChange={(next) => onChange(next === "*" ? null : JSON.parse(next) as string)} />;

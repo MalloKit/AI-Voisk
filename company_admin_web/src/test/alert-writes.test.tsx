@@ -77,6 +77,16 @@ describe("actual alert acknowledgement",()=>{
   expect(screen.getByRole("textbox")).toHaveValue("101");expect(screen.getByLabelText("DB 원본 상태")).toHaveValue(JSON.stringify("UNREAD"));
   await user.click(screen.getByRole("button",{name:"초기화"}));expect(screen.getByText("알림 목록 · 2건")).toBeInTheDocument();
  });
+ it("retains the selected UNREAD filter when the last matching alert is acknowledged",async()=>{
+  const f=fixture();f.rows.splice(1);const {user}=await open(f);
+  await user.selectOptions(screen.getByLabelText("DB 원본 상태"),JSON.stringify("UNREAD"));await detail(user);
+  await user.click(dialog().getByRole("button",{name:"확인 완료"}));await dialog().findByText("현재 관리자 (ID: 1)");
+  await user.click(dialog().getByRole("button",{name:"닫기"}));
+  expect(screen.getByText("알림 목록 · 0건")).toBeInTheDocument();
+  expect(screen.getByLabelText("DB 원본 상태")).toHaveValue(JSON.stringify("UNREAD"));
+  expect(within(screen.getByLabelText("DB 원본 상태")).getByRole("option",{selected:true})).toHaveTextContent("읽지 않음 (UNREAD)");
+  await user.selectOptions(screen.getByLabelText("DB 원본 상태"),"*");expect(screen.getByText("알림 목록 · 1건")).toBeInTheDocument();
+ });
  it("blocks repeated clicks and modal closing until the request finishes",async()=>{
   const f=fixture(),{user}=await open(f);let resolve!:(value:Response)=>void;const held=new Promise<Response>(r=>{resolve=r;});f.hold(held);
   await detail(user);const button=dialog().getByRole("button",{name:"확인 완료"});await user.dblClick(button);
