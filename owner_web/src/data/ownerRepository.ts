@@ -1,7 +1,12 @@
 import fixture from "./mock/t0001-fixture.json";
 import type {
+  Category,
   KioskDevice,
+  Menu,
   MenuBoard,
+  MenuBoardChanges,
+  MenuBoardSaveResult,
+  MenuOption,
   OrderHistory,
   StoreProfile,
 } from "./models";
@@ -15,6 +20,9 @@ export interface OwnerRepository {
   // 품절은 영업 중에 바로 알려야 하므로 저장 바를 거치지 않고 즉시 반영한다.
   setMenuSoldOut(menuId: number, isSoldOut: boolean): Promise<void>;
   setOptionSoldOut(optionId: number, isSoldOut: boolean): Promise<void>;
+  // 품절을 뺀 메뉴 관리 변경을 한 묶음으로 저장한다. 서버는 한 트랜잭션으로 처리하고,
+  // 하나라도 실패하면 아무것도 바꾸지 않는다.
+  saveMenuBoard(changes: MenuBoardChanges): Promise<MenuBoardSaveResult>;
 }
 
 type Fixture = StoreProfile &
@@ -47,5 +55,80 @@ export class MockOwnerRepository implements OwnerRepository {
     const option = this.data.options.find((o) => o.id === optionId);
     if (!option) throw new Error("Unknown Mock option");
     option.isSoldOut = isSoldOut;
+  }
+  // 복사본에 모두 적용하고 검사가 끝난 뒤에만 바꿔 끼운다(트랜잭션 흉내).
+  async saveMenuBoard(changes: MenuBoardChanges) {
+    const next = structuredClone(this.data);
+    const ids: Record<number, number> = {};
+    const nextId = (rows: { id: number }[]) =>
+      Math.max(0, ...rows.map((r) => r.id)) + 1;
+    const real = (id: number) => (id < 0 ? ids[id] : id);
+    const find = <T extends { id: number }>(rows: T[], id: number) => {
+      const row = rows.find((r) => r.id === id);
+      if (!row) throw new Error(`없는 항목입니다: ${id}`);
+      return row;
+    };
+    const storeId = next.store.id;
+
+    for (const c of changes.categories.create) {
+      const row: Category = {
+        id: nextId(next.categories),
+        storeId,
+        name: c.name,
+        sort: c.sort,
+      };
+      ids[c.tempId] = row.id;
+      next.categories.push(row);
+    }
+    for (const c of changes.categories.update)
+      Object.assign(find(next.categories, c.id), {
+        name: c.name,
+        sort: c.sort,
+      });
+    for (const { tempId, ...m } of changes.menus.create) {
+      const row: Menu = {
+        ...m,
+        id: nextId(next.menus),
+        categoryId: real(m.categoryId),
+      };
+      ids[tempId] = row.id;
+      next.menus.push(row);
+    }
+    for (const m of changes.menus.update)
+      Object.assign(find(next.menus, m.id), {
+        ...m,
+        categoryId: real(m.categoryId),
+      });
+    for (const { tempId, ...o } of changes.options.create) {
+      const row: MenuOption = {
+        ...o,
+        id: nextId(next.options),
+        menuId: real(o.menuId),
+        isActive: true,
+      };
+      ids[tempId] = row.id;
+      next.options.push(row);
+    }
+    for (const o of changes.options.update)
+      Object.assign(find(next.options, o.id), o);
+    // FK에 ON DELETE 규칙이 없으므로 메뉴가 남은 카테고리는 지울 수 없다.
+    for (const id of changes.categories.remove) {
+      find(next.categories, id);
+      if (next.menus.some((m) => m.categoryId === id))
+        throw new Error("메뉴가 남아 있는 카테고리는 삭제할 수 없습니다.");
+      next.categories = next.categories.filter((c) => c.id !== id);
+    }
+    for (const m of next.menus) {
+      if (!next.categories.some((c) => c.id === m.categoryId))
+        throw new Error("메뉴의 카테고리가 없습니다.");
+      if (!m.name.trim() || m.price < 1 || m.price > 1_000_000)
+        throw new Error("메뉴 이름과 가격을 확인해 주세요.");
+    }
+    for (const o of next.options)
+      if (!next.menus.some((m) => m.id === o.menuId))
+        throw new Error("옵션의 메뉴가 없습니다.");
+
+    this.data = next;
+    return { board: await this.getMenuBoard(), ids };
   }
 }

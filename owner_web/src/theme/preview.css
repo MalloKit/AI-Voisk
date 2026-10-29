@@ -299,3 +299,69 @@
   margin-left: auto;
   font-size: 18px;
 }
+
+/* ---- 편집용 표시: 실제 키오스크에는 없다 ---- */
+.kiosk-card,
+.kiosk-category {
+  position: relative;
+  touch-action: manipulation;
+}
+.kiosk-card.dragging,
+.kiosk-category.dragging {
+  opacity: 0.35;
+}
+.kiosk-name.placeholder,
+.kiosk-price.placeholder {
+  color: #9e9e9e;
+  font-weight: 500;
+}
+/* 저장 안 된 메뉴 카드의 주황 점 */
+.kiosk-card .unsaved-dot {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 16px;
+  height: 16px;
+}
+/* 놓일 위치를 알려 주는 선 */
+.kiosk-card.drop-before::before,
+.kiosk-card.drop-after::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 6px;
+  border-radius: 3px;
+  background: var(--brand);
+}
+.kiosk-card.drop-before::before {
+  left: -9px;
+}
+.kiosk-card.drop-after::before {
+  right: -9px;
+}
+.kiosk-category.drop-before::before,
+.kiosk-category.drop-after::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 5px;
+  border-radius: 3px;
+  background: #fff;
+}
+.kiosk-category.drop-before::before {
+  top: -7px;
+}
+.kiosk-category.drop-after::before {
+  bottom: -7px;
+}
+/* 메뉴를 카테고리 안으로 넣기 */
+.kiosk-category.drop-into {
+  outline: 4px dashed #fff;
+  outline-offset: -4px;
+  background: #ffffff33;
+}
+.kiosk-menus.drop-grid {
+  box-shadow: inset 0 0 0 4px var(--brand);
+}

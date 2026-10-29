@@ -99,7 +99,9 @@ hr {
   display: block;
   font-size: var(--text-xs);
   color: var(--muted);
-  overflow-wrap: anywhere;
+  /* 한국어 매장 이름이 단어 중간에서 끊기지 않게 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
   padding-right: var(--xxl);
 }
 .sidebar nav {
@@ -781,5 +783,173 @@ dd {
   .switch input,
   .switch input::before {
     transition: none;
+  }
+}
+
+/* ---- 메뉴 관리: 드래그와 저장 ---- */
+.menus-page {
+  /* 고정 저장 바에 가리지 않게 */
+  padding-bottom: 96px;
+}
+.menus-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lg);
+  min-width: 0;
+}
+.unsaved-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--unsaved-line);
+}
+.new-menu-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--md);
+}
+.new-menu-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--xs);
+  border-radius: 999px;
+  border: 2px dashed var(--brand);
+  color: var(--brand);
+  background: var(--surface);
+  touch-action: manipulation;
+}
+.new-menu-chip:hover {
+  background: var(--selected);
+}
+.new-menu-chip.dragging,
+.hidden-menu.dragging {
+  opacity: 0.4;
+}
+.hidden-box {
+  background: var(--surface);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: var(--lg) var(--xl);
+}
+.hidden-box.over {
+  border-color: var(--brand);
+  background: var(--selected);
+}
+.hidden-box h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--sm);
+  font-size: var(--text-md);
+}
+.hidden-box p {
+  margin: var(--sm) 0 var(--md);
+}
+.hidden-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sm);
+}
+.hidden-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sm);
+  padding: var(--sm) var(--md);
+  font-weight: 600;
+  touch-action: manipulation;
+}
+.hidden-menu .muted {
+  font-weight: 400;
+}
+.drag-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  min-width: 96px;
+  max-width: 240px;
+  padding: var(--sm) var(--lg);
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--on-brand);
+  font-weight: 600;
+  box-shadow: var(--modal-shadow);
+  cursor: grabbing;
+}
+.save-bar {
+  position: fixed;
+  left: var(--sidebar);
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--md) var(--lg);
+  padding: var(--md) var(--xl);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px #1f2a2814;
+}
+.save-bar.dirty {
+  border-top: 3px solid var(--unsaved-line);
+}
+.save-status {
+  display: flex;
+  align-items: center;
+  gap: var(--sm);
+  font-weight: 600;
+  color: var(--ok);
+}
+.save-bar.dirty .save-status {
+  color: var(--unsaved);
+}
+.save-message {
+  flex: 1 1 240px;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.save-actions {
+  display: flex;
+  gap: var(--sm);
+  margin-left: auto;
+}
+.save-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--xs);
+}
+.modal footer {
+  gap: var(--sm);
+  flex-wrap: wrap;
+}
+.change-list {
+  margin: 0;
+  padding-left: var(--xl);
+}
+.change-list li {
+  margin-bottom: var(--xs);
+}
+@media (max-width: 999px) {
+  .save-bar {
+    left: 0;
+  }
+}
+@media (max-width: 599px) {
+  .save-bar {
+    padding: var(--md) var(--lg);
+  }
+  .save-actions {
+    width: 100%;
+  }
+  .save-actions button {
+    flex: 1;
+    justify-content: center;
+    padding: var(--md) var(--sm);
   }
 }

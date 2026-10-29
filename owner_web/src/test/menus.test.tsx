@@ -124,7 +124,7 @@ describe("메뉴 편집", () => {
     expect(card("떡볶이")).toBeInTheDocument();
   });
 
-  it("판매를 끄면 미리보기에서 사라지고 판매 중지 목록에서 다시 열 수 있다", async () => {
+  it("판매를 끄면 미리보기에서 사라지고 숨긴 메뉴 상자에서 다시 열 수 있다", async () => {
     const { user } = await openMenus();
     await user.click(card("콜라"));
     await user.click(screen.getByRole("switch", { name: "키오스크에서 판매" }));
@@ -132,11 +132,13 @@ describe("메뉴 편집", () => {
       within(preview()).queryByRole("button", { name: /^콜라/ }),
     ).toBeNull();
     expect(
-      screen.getByText(/판매 중지 상태라 키오스크에 보이지 않습니다/),
+      screen.getByText(/숨긴 메뉴라 키오스크에 보이지 않습니다/),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "선택 해제" }));
-    const stopped = screen.getByRole("region", { name: "판매 중지 메뉴" });
-    await user.click(within(stopped).getByRole("button", { name: "콜라" }));
+    const hidden = screen.getByRole("region", { name: "숨긴 메뉴 1개" });
+    await user.click(
+      within(hidden).getByRole("button", { name: /^콜라 \(음료\)/ }),
+    );
     expect(screen.getByLabelText("메뉴 이름")).toHaveValue("콜라");
   });
 });

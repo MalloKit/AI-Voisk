@@ -88,3 +88,28 @@ export interface OrderHistory {
   items: OrderItem[];
   itemOptions: OrderItemOption[];
 }
+
+// 메뉴 관리 저장 묶음. 서버는 한 트랜잭션으로 처리한다.
+// 음수 id는 같은 묶음 안에서 새로 만드는 항목의 임시 id이고, categoryId·menuId가 이를 가리킬 수 있다.
+// sort는 category_sort(매장 전체), menu_sort(카테고리별), menu_option_sort(메뉴별)로 1부터 빈틈없이 매긴다.
+// 품절(is_sold_out)은 따로 즉시 반영하므로 기존 행 수정에는 넣지 않는다.
+export interface MenuBoardChanges {
+  categories: {
+    create: { tempId: number; name: string; sort: number }[];
+    update: { id: number; name: string; sort: number }[];
+    remove: number[];
+  };
+  menus: {
+    create: (Omit<Menu, "id"> & { tempId: number })[];
+    update: Omit<Menu, "isSoldOut">[];
+  };
+  options: {
+    create: (Omit<MenuOption, "id" | "isActive"> & { tempId: number })[];
+    update: Omit<MenuOption, "isSoldOut">[];
+  };
+}
+// 저장 뒤 전체 상태와 임시 id → 실제 id 대응표
+export interface MenuBoardSaveResult {
+  board: MenuBoard;
+  ids: Record<number, number>;
+}

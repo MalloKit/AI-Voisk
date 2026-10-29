@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Trash2, X } from "lucide-react";
 import type { Category } from "../../data/models";
 import {
@@ -19,14 +19,21 @@ export function CategoryEditor({
   onClose,
   onDeleted,
   onSelectMenu,
+  focusSerial,
 }: {
   category: Category;
+  // 저장이 막혔을 때 이름 칸으로 보내기 위한 요청 번호
+  focusSerial: number | null;
   draft: MenuDraft;
   onClose(): void;
   onDeleted(): void;
   onSelectMenu(id: number): void;
 }) {
   const [blocked, setBlocked] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focusSerial !== null) nameRef.current?.focus();
+  }, [focusSerial]);
   const menus = menusInCategory(draft.draft, category.id);
   return (
     <section className="editor" aria-labelledby="category-editor-title">
@@ -46,8 +53,12 @@ export function CategoryEditor({
       <TextField
         label="카테고리 이름"
         value={category.name}
+        inputRef={nameRef}
         onChange={(name) =>
-          draft.edit((b) => renameCategory(b, category.id, name))
+          draft.edit(
+            (b) => renameCategory(b, category.id, name),
+            `category-${category.id}-name`,
+          )
         }
         maxLength={LIMITS.categoryName}
         error={categoryNameError(draft.draft, category.id, category.name)}

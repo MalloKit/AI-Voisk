@@ -1,34 +1,61 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import type { Menu } from "../../data/models";
-import { kioskView, updateMenu } from "../../data/menuDraft";
+import { kioskView, moveMenu, updateMenu } from "../../data/menuDraft";
 import { LIMITS, nameError, parsePrice } from "../../data/validation";
 import type { MenuDraft } from "./useMenuDraft";
 import { Switch, TextField } from "./fields";
 import { OptionList } from "./OptionList";
 
+export interface FocusRequest {
+  id: number;
+  field: "name" | "price";
+  // 같은 칸을 다시 요청해도 효과가 다시 돌도록 매번 바꾼다.
+  serial: number;
+}
+
+const priceToText = (price: number) => (price ? String(price) : "");
+
 export function MenuEditor({
   menu,
   draft,
+  focus,
   onClose,
   onCategoryChange,
 }: {
   menu: Menu;
   draft: MenuDraft;
+  focus: FocusRequest | null;
   onClose(): void;
   onCategoryChange(categoryId: number): void;
 }) {
   // 가격은 입력 중인 글자를 따로 두고, 올바른 값일 때만 초안(미리보기)에 넣는다.
-  const [priceText, setPriceText] = useState(String(menu.price));
+  // 새 메뉴의 가격 0은 '입력 전'이라 빈칸으로 보인다.
+  const [priceText, setPriceText] = useState(priceToText(menu.price));
   const price = parsePrice(priceText);
-  const patch = (fields: Partial<Menu>) =>
-    draft.edit((b) => updateMenu(b, menu.id, fields));
+  // 되돌리기로 가격이 바뀌면 입력칸도 따라간다.
+  useEffect(() => {
+    setPriceText((text) =>
+      parsePrice(text).value === menu.price ? text : priceToText(menu.price),
+    );
+  }, [menu.price]);
+
+  const nameRef = useRef<HTMLInputElement>(null);
+  const priceRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focus?.id !== menu.id) return;
+    (focus.field === "name" ? nameRef : priceRef).current?.focus();
+  }, [focus, menu.id]);
+
+  const patch = (fields: Partial<Menu>, key?: string) =>
+    draft.edit((b) => updateMenu(b, menu.id, fields), key);
   const { categories } = kioskView(draft.draft);
+  const isNew = menu.id < 0;
   return (
     <section className="editor" aria-labelledby="menu-editor-title">
       <header className="editor-head">
         <div>
-          <span className="eyebrow">메뉴 편집</span>
+          <span className="eyebrow">{isNew ? "새 메뉴" : "메뉴 편집"}</span>
           <h2 id="menu-editor-title">{menu.name || "(이름 없음)"}</h2>
         </div>
         <button
@@ -43,7 +70,7 @@ export function MenuEditor({
         <Switch
           label="품절"
           tone="attention"
-          note="(즉시 반영)"
+          note={isNew ? "(새 메뉴)" : "(즉시 반영)"}
           checked={menu.isSoldOut}
           disabled={draft.isPending(`menu-${menu.id}`)}
           onChange={(v) => draft.setMenuSoldOut(menu.id, v)}
@@ -53,18 +80,23 @@ export function MenuEditor({
       <TextField
         label="메뉴 이름"
         value={menu.name}
-        onChange={(name) => patch({ name })}
+        inputRef={nameRef}
+        placeholder="예: 김치볶음밥"
+        onChange={(name) => patch({ name }, `menu-${menu.id}-name`)}
         maxLength={LIMITS.menuName}
         error={nameError(menu.name, LIMITS.menuName, "메뉴 이름")}
       />
       <TextField
         label="가격(원)"
         value={priceText}
+        inputRef={priceRef}
         inputMode="numeric"
+        placeholder="예: 8000"
         onChange={(text) => {
           setPriceText(text);
           const next = parsePrice(text);
-          if (next.value !== null) patch({ price: next.value });
+          if (next.value !== null)
+            patch({ price: next.value }, `menu-${menu.id}-price`);
         }}
         error={price.error}
         hint="1원부터 1,000,000원까지"
@@ -73,7 +105,9 @@ export function MenuEditor({
         label="설명"
         value={menu.description ?? ""}
         multiline
-        onChange={(text) => patch({ description: text || null })}
+        onChange={(text) =>
+          patch({ description: text || null }, `menu-${menu.id}-description`)
+        }
         maxLength={LIMITS.description}
       />
       <div className="form-field">
@@ -83,7 +117,8 @@ export function MenuEditor({
           value={menu.categoryId}
           onChange={(e) => {
             const categoryId = Number(e.target.value);
-            patch({ categoryId });
+            // 옮긴 카테고리의 맨 뒤로 간다.
+            draft.edit((b) => moveMenu(b, menu.id, { categoryId }));
             onCategoryChange(categoryId);
           }}
         >
@@ -101,8 +136,8 @@ export function MenuEditor({
       />
       {!menu.isActive && (
         <p className="notice-box">
-          판매 중지 상태라 키오스크에 보이지 않습니다. 선택을 해제하면 안내
-          화면의 '판매 중지 메뉴'에서 다시 열 수 있습니다.
+          숨긴 메뉴라 키오스크에 보이지 않습니다. 아래 '숨긴 메뉴' 상자에서
+          미리보기로 끌어 놓거나 위 스위치를 켜면 다시 판매합니다.
         </p>
       )}
       <OptionList menuId={menu.id} draft={draft} />

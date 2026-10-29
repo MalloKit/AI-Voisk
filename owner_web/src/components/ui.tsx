@@ -233,14 +233,17 @@ export function Table<T>({
     </div>
   );
 }
+// actions를 주면 기본 '닫기' 버튼 대신 그 버튼들을 아래에 둔다.
 export function Modal({
   title,
   children,
   onClose,
+  actions,
 }: {
   title: string;
   children: ReactNode;
   onClose(): void;
+  actions?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -304,9 +307,7 @@ export function Modal({
       >
         <h2>{title}</h2>
         <div className="modal-content">{children}</div>
-        <footer>
-          <button onClick={onClose}>닫기</button>
-        </footer>
+        <footer>{actions ?? <button onClick={onClose}>닫기</button>}</footer>
       </div>
     </div>
   );

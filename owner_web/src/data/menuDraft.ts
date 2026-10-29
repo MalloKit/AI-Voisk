@@ -34,6 +34,7 @@ export const nextTempId = (board: MenuBoard) =>
   Math.min(
     0,
     ...board.categories.map((c) => c.id),
+    ...board.menus.map((m) => m.id),
     ...board.options.map((o) => o.id),
   ) - 1;
 
@@ -122,4 +123,124 @@ export function removeOption(board: MenuBoard, id: number) {
   return id < 0
     ? { ...board, options: board.options.filter((o) => o.id !== id) }
     : updateOption(board, id, { isActive: false });
+}
+
+export type Side = "before" | "after";
+// 놓을 위치. anchorId가 없으면 카테고리 맨 뒤.
+export interface MenuPlace {
+  categoryId: number;
+  anchorId?: number;
+  side?: Side;
+}
+
+// 목록에서 item을 빼고 anchor 앞뒤(없으면 맨 뒤)에 넣은 순서를 돌려준다.
+function placeIn<T extends { id: number }>(
+  list: T[],
+  item: T,
+  anchorId?: number,
+  side: Side = "before",
+) {
+  const rest = list.filter((x) => x.id !== item.id);
+  const at = rest.findIndex((x) => x.id === anchorId);
+  if (at < 0) return [...rest, item];
+  rest.splice(side === "before" ? at : at + 1, 0, item);
+  return rest;
+}
+
+// 카테고리 안의 menu_sort를 1부터 빈틈없이 다시 매긴다.
+function withMenuOrder(board: MenuBoard, categoryId: number, ordered: Menu[]) {
+  const sorts = new Map(ordered.map((m, i) => [m.id, i + 1]));
+  return {
+    ...board,
+    menus: board.menus.map((m) =>
+      sorts.has(m.id) ? { ...m, categoryId, sort: sorts.get(m.id)! } : m,
+    ),
+  };
+}
+
+export function moveMenu(
+  board: MenuBoard,
+  menuId: number,
+  place: MenuPlace,
+  patch: Partial<Menu> = {},
+) {
+  const menu = board.menus.find((m) => m.id === menuId);
+  if (!menu || (place.anchorId === menuId && !patch.isActive)) return board;
+  const moved = { ...menu, ...patch, categoryId: place.categoryId };
+  let next = updateMenu(board, menuId, moved);
+  const target = menusInCategory(board, place.categoryId);
+  next = withMenuOrder(
+    next,
+    place.categoryId,
+    placeIn(target, moved, place.anchorId, place.side),
+  );
+  if (menu.categoryId !== place.categoryId)
+    next = withMenuOrder(
+      next,
+      menu.categoryId,
+      menusInCategory(board, menu.categoryId).filter((m) => m.id !== menuId),
+    );
+  return next;
+}
+
+// 새 메뉴는 이름과 가격이 빈칸이다. 가격 0은 '입력 전'이며 저장할 수 없다.
+export function addMenu(board: MenuBoard, place: MenuPlace) {
+  const menu: Menu = {
+    id: nextTempId(board),
+    categoryId: place.categoryId,
+    name: "",
+    price: 0,
+    description: null,
+    isActive: true,
+    isSoldOut: false,
+    sort: 0,
+  };
+  const next = moveMenu(
+    { ...board, menus: [...board.menus, menu] },
+    menu.id,
+    place,
+  );
+  return { board: next, id: menu.id };
+}
+
+export function moveCategory(
+  board: MenuBoard,
+  id: number,
+  anchorId: number,
+  side: Side,
+) {
+  const category = board.categories.find((c) => c.id === id);
+  if (!category || id === anchorId) return board;
+  const ordered = placeIn(
+    [...board.categories].sort(byOrder),
+    category,
+    anchorId,
+    side,
+  );
+  const sorts = new Map(ordered.map((c, i) => [c.id, i + 1]));
+  return {
+    ...board,
+    categories: board.categories.map((c) => ({ ...c, sort: sorts.get(c.id)! })),
+  };
+}
+
+// category_sort, 카테고리별 menu_sort, 메뉴별 menu_option_sort를 1부터 다시 매긴다.
+export function renumber(board: MenuBoard): MenuBoard {
+  const rank = <T extends { id: number; sort: number }>(
+    items: T[],
+    group: (x: T) => number,
+  ) => {
+    const sorts = new Map<number, number>();
+    const groups = new Map<number, T[]>();
+    for (const x of items)
+      groups.set(group(x), [...(groups.get(group(x)) ?? []), x]);
+    for (const list of groups.values())
+      list.sort(byOrder).forEach((x, i) => sorts.set(x.id, i + 1));
+    return items.map((x) => ({ ...x, sort: sorts.get(x.id)! }));
+  };
+  return {
+    categories: rank(board.categories, () => 0),
+    menus: rank(board.menus, (m) => m.categoryId),
+    options: rank(board.options, (o) => o.menuId),
+  };
 }

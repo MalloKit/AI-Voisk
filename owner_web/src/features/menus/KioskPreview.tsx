@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   CookingPot,
   CupSoda,
@@ -12,9 +13,17 @@ import {
   UtensilsCrossed,
   CircleCheck,
 } from "lucide-react";
-import type { MenuBoard } from "../../data/models";
+import type { Category, Menu, MenuBoard } from "../../data/models";
 import { kioskView } from "../../data/menuDraft";
 import { formatWon } from "../../data/validation";
+import type { CategoryFilter, DragData, DropData } from "./dnd";
+
+export type { CategoryFilter };
+// 끄는 동안 놓일 위치 표시. into는 카테고리 안으로 넣기.
+export interface DropMark {
+  id: string;
+  mode: "before" | "after" | "into";
+}
 
 // kiosk_app/lib/service/screens/order_screen.dart를 축소해 그린다.
 // 실제 화면 크기(논리 해상도)로 그린 뒤 미리보기 폭에 맞춰 줄인다.
@@ -26,13 +35,148 @@ const categoryIcon = (name: string) =>
   ({ 식사: Soup, 국물: CookingPot, 사이드: Utensils, 음료: CupSoda })[name] ??
   UtensilsCrossed;
 
-export type CategoryFilter = number | "all";
+export const menuLabel = (m: Pick<Menu, "name">) => m.name.trim() || "새 메뉴";
+const markClass = (mark: DropMark | null, id: string) =>
+  mark?.id === id ? `drop-${mark.mode}` : "";
+
+function MenuCard({
+  menu,
+  categoryName,
+  selected,
+  changed,
+  mark,
+  onSelect,
+}: {
+  menu: Menu;
+  categoryName: string;
+  selected: boolean;
+  changed: boolean;
+  mark: DropMark | null;
+  onSelect(): void;
+}) {
+  const id = `menu:${menu.id}`;
+  const label = menuLabel(menu);
+  const drag = useDraggable({
+    id,
+    data: { type: "menu", menuId: menu.id, label } satisfies DragData,
+    attributes: { roleDescription: "끌 수 있는 메뉴 카드" },
+  });
+  const drop = useDroppable({
+    id,
+    data: {
+      type: "menu",
+      menuId: menu.id,
+      categoryId: menu.categoryId,
+      label,
+    } satisfies DropData,
+  });
+  const Icon = categoryIcon(categoryName);
+  return (
+    <button
+      ref={(el) => {
+        drag.setNodeRef(el);
+        drop.setNodeRef(el);
+      }}
+      {...drag.attributes}
+      {...drag.listeners}
+      className={[
+        "kiosk-card",
+        menu.isSoldOut ? "sold-out" : "",
+        drag.isDragging ? "dragging" : "",
+        markClass(mark, id),
+      ].join(" ")}
+      aria-label={[
+        menu.name.trim() || "이름 입력",
+        menu.price ? formatWon(menu.price) : "가격 입력",
+        menu.isSoldOut ? "품절" : "",
+        changed ? "· 저장 안 됨" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      aria-pressed={selected}
+      onClick={onSelect}
+    >
+      {changed && <span className="unsaved-dot" aria-hidden="true" />}
+      <span className="kiosk-icon" aria-hidden="true">
+        <Icon size={52} />
+      </span>
+      {menu.isSoldOut && <span className="kiosk-sold-out">품절</span>}
+      <span className={`kiosk-name ${menu.name.trim() ? "" : "placeholder"}`}>
+        {menu.name.trim() || "이름 입력"}
+      </span>
+      <span className={`kiosk-price ${menu.price ? "" : "placeholder"}`}>
+        {menu.price ? formatWon(menu.price) : "가격 입력"}
+      </span>
+    </button>
+  );
+}
+
+function RailCategory({
+  category,
+  pressed,
+  empty,
+  mark,
+  onSelect,
+}: {
+  category: Category;
+  pressed: boolean;
+  empty: boolean;
+  mark: DropMark | null;
+  onSelect(): void;
+}) {
+  const id = `category:${category.id}`;
+  const label = category.name.trim() || "이름 없는 카테고리";
+  const drag = useDraggable({
+    id,
+    data: {
+      type: "category",
+      categoryId: category.id,
+      label,
+    } satisfies DragData,
+    attributes: { roleDescription: "끌 수 있는 카테고리" },
+  });
+  const drop = useDroppable({
+    id,
+    data: {
+      type: "category",
+      categoryId: category.id,
+      label,
+    } satisfies DropData,
+  });
+  return (
+    <button
+      ref={(el) => {
+        drag.setNodeRef(el);
+        drop.setNodeRef(el);
+      }}
+      {...drag.attributes}
+      {...drag.listeners}
+      className={[
+        "kiosk-category",
+        empty ? "empty" : "",
+        drag.isDragging ? "dragging" : "",
+        markClass(mark, id),
+      ].join(" ")}
+      aria-pressed={pressed}
+      title={
+        empty
+          ? "판매 중인 메뉴가 없어 실제 키오스크에는 보이지 않습니다."
+          : undefined
+      }
+      onClick={onSelect}
+    >
+      {category.name || "(이름 없음)"}
+    </button>
+  );
+}
 
 export function KioskPreview({
   board,
   category,
   selectedMenuId,
   editingCategoryId,
+  changedMenuIds,
+  mark,
   onSelectCategory,
   onSelectMenu,
   onAddCategory,
@@ -43,6 +187,8 @@ export function KioskPreview({
   category: CategoryFilter;
   selectedMenuId: number | null;
   editingCategoryId: number | null;
+  changedMenuIds: Set<number>;
+  mark: DropMark | null;
   onSelectCategory(category: CategoryFilter): void;
   onSelectMenu(id: number): void;
   onAddCategory(): void;
@@ -60,6 +206,10 @@ export function KioskPreview({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+  const grid = useDroppable({
+    id: "grid",
+    data: { type: "grid", label: "메뉴 영역" } satisfies DropData,
+  });
 
   const { categories, menus } = kioskView(board);
   const visible =
@@ -117,19 +267,14 @@ export function KioskPreview({
                       }}
                     />
                   ) : (
-                    <button
+                    <RailCategory
                       key={c.id}
-                      className={`kiosk-category ${hasMenus(c.id) ? "" : "empty"}`}
-                      aria-pressed={category === c.id}
-                      title={
-                        hasMenus(c.id)
-                          ? undefined
-                          : "판매 중인 메뉴가 없어 실제 키오스크에는 보이지 않습니다."
-                      }
-                      onClick={() => onSelectCategory(c.id)}
-                    >
-                      {c.name || "(이름 없음)"}
-                    </button>
+                      category={c}
+                      pressed={category === c.id}
+                      empty={!hasMenus(c.id)}
+                      mark={mark}
+                      onSelect={() => onSelectCategory(c.id)}
+                    />
                   ),
                 )}
                 <button
@@ -141,7 +286,10 @@ export function KioskPreview({
                   ＋
                 </button>
               </nav>
-              <div className="kiosk-menus">
+              <div
+                ref={grid.setNodeRef}
+                className={`kiosk-menus ${grid.isOver ? "drop-grid" : ""}`}
+              >
                 <div className="kiosk-heading">
                   <strong>
                     {category === "all"
@@ -152,29 +300,17 @@ export function KioskPreview({
                 </div>
                 {visible.length ? (
                   <div className="kiosk-grid">
-                    {visible.map((m) => {
-                      const Icon = categoryIcon(categoryName(m.categoryId));
-                      return (
-                        <button
-                          key={m.id}
-                          className={`kiosk-card ${m.isSoldOut ? "sold-out" : ""}`}
-                          aria-label={`${m.name} ${formatWon(m.price)}${m.isSoldOut ? " 품절" : ""}`}
-                          aria-pressed={m.id === selectedMenuId}
-                          onClick={() => onSelectMenu(m.id)}
-                        >
-                          <span className="kiosk-icon" aria-hidden="true">
-                            <Icon size={52} />
-                          </span>
-                          {m.isSoldOut && (
-                            <span className="kiosk-sold-out">품절</span>
-                          )}
-                          <span className="kiosk-name">{m.name}</span>
-                          <span className="kiosk-price">
-                            {formatWon(m.price)}
-                          </span>
-                        </button>
-                      );
-                    })}
+                    {visible.map((m) => (
+                      <MenuCard
+                        key={m.id}
+                        menu={m}
+                        categoryName={categoryName(m.categoryId)}
+                        selected={m.id === selectedMenuId}
+                        changed={changedMenuIds.has(m.id)}
+                        mark={mark}
+                        onSelect={() => onSelectMenu(m.id)}
+                      />
+                    ))}
                   </div>
                 ) : (
                   <p className="kiosk-empty">등록된 메뉴가 없습니다.</p>
@@ -218,8 +354,9 @@ export function KioskPreview({
         </div>
       </div>
       <p className="preview-note">
-        실제 키오스크 화면을 축소한 모습입니다. 카드를 누르면 편집할 수 있고,
-        점선 ＋ 버튼은 편집용이라 실제 키오스크에는 없습니다.
+        실제 키오스크 화면을 축소한 모습입니다. 카드를 누르면 편집하고, 끌면
+        순서를 바꿉니다. 점선 ＋ 버튼과 주황 점은 편집용 표시라 실제
+        키오스크에는 없습니다.
       </p>
     </section>
   );

@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { useId, type ReactNode, type Ref } from "react";
 
 // 편집 폼 공통 입력. 오류 문구는 aria-describedby로 입력과 연결한다.
 export function TextField({
@@ -10,6 +10,8 @@ export function TextField({
   multiline = false,
   inputMode,
   hint,
+  placeholder,
+  inputRef,
 }: {
   label: string;
   value: string;
@@ -19,12 +21,15 @@ export function TextField({
   multiline?: boolean;
   inputMode?: "numeric";
   hint?: ReactNode;
+  placeholder?: string;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   const id = useId();
   const props = {
     id,
     value,
     maxLength,
+    placeholder,
     "aria-invalid": error ? true : undefined,
     "aria-describedby": `${id}-help`,
   };
@@ -40,6 +45,7 @@ export function TextField({
       ) : (
         <input
           {...props}
+          ref={inputRef}
           inputMode={inputMode}
           onChange={(e) => onChange(e.target.value)}
         />
