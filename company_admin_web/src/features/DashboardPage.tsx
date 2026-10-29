@@ -158,7 +158,7 @@ export function DashboardPage({
           {devicesResult.error && liveDevices && <ErrorState message="실제 기기 조회 실패. Mock 수치로 대체하지 않습니다." onRetry={devicesResult.reload} />}
         </section>
       </Card>
-      <Section title="최근 주문 내역">
+      <Section title="최근 주문 내역 · 최대 5건">
         <a className="dashboard-list-link" href="#orders" aria-label="최근 주문 내역 전체 보기"
           onClick={(event) => { event.preventDefault(); onNavigate("orders"); }}>
           전체 보기 <ArrowRight size={16} aria-hidden="true" />
@@ -172,7 +172,7 @@ export function DashboardPage({
           onRetry={result.reload}
         />
       ) : (
-        <OrderTable orders={latestOrders} onDetail={setOrder} />
+        <OrderTable orders={latestOrders} onDetail={setOrder} pagination={false} />
       )}
       <Section title="점주 미연결 매장">
         <a className="dashboard-list-link" href="#stores" aria-label="점주 미연결 매장 전체 보기"

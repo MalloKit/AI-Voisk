@@ -84,10 +84,9 @@ export function StoresPage({
   );
   return (
     <>
-      <Heading title="매장 관리">
+      <Heading title="매장 관리" actions={writable && <button className="button-primary" onClick={() => { setNotice(""); setFocusEdit(false); setEditing(null); }}>매장 등록</button>}>
         등록 매장의 기본 정보와 담당자, 점주 연결 현황을 확인합니다.
       </Heading>
-      {writable && <div className="store-page-actions"><button className="button-primary" onClick={() => { setNotice(""); setFocusEdit(false); setEditing(null); }}>매장 등록</button></div>}
       {notice && <p role="status" className="form-feedback">{notice} 목록과 운영 요약은 최신 조회 결과로 갱신합니다.</p>}
       {live && result.loading ? <Loading text="실제 매장을 불러오는 중…" /> : live && result.error ? (
         <ErrorState message="실제 매장 조회 실패. Mock 데이터로 대체하지 않습니다." onRetry={result.reload} />

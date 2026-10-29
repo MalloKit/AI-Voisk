@@ -50,10 +50,9 @@ export function OwnersPage({
   );
   return (
     <>
-      <Heading title="점주 계정">
+      <Heading title="점주 계정" actions={repository?.create && <button className="button-primary" onClick={() => { setNotice(""); setCreating(true); }}>점주 계정 생성</button>}>
         점주 로그인 ID와 계정별 연결 매장을 조회합니다.
       </Heading>
-      {repository?.create && <div className="store-page-actions"><button className="button-primary" onClick={() => { setNotice(""); setCreating(true); }}>점주 계정 생성</button></div>}
       {notice && <p role="status" className="form-feedback">{notice}</p>}
       {live && result.loading ? <Loading text="실제 점주 계정을 불러오는 중…" /> :
         live && result.error ? (

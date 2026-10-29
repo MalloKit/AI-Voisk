@@ -18,14 +18,18 @@ export function Card({
 export function Heading({
   title,
   children,
+  actions,
 }: {
   title: string;
   children: ReactNode;
+  actions?: ReactNode;
 }) {
   return (
-    <header className="page-heading">
-      <h1>{title}</h1>
-      <p>{children}</p>
+    <header className={`page-heading${actions ? " page-heading-with-actions" : ""}`}>
+      {actions ? <>
+        <div><h1>{title}</h1><p>{children}</p></div>
+        <div className="page-heading-actions">{actions}</div>
+      </> : <><h1>{title}</h1><p>{children}</p></>}
     </header>
   );
 }
@@ -163,6 +167,7 @@ export function Table<T>({
   columns,
   rowId,
   label,
+  pagination = true,
   emptyMessage = "조건에 맞는 결과가 없습니다. 검색어나 필터를 변경해 주세요.",
 }: {
   rows: T[];
@@ -170,15 +175,16 @@ export function Table<T>({
   rowId(row: T): string | number;
   label: string;
   emptyMessage?: string;
+  pagination?: boolean;
 }) {
   const keys = rows.map(rowId).join("|");
   const [state, setState] = useState({ keys, page: 0 });
   const page =
-    state.keys === keys
+    pagination && state.keys === keys
       ? Math.min(state.page, Math.max(0, Math.ceil(rows.length / 5) - 1))
       : 0;
   const start = page * 5,
-    end = Math.min(start + 5, rows.length);
+    end = pagination ? Math.min(start + 5, rows.length) : rows.length;
   if (!rows.length) return <Card className="empty">{emptyMessage}</Card>;
   return (
     <div className="table-card">
@@ -210,7 +216,7 @@ export function Table<T>({
           </tbody>
         </table>
       </div>
-      <div className="pagination">
+      {pagination && <div className="pagination">
         <span>
           {start + 1}–{end} / {rows.length}건
         </span>
@@ -230,7 +236,7 @@ export function Table<T>({
         >
           <ChevronRight />
         </button>
-      </div>
+      </div>}
     </div>
   );
 }

@@ -170,8 +170,7 @@ function LiveDevicesPage({
   const moment = (value: string | null) => value === null ? "미수집" : dateLabel(value, true);
   return (
     <>
-      <Heading title="기기 관리">등록된 기기와 설치 매장 정보를 확인합니다.</Heading>
-      {repository.create && liveStores && storesResult && <div className="store-page-actions"><button className="button-primary" onClick={() => { setNotice(""); setCreating(true); }}>기기 등록</button></div>}
+      <Heading title="기기 관리" actions={repository.create && liveStores && storesResult && <button className="button-primary" onClick={() => { setNotice(""); setCreating(true); }}>기기 등록</button>}>등록된 기기와 설치 매장 정보를 확인합니다.</Heading>
       {notice && <p role="status" className="form-feedback">{notice}</p>}
       <Card className="notice">
         활성화는 주문 허용 상태이며 온라인 상태가 아닙니다. 연결 상태는 미확인입니다.

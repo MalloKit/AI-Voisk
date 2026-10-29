@@ -216,7 +216,7 @@ describe("operational dashboard presentation", () => {
     s.orders.load.mockResolvedValue(Array.from({ length: count }, (_, index) => ({ ...order, order_id: index + 1, ordered_at: old })));
     await open(s);
     expect(metric("최근 7일 주문")).toHaveTextContent("0건");
-    expect(screen.getByRole("heading", { name: "최근 주문 내역" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "최근 주문 내역 · 최대 5건" })).toBeInTheDocument();
     const details = screen.queryAllByRole("button", { name: /주문 상세:/ });
     expect(details).toHaveLength(Math.min(5, count));
     expect(details.map((node) => node.getAttribute("aria-label")))

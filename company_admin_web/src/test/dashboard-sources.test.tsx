@@ -62,6 +62,28 @@ function deferred<T>() {
 }
 
 describe("shared live dashboard sources", () => {
+  it("limits dashboard orders to five without pagination and preserves access to all seven orders", async () => {
+    const repos = repositories();
+    repos.orders.load.mockResolvedValue(Array.from({ length: 7 }, (_, i) => order(i + 1)));
+    const { user } = await open(repos);
+    await screen.findByRole("heading", { name: "최근 주문 내역 · 최대 5건" });
+    const table = await screen.findByRole("table", { name: "주문 목록" });
+    expect(within(table).getAllByRole("row")).toHaveLength(6);
+    expect(table).toHaveTextContent("#7");
+    expect(table).not.toHaveTextContent("#1");
+    expect(table.closest(".table-card")?.querySelector(".pagination")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "주문 상세: #7" }));
+    await within(screen.getByRole("dialog")).findByText("DB 매장 1");
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "닫기" }));
+    await user.click(screen.getByRole("link", { name: "최근 주문 내역 전체 보기" }));
+    await screen.findByRole("heading", { name: "주문 조회", level: 1 });
+    expect(screen.getByText("1–5 / 7건")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "다음 페이지" }));
+    expect(screen.getByText("6–7 / 7건")).toBeInTheDocument();
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(3);
+    expect(repos.orders.load).toHaveBeenCalledTimes(1);
+  });
+
   it("shows successful zero store and owner counts without using Mock metrics", async () => {
     await open();
     await waitFor(() => expect(metric("등록 매장")).toHaveTextContent("0곳"));

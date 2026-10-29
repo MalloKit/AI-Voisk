@@ -90,7 +90,7 @@ describe("clean admin shell presentation", () => {
       expect(metric.querySelector("svg")).not.toBeNull();
       expect(metric.querySelector("small")).toBeNull();
     }
-    expect(screen.getByRole("heading", { name: "최근 주문 내역" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "최근 주문 내역 · 최대 5건" })).toBeInTheDocument();
     expect(screen.queryByText(/매장:.*API|점주:.*Mock|기기:.*Mock|알림:.*Mock/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "기기 관리" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "장애/알림" })).toBeInTheDocument();

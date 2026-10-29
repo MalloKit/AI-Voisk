@@ -25,13 +25,16 @@ import { OrderDetails } from "./details";
 export function OrderTable({
   orders,
   onDetail,
+  pagination = true,
 }: {
   orders: Order[];
   onDetail(o: Order): void;
+  pagination?: boolean;
 }) {
   return (
     <Table<Order>
       label="주문 목록"
+      pagination={pagination}
       rows={orders}
       rowId={(o) => o.order_id}
       columns={[

@@ -658,7 +658,12 @@ dd {
 }
 
 
-.store-page-actions { display: flex; justify-content: flex-end; margin-bottom: var(--md); }
+.page-heading-with-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--lg); }
+.page-heading-actions { display: flex; flex-wrap: wrap; gap: var(--sm); }
+@media (max-width: 599px) {
+  .page-heading-with-actions { grid-template-columns: minmax(0, 1fr); gap: var(--md); }
+  .page-heading-actions { justify-self: start; max-width: 100%; }
+}
 .store-form { display: flex; flex-direction: column; gap: var(--lg); }
 .store-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lg); }
 .store-form-grid .field { min-width: 0; }
