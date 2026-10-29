@@ -163,12 +163,15 @@ export function Table<T>({
   rowId,
   label,
   emptyMessage = "조건에 맞는 결과가 없습니다. 검색어나 필터를 변경해 주세요.",
+  onRowClick,
 }: {
   rows: T[];
   columns: Column<T>[];
   rowId(row: T): string | number;
   label: string;
   emptyMessage?: string;
+  // 행 전체를 누를 수 있게 한다. 키보드 사용자를 위해 칸 안에도 버튼을 둔다.
+  onRowClick?(row: T): void;
 }) {
   const keys = rows.map(rowId).join("|");
   const [state, setState] = useState({ keys, page: 0 });
@@ -200,7 +203,11 @@ export function Table<T>({
           </thead>
           <tbody>
             {rows.slice(start, end).map((row) => (
-              <tr key={rowId(row)}>
+              <tr
+                key={rowId(row)}
+                className={onRowClick ? "clickable" : undefined}
+                onClick={onRowClick && (() => onRowClick(row))}
+              >
                 {columns.map((c, i) => (
                   <td key={i}>{c.render(row)}</td>
                 ))}

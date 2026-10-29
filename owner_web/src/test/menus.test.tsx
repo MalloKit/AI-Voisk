@@ -8,7 +8,12 @@ async function openMenus(repository = new MockOwnerRepository()) {
   const user = userEvent.setup();
   render(<App repository={repository} />);
   await screen.findByRole("heading", { level: 1, name: "오늘 현황" });
-  await user.click(screen.getByRole("button", { name: /메뉴 관리/ }));
+  await user.click(
+    within(screen.getByRole("navigation", { name: "주요 화면" })).getByRole(
+      "button",
+      { name: /메뉴 관리/ },
+    ),
+  );
   return { user, repository };
 }
 const preview = () => screen.getByRole("region", { name: "키오스크 미리보기" });
@@ -306,7 +311,12 @@ describe("품절 즉시 반영", () => {
     await user.click(screen.getByRole("switch", { name: "품절 (즉시 반영)" }));
     await user.click(screen.getByRole("button", { name: "오늘 현황" }));
     expect(screen.queryByLabelText(/품절 \d개/)).toBeNull();
-    await user.click(screen.getByRole("button", { name: /메뉴 관리/ }));
+    await user.click(
+      within(screen.getByRole("navigation", { name: "주요 화면" })).getByRole(
+        "button",
+        { name: /메뉴 관리/ },
+      ),
+    );
     expect(card("사이다")).not.toHaveTextContent("품절");
   });
 

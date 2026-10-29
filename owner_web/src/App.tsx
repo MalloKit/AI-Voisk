@@ -5,6 +5,7 @@ import {
   type OwnerRepository,
 } from "./data/ownerRepository";
 import { soldOutMenuCount } from "./data/selectors";
+import { DEMO_NOW } from "./data/demoClock";
 import { useAsync } from "./hooks/useAsync";
 import { ErrorState, Loading, Modal } from "./components/ui";
 import { OwnerShell } from "./layout/OwnerShell";
@@ -17,8 +18,11 @@ import { StorePage } from "./features/StorePage";
 const defaultRepository = new MockOwnerRepository();
 export function App({
   repository = defaultRepository,
+  now = DEMO_NOW,
 }: {
   repository?: OwnerRepository;
+  // '오늘' 기준 시각. 시연에서는 고정 시각을 쓰고, 실제 API로 바꿀 때 현재 시각을 넘긴다.
+  now?: string;
 }) {
   const [page, setPage] = useState<Page>("today");
   // 메뉴 관리에 저장 안 된 변경이 있으면 이동 전에 확인한다.
@@ -52,6 +56,9 @@ export function App({
       </div>
     );
   const { profile, board } = result.data;
+  // 메뉴판은 App이 갖고 있어서 품절 배지·오늘 현황·주문 금액이 같은 값을 본다.
+  const changeBoard = (update: (b: typeof board) => typeof board) =>
+    result.setData((d) => d && { ...d, board: update(d.board) });
   function navigate(next: Page) {
     if (next === page) return;
     if (menusGuard.current?.changeCount) setLeavingTo(next);
@@ -79,20 +86,28 @@ export function App({
         storeName={profile.store.name}
         soldOutCount={soldOutMenuCount(board)}
       >
-        {page === "today" && <TodayPage />}
+        {page === "today" && (
+          <TodayPage
+            repository={repository}
+            board={board}
+            now={now}
+            onBoardChange={changeBoard}
+            onNavigate={navigate}
+          />
+        )}
         {page === "menus" && (
           <MenusPage
             repository={repository}
             storeId={profile.store.id}
             board={board}
-            onBoardChange={(update) =>
-              result.setData((d) => d && { ...d, board: update(d.board) })
-            }
+            onBoardChange={changeBoard}
             guard={menusGuard}
           />
         )}
-        {page === "orders" && <OrdersPage />}
-        {page === "store" && <StorePage />}
+        {page === "orders" && (
+          <OrdersPage repository={repository} board={board} now={now} />
+        )}
+        {page === "store" && <StorePage profile={profile} />}
       </OwnerShell>
       {leavingTo && (
         <Modal

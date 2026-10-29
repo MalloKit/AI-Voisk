@@ -953,3 +953,241 @@ dd {
     padding: var(--md) var(--sm);
   }
 }
+
+/* ---- 오늘 현황 ---- */
+.metrics .card {
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+.metric-value {
+  margin: var(--md) 0 var(--xs);
+}
+.metric-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--xs);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.metric-button {
+  text-align: left;
+  font-weight: 400;
+  color: var(--ink);
+  cursor: pointer;
+}
+.metric-button:hover {
+  border-color: var(--brand);
+  background: var(--surface);
+}
+.metric-button.attention,
+.attention-card {
+  border: 2px solid var(--error);
+  background: var(--error-surface);
+}
+.metric-button.attention .metric-title svg,
+.metric-button.attention .metric-value {
+  color: var(--error);
+}
+.today-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--lg);
+  margin-top: var(--lg);
+}
+.today-card {
+  margin-bottom: 0;
+}
+.today-card .section-heading {
+  margin-bottom: var(--md);
+}
+.today-card .section-heading svg {
+  color: var(--muted);
+}
+.strong {
+  font-weight: 600;
+  margin: 0 0 var(--md);
+}
+.ok-text {
+  color: var(--ok);
+}
+.today-list,
+.recent-orders,
+.top-menus {
+  list-style: none;
+  margin: 0 0 var(--md);
+  padding: 0;
+}
+.today-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sm) var(--md);
+  padding: var(--sm) 0;
+  border-bottom: 1px solid var(--border);
+}
+.today-list-main {
+  flex: 1;
+  min-width: 120px;
+  font-weight: 600;
+}
+.today-list button {
+  padding: var(--sm) var(--md);
+}
+.top-menus li {
+  display: grid;
+  /* 수량·매출 칸 폭을 고정해 막대 시작점을 맞춘다 */
+  grid-template-columns: 24px minmax(80px, 1fr) minmax(60px, 2fr) 40px 80px;
+  align-items: center;
+  gap: var(--md);
+  padding: var(--sm) 0;
+}
+.top-rank {
+  font-weight: 700;
+  color: var(--brand);
+  text-align: center;
+}
+.top-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.top-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--canvas);
+  overflow: hidden;
+}
+.top-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--brand);
+}
+.top-quantity,
+.top-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.top-amount {
+  color: var(--muted);
+}
+.recent-order {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 48px auto 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--md);
+  margin-bottom: var(--xs);
+  padding: var(--sm) var(--md);
+  border-color: transparent;
+  text-align: left;
+  font-weight: 400;
+  color: var(--ink);
+}
+.recent-order:hover {
+  border-color: var(--border);
+}
+.recent-id {
+  font-weight: 700;
+}
+.recent-menu {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 주문 내역 ---- */
+.result-summary {
+  margin: 0 0 var(--md);
+}
+tr.clickable {
+  cursor: pointer;
+}
+tr.clickable:hover td {
+  background: var(--canvas);
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  column-gap: var(--xl);
+}
+.order-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+.order-lines > li {
+  padding: var(--md) 0;
+  border-bottom: 1px solid var(--border);
+}
+.order-line-head {
+  display: flex;
+  gap: var(--md);
+  align-items: baseline;
+}
+.order-line-head strong {
+  flex: 1;
+}
+.order-line-amount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.order-line-options {
+  list-style: none;
+  margin: var(--xs) 0 0;
+  padding: 0 0 0 var(--lg);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.order-line-options li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--md);
+}
+.order-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: var(--md) 0;
+  font-size: var(--text-lg);
+}
+
+/* ---- 매장 정보 ---- */
+.info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sm);
+  margin: 0 0 var(--md);
+  padding: var(--md) var(--lg);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--ink);
+}
+.info-box svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--brand);
+}
+@media (max-width: 999px) {
+  .today-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 599px) {
+  .recent-order {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+  }
+  .recent-order > .muted,
+  .recent-order > span:nth-child(3) {
+    display: none;
+  }
+  .top-menus li {
+    grid-template-columns: 24px minmax(0, 1fr) 40px 80px;
+  }
+  .top-bar {
+    display: none;
+  }
+}
