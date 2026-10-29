@@ -112,10 +112,10 @@ describe("store number integration", () => {
     await user.click(screen.getByRole("button", { name: "저장" }));
     await waitFor(() => expect(repository.create).toHaveBeenCalledWith({ ...payload, phone: "010-1234-5678" }, expect.any(AbortSignal)));
   });
-  it("formats valid existing values for display without adding formatting-only changes to PATCH", async () => {
+  it("preserves existing values on open without adding formatting-only changes to PATCH", async () => {
     const { user, repository } = await editor(parseStore({ ...rawStore, phone: "0212345678" }));
-    expect(named("전화번호")).toHaveValue("02-1234-5678");
-    expect(named("사업자번호")).toHaveValue("000-00-00001");
+    expect(named("전화번호")).toHaveValue("0212345678");
+    expect(named("사업자번호")).toHaveValue("0000000001");
     fireEvent.change(named("매장명"), { target: { value: "이름만 변경" } });
     await user.click(screen.getByRole("button", { name: "저장" }));
     await waitFor(() => expect(repository.update).toHaveBeenCalledWith(1, { store_name: "이름만 변경" }, expect.any(AbortSignal)));

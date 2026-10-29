@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { LimitedInput } from "../components/LimitedInput";
 import { NumberInput } from "../components/NumberInput";
-import { numberDigits, validPhone, validBusiness, formatNumber, canonicalNumber, sameNumber } from "../data/koreanNumbers";
+import { numberDigits, validPhone, validBusiness, canonicalNumber, sameNumber } from "../data/koreanNumbers";
 import type { ApiStore } from "../data/models";
 import type { StoreInput, StoreRepository } from "../data/storeRepository";
 
@@ -49,12 +50,7 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
   onBusy(busy: boolean): void;
 }) {
   const original = store ? storeValues(store) : undefined;
-  const [values, setValues] = useState(() => {
-    const initial = storeValues(store);
-    if (validPhone(initial.phone)) initial.phone = formatNumber(initial.phone, "phone");
-    if (validBusiness(initial.business_no)) initial.business_no = formatNumber(initial.business_no, "business");
-    return initial;
-  });
+  const [values, setValues] = useState(() => storeValues(store));
   const [errors, setErrors] = useState<Partial<Record<Key, string>>>({});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -106,18 +102,22 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
   }
   return <form id={formId} ref={form} className="store-form" onSubmit={save} noValidate aria-busy={busy}>
     <div className="store-form-grid">
-      {storeFields.map(([key, label]) => <label className="field form-field" key={key}>
+      {storeFields.map(([key, label, limit]) => <label className="field form-field" key={key}>
         <span id={key + "-label"}>{label}{key !== "address_detail" && " *"}</span>
         {key === "phone" || key === "business_no" ? <NumberInput
           aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy} required
           kind={key === "phone" ? "phone" : "business"} type="tel" inputMode={key === "phone" ? "tel" : "numeric"}
           aria-invalid={!!errors[key]} aria-describedby={errors[key] ? key + "-error" : undefined}
+          maxDigits={key === "phone" ? 11 : 10} originalValue={original?.[key]}
+          onRejected={() => setErrors((previous) => ({ ...previous, [key]: `숫자는 최대 ${key === "phone" ? 11 : 10}자리이며 지원하는 문자만 입력해 주세요.` }))}
           onValueChange={(value) => updateValue(key, value)} />
-          : <input aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy}
+          : <LimitedInput aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy}
             required={key !== "address_detail"} aria-invalid={!!errors[key]}
             aria-describedby={errors[key] ? key + "-error" : undefined}
             inputMode={key === "store_code" ? "numeric" : undefined}
-            onChange={(event) => updateValue(key, event.target.value)} />}
+            rule={{ max: limit, kind: key === "store_code" ? "postcode" : "text", original: original?.[key] }}
+            onRejected={() => setErrors((previous) => ({ ...previous, [key]: key === "store_code" ? "우편번호는 숫자 5자리까지 입력해 주세요." : `${limit}자 이하로 입력해 주세요.` }))}
+            onValueChange={(value) => updateValue(key, value)} />}
         {errors[key] && <p id={key + "-error"} className="field-error">{errors[key]}</p>}
       </label>)}
     </div>

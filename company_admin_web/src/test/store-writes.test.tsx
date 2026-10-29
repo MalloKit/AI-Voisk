@@ -135,10 +135,13 @@ describe("live store registration and editing", () => {
     }
     fill();
     fireEvent.change(screen.getByRole("textbox", { name: "우편번호 *" }), { target: { value: "abcde" } });
+    expect(screen.getByRole("textbox", { name: "우편번호 *" })).toHaveValue("00123");
+    fireEvent.change(screen.getByRole("textbox", { name: "우편번호 *" }), { target: { value: "123" } });
     fireEvent.change(screen.getByRole("textbox", { name: "사업자번호 *" }), { target: { value: "123-456" } });
     fireEvent.change(screen.getByRole("textbox", { name: "매장명 *" }), { target: { value: "가".repeat(101) } });
-    await user.click(screen.getByRole("button", { name: "저장" }));
     expect(screen.getByText("100자 이하로 입력해 주세요.")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "매장명 *" })).toHaveValue(input.store_name);
+    await user.click(screen.getByRole("button", { name: "저장" }));
     expect(screen.getByText(/우편번호는 숫자 5자리/)).toBeInTheDocument();
     expect(repo.create).not.toHaveBeenCalled();
   });
@@ -297,10 +300,10 @@ describe("live store registration and editing", () => {
     expect(legacy.address).toBe(" 부산 ");
   });
   it.each([
-    ["우편번호 *", "X0002", "우편번호는 숫자 5자리"],
-    ["사업자번호 *", "BAD-NEW", "사업자번호는 숫자 10자리"],
+    ["우편번호 *", "123", "우편번호는 숫자 5자리"],
+    ["사업자번호 *", "12345", "사업자번호는 숫자 10자리"],
     ["매장명 *", "", "매장명을(를) 입력해 주세요."],
-    ["전화번호 *", "가".repeat(51), "50자 이하로 입력해 주세요."],
+    ["전화번호 *", "0101234567", "지원하는 국내 전화번호 형식과 자리수를 확인해 주세요."],
   ])("validates the changed legacy field %s without validating untouched fields", async (label, value, message) => {
     const legacy = parseStore({ ...raw(), store_code: "T0001", business_no: "OLD" });
     const repo = repositories([legacy]); const { user } = await open(repo);
@@ -329,7 +332,7 @@ describe("live store registration and editing", () => {
     await user.click(screen.getByRole("button", { name: "매장 상세: 등록 매장" }));
     await user.click(await screen.findByRole("button", { name: "매장 정보 수정" }));
     const postcode = screen.getByRole("textbox", { name: "우편번호 *" });
-    fireEvent.change(postcode, { target: { value: "X0002" } });
+    fireEvent.change(postcode, { target: { value: "123" } });
     await user.click(screen.getByRole("button", { name: "저장" }));
     expect(postcode).toHaveAttribute("aria-invalid", "true");
     fireEvent.change(postcode, { target: { value: "T0001" } });
@@ -341,8 +344,15 @@ describe("live store registration and editing", () => {
   it("keeps create validation strict for the same legacy postcode and business number", async () => {
     const { user, repo } = await open();
     await user.click(screen.getByRole("button", { name: "매장 등록" })); fill();
-    fireEvent.change(screen.getByRole("textbox", { name: "우편번호 *" }), { target: { value: "T0001" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "사업자번호 *" }), { target: { value: "OLD" } });
+    const postcode = screen.getByRole("textbox", { name: "우편번호 *" });
+    const business = screen.getByRole("textbox", { name: "사업자번호 *" });
+    fireEvent.change(postcode, { target: { value: "T0001" } });
+    fireEvent.change(business, { target: { value: "OLD" } });
+    expect(postcode).toHaveValue(input.store_code);
+    expect(business).toHaveValue("000-00-00001");
+    // Invalid characters are now rejected during editing; short numeric values still reach save validation.
+    fireEvent.change(postcode, { target: { value: "123" } });
+    fireEvent.change(business, { target: { value: "12345" } });
     await user.click(screen.getByRole("button", { name: "저장" }));
     expect(screen.getByText("우편번호는 숫자 5자리로 입력해 주세요.")).toBeInTheDocument();
     expect(screen.getByText("사업자번호는 숫자 10자리로 입력해 주세요.")).toBeInTheDocument();
