@@ -9,7 +9,7 @@ import { useAsync } from "./hooks/useAsync";
 import { ErrorState, Loading } from "./components/ui";
 import { OwnerShell } from "./layout/OwnerShell";
 import { TodayPage } from "./features/TodayPage";
-import { MenusPage } from "./features/MenusPage";
+import { MenusPage } from "./features/menus/MenusPage";
 import { OrdersPage } from "./features/OrdersPage";
 import { StorePage } from "./features/StorePage";
 
@@ -56,7 +56,16 @@ export function App({
       soldOutCount={soldOutMenuCount(board)}
     >
       {page === "today" && <TodayPage />}
-      {page === "menus" && <MenusPage />}
+      {page === "menus" && (
+        <MenusPage
+          repository={repository}
+          storeId={profile.store.id}
+          board={board}
+          onBoardChange={(update) =>
+            result.setData((d) => d && { ...d, board: update(d.board) })
+          }
+        />
+      )}
       {page === "orders" && <OrdersPage />}
       {page === "store" && <StorePage />}
     </OwnerShell>

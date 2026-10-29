@@ -12,6 +12,9 @@ export interface OwnerRepository {
   getMenuBoard(signal?: AbortSignal): Promise<MenuBoard>;
   getOrderHistory(signal?: AbortSignal): Promise<OrderHistory>;
   getDevices(signal?: AbortSignal): Promise<KioskDevice[]>;
+  // 품절은 영업 중에 바로 알려야 하므로 저장 바를 거치지 않고 즉시 반영한다.
+  setMenuSoldOut(menuId: number, isSoldOut: boolean): Promise<void>;
+  setOptionSoldOut(optionId: number, isSoldOut: boolean): Promise<void>;
 }
 
 type Fixture = StoreProfile &
@@ -34,5 +37,15 @@ export class MockOwnerRepository implements OwnerRepository {
   }
   async getDevices() {
     return structuredClone(this.data.devices);
+  }
+  async setMenuSoldOut(menuId: number, isSoldOut: boolean) {
+    const menu = this.data.menus.find((m) => m.id === menuId);
+    if (!menu) throw new Error("Unknown Mock menu");
+    menu.isSoldOut = isSoldOut;
+  }
+  async setOptionSoldOut(optionId: number, isSoldOut: boolean) {
+    const option = this.data.options.find((o) => o.id === optionId);
+    if (!option) throw new Error("Unknown Mock option");
+    option.isSoldOut = isSoldOut;
   }
 }
