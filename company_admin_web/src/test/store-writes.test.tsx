@@ -167,8 +167,22 @@ describe("live store registration and editing", () => {
     await user.click(await screen.findByRole("button", { name: "매장 정보 수정" }));
     expect(screen.getByRole("textbox", { name: "매장명 *" })).toHaveValue("등록 매장");
     expect(within(screen.getByRole("dialog")).getAllByRole("textbox")).toHaveLength(8);
-    expect(screen.getByText("010·02·070 등 · 하이픈 자동 표시")).toHaveAttribute("id", "phone-format");
-    expect(screen.getByRole("textbox", { name: "전화번호 *" })).toHaveAttribute("aria-describedby", "phone-format");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.querySelector(".field-help, .form-feedback")).toBeNull();
+    for (const field of within(dialog).getAllByRole("textbox")) expect(field).not.toHaveAttribute("aria-describedby");
+    for (const label of ["매장명", "우편번호", "업종", "주소", "전화번호", "사업자번호", "대표자명"])
+      expect(within(dialog).getByRole("textbox", { name: label + " *" })).toBeRequired();
+    fireEvent.change(screen.getByRole("textbox", { name: "매장명 *" }), { target: { value: "" } });
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    expect(repo.update).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "매장명 *" })).toHaveFocus();
+    expect(screen.getByText("매장명을(를) 입력해 주세요.")).toBeInTheDocument();
+    for (const field of within(dialog).getAllByRole("textbox")) {
+      for (const attribute of ["aria-labelledby", "aria-describedby"]) {
+        const id = field.getAttribute(attribute);
+        if (id) expect(document.getElementById(id)).toBeInTheDocument();
+      }
+    }
     fireEvent.change(screen.getByRole("textbox", { name: "매장명 *" }), { target: { value: "등록 수정" } });
     await user.click(screen.getByRole("button", { name: "저장" }));
     await screen.findByText(/매장 정보를 저장했습니다/);

@@ -105,15 +105,13 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
     setErrors((previous) => ({ ...previous, [key]: previous[key] ? validateStore(next, original)[key] : undefined }));
   }
   return <form id={formId} ref={form} className="store-form" onSubmit={save} noValidate aria-busy={busy}>
-    {store && <p className="form-feedback">* 필수 항목 · 우편번호와 사업자번호 중복을 허용합니다.
-      변경한 항목만 검증·저장하며 기존 값은 자동 정정하지 않습니다. 담당 관리자·점주 연결은 유지합니다.</p>}
     <div className="store-form-grid">
-      {storeFields.map(([key, label, limit]) => <label className="field form-field" key={key}>
+      {storeFields.map(([key, label]) => <label className="field form-field" key={key}>
         <span id={key + "-label"}>{label}{key !== "address_detail" && " *"}</span>
         {key === "phone" || key === "business_no" ? <NumberInput
           aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy} required
           kind={key === "phone" ? "phone" : "business"} type="tel" inputMode={key === "phone" ? "tel" : "numeric"}
-          aria-invalid={!!errors[key]} aria-describedby={errors[key] ? key + "-error" : store ? key + "-format" : undefined}
+          aria-invalid={!!errors[key]} aria-describedby={errors[key] ? key + "-error" : undefined}
           onValueChange={(value) => updateValue(key, value)} />
           : <input aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy}
             required={key !== "address_detail"} aria-invalid={!!errors[key]}
@@ -121,9 +119,6 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
             inputMode={key === "store_code" ? "numeric" : undefined}
             onChange={(event) => updateValue(key, event.target.value)} />}
         {errors[key] && <p id={key + "-error"} className="field-error">{errors[key]}</p>}
-        {store && key !== "phone" && key !== "business_no" && <small className="field-help">최대 {limit}자</small>}
-        {store && key === "business_no" && <small id="business_no-format" className="field-help">숫자 10자리 · 000-00-00000 자동 표시</small>}
-        {store && key === "phone" && <small id="phone-format" className="field-help">010·02·070 등 · 하이픈 자동 표시</small>}
       </label>)}
     </div>
     {message && <p role="alert" className="form-feedback">{message}</p>}
