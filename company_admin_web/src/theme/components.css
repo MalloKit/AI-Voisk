@@ -723,6 +723,7 @@ dd {
 .owner-details-stores .detail-field:last-child { margin-bottom: 0; }
 
 /* A compact live device summary; full metadata remains in its detail dialog. */
+.devices-table { container-type: inline-size; }
 .devices-table table { min-width: 900px; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
 .devices-table th, .devices-table td { padding: var(--md); white-space: nowrap; }
 .devices-table th:nth-child(1) { width: 8%; }
@@ -730,8 +731,13 @@ dd {
 .devices-table th:nth-child(4), .devices-table th:nth-child(5) { width: 10%; }
 .devices-table th:nth-child(6) { width: 16%; }
 .device-cell-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.devices-table th:last-child, .devices-table td:last-child { position: sticky; right: 0; width: 88px; background: var(--surface); border-left: 1px solid var(--border); z-index: 1; }
-.devices-table th:last-child { background: var(--table-head); z-index: 2; }
+.devices-table th:last-child, .devices-table td:last-child { width: 88px; background: var(--surface); }
+.devices-table th:last-child { background: var(--table-head); }
+/* Match the table's minimum width using its own available space, not the viewport. */
+@container (max-width: 899.98px) {
+  .devices-table th:last-child, .devices-table td:last-child { position: sticky; right: 0; z-index: 1; }
+  .devices-table th:last-child { z-index: 2; }
+}
 
 /* Keep the live alert controls together on desktop without affecting other filters. */
 .alert-filters { display: grid; grid-template-columns: minmax(220px, 1.7fr) repeat(3, minmax(120px, 1fr)) auto auto; gap: var(--md); padding: var(--lg); }
