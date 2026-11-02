@@ -88,3 +88,58 @@ export interface Order {
   quantity: number;
   items: OrderItem[];
 }
+
+/** store_code is intentionally not interpreted as a postcode. */
+export interface ApiStore extends Omit<Store, "postcode"> {
+  storeCode: string;
+  adminName: string | null;
+  ownerLoginId: string | null;
+}
+
+export interface ApiOwner extends Owner {
+  storeCount: number;
+}
+export interface OwnerStore {
+  id: number;
+  name: string;
+  address: string;
+  addressDetail: string;
+  adminId: number;
+  adminName: string | null;
+}
+export interface ApiOwnerDetail extends ApiOwner {
+  stores: OwnerStore[];
+}
+
+/** 실제 기기 식별자는 주문 API와 동일한 정수이며 Mock Device와 분리합니다. */
+export interface ApiDevice {
+  device_id: number;
+  device_code: string;
+  store_id: number;
+  store_name: string;
+  store_address: string;
+  store_address_detail: string | null;
+  is_active: boolean;
+  registered_at: string;
+  app_version: string | null;
+  last_seen_at: string | null;
+  last_synced_at: string | null;
+}
+
+/** 실제 정수 알림 ID와 원본 문자열을 Mock DeviceAlert 모델과 분리합니다. */
+export interface ApiAlert {
+  alert_id: number;
+  device_id: number;
+  device_code: string;
+  store_id: number;
+  store_name: string;
+  alert_type: string;
+  severity: string;
+  message: string;
+  alert_status: string;
+  occurred_at: string;
+  acknowledged_at: string | null;
+  acknowledged_by: number | null;
+  acknowledged_by_name: string | null;
+  resolved_at: string | null;
+}

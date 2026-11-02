@@ -43,7 +43,7 @@ async function open(
   orders: OrderRepository | null = null,
 ) {
   const user = userEvent.setup();
-  render(<App repository={repository} orderRepository={orders} />);
+  render(<App alertRepository={null} deviceRepository={null} ownerRepository={null} storeRepository={null} repository={repository} orderRepository={orders} />);
   await screen.findByRole("heading", { level: 1, name: "운영 요약" });
   return user;
 }
@@ -65,9 +65,10 @@ describe("six screens and Flutter behaviour parity", () => {
     await user.click(
       screen.getByRole("button", { name: "매장 상세: 온기 분식" }),
     );
-    expect(screen.getByRole("dialog")).toHaveTextContent("담당자 및 점주 연결");
+    expect(within(screen.getByRole("dialog")).queryByRole("heading", { name: "매장 기본 정보" })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "담당자·점주 연결", level: 3 })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "닫기" }));
-    await user.click(screen.getByRole("button", { name: "미연결 매장 보기" }));
+    await user.click(screen.getByRole("link", { name: "점주 미연결 매장 전체 보기" }));
     expect(
       screen.getByRole("heading", { name: "매장 목록 · 2곳" }),
     ).toBeInTheDocument();
@@ -208,7 +209,7 @@ describe("six screens and Flutter behaviour parity", () => {
     const repository = new MockAdminRepository();
     vi.spyOn(repository, "load").mockRejectedValueOnce(new Error("fail"));
     const user = userEvent.setup();
-    render(<App repository={repository} orderRepository={null} />);
+    render(<App alertRepository={null} deviceRepository={null} ownerRepository={null} storeRepository={null} repository={repository} orderRepository={null} />);
     expect(screen.getByRole("status")).toBeInTheDocument();
     await screen.findByText("데이터를 불러오지 못했습니다.");
     await user.click(screen.getByRole("button", { name: "다시 시도" }));
@@ -254,8 +255,8 @@ describe("live order UI, no Mock substitution", () => {
     };
     const user = await open(new MockAdminRepository(), repo);
     await user.click(nav("주문 조회"));
-    await screen.findByText("실제 주문 목록 · 2건");
-    expect(screen.getByText("실제 주문 API")).toBeInTheDocument();
+    await screen.findByText("주문 목록 · 2건");
+    expect(screen.queryByText("실제 주문 API")).not.toBeInTheDocument();
     expect(screen.getByText("매장 식사 / 테이블 3번")).toBeInTheDocument();
     await user.type(search(), "1");
     await user.click(screen.getByRole("button", { name: "주문 상세: #1" }));
@@ -264,9 +265,9 @@ describe("live order UI, no Mock substitution", () => {
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "초기화" }));
     await user.selectOptions(screen.getByLabelText("조회 기간"), "0");
-    expect(screen.getByText("실제 주문 목록 · 3건")).toBeInTheDocument();
+    expect(screen.getByText("주문 목록 · 3건")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("매장"), "2");
-    expect(screen.getByText("실제 주문 목록 · 1건")).toBeInTheDocument();
+    expect(screen.getByText("주문 목록 · 1건")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "새로고침" }));
     await waitFor(() => expect(repo.load).toHaveBeenCalledTimes(2));
   });
@@ -277,7 +278,7 @@ describe("live order UI, no Mock substitution", () => {
     };
     const user = await open(new MockAdminRepository(), repo);
     await user.click(nav("주문 조회"));
-    await screen.findByText("실제 주문 목록 · 1건");
+    await screen.findByText("주문 목록 · 1건");
     expect(screen.getByRole("table")).toHaveTextContent("매장 식사");
     expect(screen.getByRole("table")).not.toHaveTextContent("테이블 null");
   });
@@ -297,7 +298,7 @@ describe("live order UI, no Mock substitution", () => {
       "Mock 데이터로 대체하지 않습니다",
     );
     await user.click(screen.getByRole("button", { name: "다시 시도" }));
-    await screen.findByText("실제 주문 목록 · 0건");
+    await screen.findByText("주문 목록 · 0건");
     expect(screen.getByText(/조건에 맞는 결과/)).toBeInTheDocument();
   });
   it("shows detail loading/failure and permits retry", async () => {
@@ -316,7 +317,7 @@ describe("live order UI, no Mock substitution", () => {
     };
     const user = await open(new MockAdminRepository(), repo);
     await user.click(nav("주문 조회"));
-    await screen.findByText("실제 주문 목록 · 1건");
+    await screen.findByText("주문 목록 · 1건");
     await user.click(screen.getByRole("button", { name: "주문 상세: #1" }));
     await screen.findByRole("alert");
     await user.click(screen.getByRole("button", { name: "다시 시도" }));
@@ -336,7 +337,7 @@ describe("live order UI, no Mock substitution", () => {
       new ApiOrderRepository("http://localhost:8001", transport),
     );
     await user.click(nav("주문 조회"));
-    await screen.findByText("실제 주문 목록 · 1건");
+    await screen.findByText("주문 목록 · 1건");
     await user.click(screen.getByRole("button", { name: "주문 상세: #1" }));
     await screen.findByText("옵션: 밥 추가, 계란 추가");
     expect(transport.mock.calls.map((c) => c[0])).toEqual([

@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from main import app
+from auth_test_support import authenticated_client
 
 
 class Cursor:
@@ -81,6 +82,9 @@ class OrderApiTests(unittest.TestCase):
         self.no_network = patch('database.connect', side_effect=AssertionError('Live DB access forbidden'))
         self.no_network.start()
         self.client = TestClient(app)
+        self.auth_context = authenticated_client(self.client)
+        self.auth_context.__enter__()
+        self.addCleanup(self.auth_context.__exit__, None, None, None)
         self.payload = dict(store_id=1,device_id=7,client_order_id=str(uuid4()),order_type='takeaway',table_no=None,
                             items=[dict(menu_id=10,quantity=2,option_ids=[101,102])])
     def tearDown(self):
@@ -210,6 +214,24 @@ class OrderApiTests(unittest.TestCase):
         remote.close()
         self.assertEqual(self.client.get('/admin/orders/999').status_code,404)
         self.assertEqual(self.client.get('/admin/orders?limit=201').status_code,422)
+
+
+
+    def test_kiosk_order_without_admin_cookie_keeps_retry_and_activation_rules(self):
+        with TestClient(app) as kiosk:
+            self.assertEqual(len(kiosk.cookies), 0)
+            first = kiosk.post('/orders', json=self.payload)
+            self.assertEqual(first.status_code, 200)
+            self.assertEqual(kiosk.get('/admin/orders').status_code, 401)
+            self.db.execute('UPDATE kiosk_device SET is_active=0 WHERE device_id=7')
+            self.db.commit()
+            replay = kiosk.post('/orders', json=self.payload)
+            self.assertEqual(replay.status_code, 200)
+            self.assertTrue(replay.json()['replayed'])
+            self.assertEqual(replay.json()['order_id'], first.json()['order_id'])
+            self.payload['client_order_id'] = str(uuid4())
+            self.assertEqual(kiosk.post('/orders', json=self.payload).status_code, 422)
+            self.assertEqual(self.count('orders'), 1)
 
 
 if __name__ == '__main__': unittest.main()

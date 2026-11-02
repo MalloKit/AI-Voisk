@@ -1,3 +1,4 @@
+import { adminRequest } from "./apiSession.ts";
 import type { Order, OrderItem } from "./models";
 
 export interface OrderRepository {
@@ -91,7 +92,7 @@ export class ApiOrderRepository implements OrderRepository {
     try {
       // Preserve an optional base path, like the Flutter repository.
       const target = `${url.origin}${url.pathname.replace(/\/$/, "")}${path}`;
-      const response = await this.transport(target, {
+      const response = await adminRequest(this.transport, target, {
         method: "GET",
         signal: controller.signal,
       });
@@ -103,22 +104,30 @@ export class ApiOrderRepository implements OrderRepository {
     }
   }
   async load(signal?: AbortSignal): Promise<Order[]> {
-    const orders: Order[] = [];
-    let total: number;
+    const orders = new Map<number, Order>();
+    let offset = 0;
+    let total: number | undefined;
     do {
       const result = await this.get(
-        `/admin/orders?limit=200&offset=${orders.length}`,
+        `/admin/orders?limit=200&offset=${offset}`,
         signal,
       );
       if (!Array.isArray(result.orders))
         throw new Error("주문 목록 형식을 확인해 주세요.");
-      total = number(result.total);
+      const reportedTotal = number(result.total);
+      if (!Number.isSafeInteger(reportedTotal) || reportedTotal < 0)
+        throw new Error("주문 목록 건수를 확인해 주세요.");
+      // Bound this load by its first total instead of chasing a growing order stream.
+      total ??= reportedTotal;
       const rows = result.orders.map(parseOrder);
-      orders.push(...rows);
+      // OFFSET counts received rows, not unique IDs. Keep the first occurrence and its ordering.
+      offset += rows.length;
+      for (const order of rows) if (!orders.has(order.order_id)) orders.set(order.order_id, order);
       if (!rows.length) break;
-    } while (orders.length < total);
-    return orders;
+    } while (offset < total);
+    return [...orders.values()];
   }
+
   async detail(id: number, signal?: AbortSignal) {
     if (!Number.isInteger(id) || id < 1)
       throw new Error("주문 ID를 확인해 주세요.");
