@@ -77,20 +77,21 @@ export function OwnerDetails(
         <Field label="점주 ID">{owner.id}</Field>
         <Field label="로그인 ID">{owner.loginId}</Field>
       </dl>
-      <hr />
-      <Section title={`연결 매장 · ${stores.length}곳`} />
-      {!stores.length && <p>연결된 매장이 없습니다.</p>}
-      <dl>
-        {stores.map((s) => (
-          <Field label={s.name} key={s.id}>
-            매장 ID: {s.id}
-            <br />
-            {`${s.address} ${s.addressDetail}`.trim()}
-            <br />
-            담당 관리자: {s.adminName ?? "정보 없음"} (ID: {s.adminId})
-          </Field>
-        ))}
-      </dl>
+      <section className="owner-details-stores" aria-label="연결 매장">
+        <h3>{`연결 매장 · ${stores.length}곳`}</h3>
+        {!stores.length && <p>연결된 매장이 없습니다.</p>}
+        <dl>
+          {stores.map((s) => (
+            <Field label={s.name} key={s.id}>
+              매장 ID: {s.id}
+              <br />
+              {`${s.address} ${s.addressDetail}`.trim()}
+              <br />
+              담당 관리자: {s.adminName ?? "정보 없음"} (ID: {s.adminId})
+            </Field>
+          ))}
+        </dl>
+      </section>
     </>
   );
 }

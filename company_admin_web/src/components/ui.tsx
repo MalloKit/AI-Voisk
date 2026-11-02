@@ -168,6 +168,7 @@ export function Table<T>({
   rowId,
   label,
   pagination = true,
+  className = "",
   emptyMessage = "조건에 맞는 결과가 없습니다. 검색어나 필터를 변경해 주세요.",
 }: {
   rows: T[];
@@ -176,6 +177,7 @@ export function Table<T>({
   label: string;
   emptyMessage?: string;
   pagination?: boolean;
+  className?: string;
 }) {
   const keys = rows.map(rowId).join("|");
   const [state, setState] = useState({ keys, page: 0 });
@@ -187,7 +189,7 @@ export function Table<T>({
     end = pagination ? Math.min(start + 5, rows.length) : rows.length;
   if (!rows.length) return <Card className="empty">{emptyMessage}</Card>;
   return (
-    <div className="table-card">
+    <div className={`table-card ${className}`}>
       <div
         className="table-scroll"
         tabIndex={0}

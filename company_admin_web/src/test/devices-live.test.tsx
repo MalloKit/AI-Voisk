@@ -159,3 +159,24 @@ describe("실제 기기 관리", () => {
     expect(repository.load).toHaveBeenCalledTimes(1);
   });
 });
+
+
+it("scopes the pinned action layout to the live device table after pagination and filtering", async () => {
+  const rows = Array.from({ length: 6 }, (_, i) => device(101 + i));
+  const repository: DeviceRepository = { load: vi.fn().mockResolvedValue(rows), detail: vi.fn().mockResolvedValue(rows[5]) };
+  const user = await open(repository);
+  const table = screen.getByRole("table", { name: "기기 목록" });
+  expect(table.closest(".table-card")).toHaveClass("devices-table");
+  expect(within(table).getAllByRole("columnheader")).toHaveLength(10);
+  expect(within(table).getByRole("columnheader", { name: "마지막 확인" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "다음 페이지" }));
+  await user.click(screen.getByRole("button", { name: "기기 상세: DB-106" }));
+  expect(await within(screen.getByRole("dialog")).findByText("DB-106")).toBeInTheDocument();
+  await user.keyboard("{Escape}");
+  expect(screen.getByRole("button", { name: "기기 상세: DB-106" })).toHaveFocus();
+  await user.type(screen.getByRole("textbox"), "DB-101");
+  expect(screen.getByRole("table").closest(".table-card")).toHaveClass("devices-table");
+  expect(screen.getByRole("button", { name: "기기 상세: DB-101" })).toBeInTheDocument();
+  await user.click(nav("점주 계정"));
+  expect(screen.getByRole("table").closest(".table-card")).not.toHaveClass("devices-table");
+});

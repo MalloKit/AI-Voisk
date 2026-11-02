@@ -134,3 +134,13 @@ describe("live owner accounts without Mock store joins", () => {
     expect(repository.load).toHaveBeenCalledTimes(2);
   });
 });
+
+
+it.each([0, 1, 3])("groups %i connected stores under a content-aligned heading", async (count) => {
+  const { OwnerDetails } = await import("../features/details");
+  render(<OwnerDetails source="api" owner={detail(1, count)} />);
+  const group = screen.getByRole("region", { name: "연결 매장" });
+  expect(within(group).getByRole("heading", { level: 3, name: `연결 매장 · ${count}곳` })).toBeInTheDocument();
+  expect(group.querySelectorAll(".detail-field")).toHaveLength(count);
+  expect(group).toHaveClass("owner-details-stores");
+});

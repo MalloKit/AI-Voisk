@@ -193,7 +193,7 @@ function LiveDevicesPage({
             <button onClick={() => { setSearch(""); setStore(0); setActive("전체"); }}>초기화</button>
           </Filters>
           <Section title={`기기 목록 · ${rows.length}대`} />
-          <Table label="기기 목록" rows={rows} rowId={(d) => d.device_id}
+          <Table className="devices-table" label="기기 목록" rows={rows} rowId={(d) => d.device_id}
             columns={[
               { label: "기기 ID", render: (d) => d.device_id },
               { label: "기기 코드", render: (d) => d.device_code },
@@ -202,8 +202,8 @@ function LiveDevicesPage({
               { label: "연결 상태", render: () => "미확인" },
               { label: "앱 버전", render: (d) => d.app_version ?? "미수집" },
               { label: "등록 시각", render: (d) => dateLabel(d.registered_at, true) },
-              { label: "마지막 확인 (DB 기록)", render: (d) => moment(d.last_seen_at) },
-              { label: "마지막 동기화 (DB 기록)", render: (d) => moment(d.last_synced_at) },
+              { label: "마지막 확인", render: (d) => moment(d.last_seen_at) },
+              { label: "마지막 동기화", render: (d) => moment(d.last_synced_at) },
               { label: "", render: (d) => (
                 <button aria-label={`기기 상세: ${d.device_code}`} onClick={() => { setFocusStatus(false); setDetail(d); }}>상세</button>
               ) },
