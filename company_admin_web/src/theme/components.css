@@ -722,17 +722,26 @@ dd {
 .owner-details-stores p { margin: 0 0 var(--md); }
 .owner-details-stores .detail-field:last-child { margin-bottom: 0; }
 
-/* Only the live device list opts into these column sizes and pinned actions. */
-.devices-table table { min-width: 1260px; border-collapse: separate; border-spacing: 0; }
-.devices-table th, .devices-table td { padding: var(--md); }
-.devices-table th:nth-child(1), .devices-table td:nth-child(1) { min-width: 80px; }
-.devices-table th:nth-child(2), .devices-table td:nth-child(2) { min-width: 160px; max-width: 260px; word-break: normal; overflow-wrap: break-word; }
-.devices-table th:nth-child(3), .devices-table td:nth-child(3) { min-width: 140px; max-width: 220px; word-break: normal; overflow-wrap: break-word; }
-.devices-table th:nth-child(4), .devices-table td:nth-child(4),
-.devices-table th:nth-child(5), .devices-table td:nth-child(5),
-.devices-table th:nth-child(6), .devices-table td:nth-child(6) { min-width: 92px; }
-.devices-table th:nth-child(7), .devices-table td:nth-child(7),
-.devices-table th:nth-child(8), .devices-table td:nth-child(8),
-.devices-table th:nth-child(9), .devices-table td:nth-child(9) { min-width: 172px; white-space: nowrap; }
-.devices-table th:last-child, .devices-table td:last-child { position: sticky; right: 0; min-width: 88px; width: 88px; background: var(--surface); border-left: 1px solid var(--border); z-index: 1; }
+/* A compact live device summary; full metadata remains in its detail dialog. */
+.devices-table table { min-width: 900px; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.devices-table th, .devices-table td { padding: var(--md); white-space: nowrap; }
+.devices-table th:nth-child(1) { width: 8%; }
+.devices-table th:nth-child(2), .devices-table th:nth-child(3) { width: 23%; }
+.devices-table th:nth-child(4), .devices-table th:nth-child(5) { width: 10%; }
+.devices-table th:nth-child(6) { width: 16%; }
+.device-cell-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.devices-table th:last-child, .devices-table td:last-child { position: sticky; right: 0; width: 88px; background: var(--surface); border-left: 1px solid var(--border); z-index: 1; }
 .devices-table th:last-child { background: var(--table-head); z-index: 2; }
+
+/* Keep the live alert controls together on desktop without affecting other filters. */
+.alert-filters { display: grid; grid-template-columns: minmax(220px, 1.7fr) repeat(3, minmax(120px, 1fr)) auto auto; gap: var(--md); padding: var(--lg); }
+.alert-filters .search, .alert-filters .filter { width: 100%; min-width: 0; }
+.alert-filters > button { white-space: nowrap; padding-inline: var(--md); }
+@media (max-width: 1199px) {
+  .alert-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .alert-filters .search { grid-column: 1 / -1; }
+}
+@media (max-width: 599px) {
+  .alert-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .alert-filters .field { grid-column: 1 / -1; }
+}

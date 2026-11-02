@@ -350,7 +350,7 @@ function LiveAlertsPage({
         <ErrorState message={notice ? "확인 저장은 완료됐지만 알림 목록 재조회에 실패했습니다. 다시 시도해 주세요." : "실제 알림 조회 실패. Mock 데이터로 대체하지 않습니다."} onRetry={result.reload} />
       ) : (
         <>
-          <Filters>
+          <Filters className="alert-filters">
             <Search label="알림 ID / 기기 ID / 기기 코드 / 매장" value={search} onChange={setSearch} />
             <RawFilter label="알림 유형" value={type} values={values("alert_type")} onChange={setType} />
             <RawFilter label="심각도" value={severity} values={values("severity")} onChange={setSeverity} />

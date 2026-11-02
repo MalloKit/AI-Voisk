@@ -167,11 +167,14 @@ it("scopes the pinned action layout to the live device table after pagination an
   const user = await open(repository);
   const table = screen.getByRole("table", { name: "기기 목록" });
   expect(table.closest(".table-card")).toHaveClass("devices-table");
-  expect(within(table).getAllByRole("columnheader")).toHaveLength(10);
-  expect(within(table).getByRole("columnheader", { name: "마지막 확인" })).toBeInTheDocument();
+  expect(within(table).getAllByRole("columnheader")).toHaveLength(7);
+  expect(within(table).getByRole("columnheader", { name: "등록일" })).toBeInTheDocument();
+  for (const name of ["앱 버전", "마지막 확인", "마지막 동기화"]) expect(within(table).queryByRole("columnheader", { name })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "다음 페이지" }));
   await user.click(screen.getByRole("button", { name: "기기 상세: DB-106" }));
   expect(await within(screen.getByRole("dialog")).findByText("DB-106")).toBeInTheDocument();
+  const dialog = screen.getByRole("dialog");
+  for (const name of ["앱 버전", "마지막 확인 시각 (DB 기록)", "마지막 동기화 시각 (DB 기록)"]) expect(within(dialog).getByText(name)).toBeInTheDocument();
   await user.keyboard("{Escape}");
   expect(screen.getByRole("button", { name: "기기 상세: DB-106" })).toHaveFocus();
   await user.type(screen.getByRole("textbox"), "DB-101");

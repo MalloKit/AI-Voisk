@@ -174,3 +174,18 @@ describe("실제 알림 조회", () => {
     expect(repository.load).toHaveBeenCalledTimes(1);
   });
 });
+
+
+it("keeps live alert search, all filters and both actions in the scoped control group", async () => {
+  const repository = { load: vi.fn().mockResolvedValue([alert()]), detail: vi.fn() };
+  const user = await open(repository);
+  const group = screen.getByRole("textbox").closest(".alert-filters") as HTMLElement;
+  expect(group).toBeInTheDocument();
+  expect(within(group).getAllByRole("combobox")).toHaveLength(3);
+  await user.type(within(group).getByRole("textbox"), "missing");
+  await user.click(within(group).getByRole("button", { name: "초기화" }));
+  expect(within(group).getByRole("textbox")).toHaveValue("");
+  expect(screen.getByText("알림 목록 · 1건")).toBeInTheDocument();
+  await user.click(within(group).getByRole("button", { name: "새로고침" }));
+  await waitFor(() => expect(repository.load).toHaveBeenCalledTimes(2));
+});

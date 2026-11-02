@@ -133,8 +133,8 @@ export function Filter({
     </label>
   );
 }
-export function Filters({ children }: { children: ReactNode }) {
-  return <Card className="filters">{children}</Card>;
+export function Filters({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <Card className={`filters ${className}`}>{children}</Card>;
 }
 export function Loading({ text = "데이터를 불러오는 중…" }: { text?: string }) {
   return (

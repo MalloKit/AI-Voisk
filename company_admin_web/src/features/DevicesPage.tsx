@@ -167,7 +167,6 @@ function LiveDevicesPage({
     (!store || d.store_id === store) &&
     (active === "전체" || (active === "활성" ? d.is_active : !d.is_active)),
   );
-  const moment = (value: string | null) => value === null ? "미수집" : dateLabel(value, true);
   return (
     <>
       <Heading title="기기 관리" actions={repository.create && liveStores && storesResult && <button className="button-primary" onClick={() => { setNotice(""); setCreating(true); }}>기기 등록</button>}>등록된 기기와 설치 매장 정보를 확인합니다.</Heading>
@@ -196,14 +195,11 @@ function LiveDevicesPage({
           <Table className="devices-table" label="기기 목록" rows={rows} rowId={(d) => d.device_id}
             columns={[
               { label: "기기 ID", render: (d) => d.device_id },
-              { label: "기기 코드", render: (d) => d.device_code },
-              { label: "설치 매장", render: (d) => d.store_name },
-              { label: "활성화 상태", render: (d) => <Badge>{d.is_active ? "활성" : "비활성"}</Badge> },
+              { label: "기기 코드", render: (d) => <span className="device-cell-text" title={d.device_code}>{d.device_code}</span> },
+              { label: "설치 매장", render: (d) => <span className="device-cell-text" title={d.store_name}>{d.store_name}</span> },
+              { label: "활성 상태", render: (d) => <Badge>{d.is_active ? "활성" : "비활성"}</Badge> },
               { label: "연결 상태", render: () => "미확인" },
-              { label: "앱 버전", render: (d) => d.app_version ?? "미수집" },
-              { label: "등록 시각", render: (d) => dateLabel(d.registered_at, true) },
-              { label: "마지막 확인", render: (d) => moment(d.last_seen_at) },
-              { label: "마지막 동기화", render: (d) => moment(d.last_synced_at) },
+              { label: "등록일", render: (d) => dateLabel(d.registered_at) },
               { label: "", render: (d) => (
                 <button aria-label={`기기 상세: ${d.device_code}`} onClick={() => { setFocusStatus(false); setDetail(d); }}>상세</button>
               ) },
