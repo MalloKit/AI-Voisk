@@ -352,7 +352,7 @@ td button {
   display: flex;
   flex-direction: column;
 }
-.modal h2 {
+.modal > h2 {
   font-size: var(--title);
   flex-shrink: 0;
   max-height: 30dvh;
@@ -360,6 +360,8 @@ td button {
   overflow-wrap: anywhere;
   padding: var(--xl) var(--xl) 0;
 }
+.modal-content hr { margin: var(--lg) 0; }
+.modal-content .section-heading { margin: 0 0 var(--md); }
 .modal-content {
   padding: var(--xl);
   overflow-y: auto;
@@ -632,7 +634,7 @@ dd {
   .field input, .field select {
     font-size: var(--text-lg);
   }
-  .modal h2 {
+  .modal > h2 {
     padding: var(--lg) var(--lg) 0;
   }
   .modal-content {
