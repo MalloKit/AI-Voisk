@@ -73,6 +73,8 @@ export function StoresPage({
     if (saving) return;
     setEditing(undefined); setLinking(undefined); setDetail(undefined);
   }
+  const industries = [...new Set(all.map((s) => s.type))];
+  if (type !== "전체" && !industries.includes(type)) industries.push(type);
   const rows = all.filter(
     (s) =>
       `${s.name} ${s.representative} ${s.businessNo}`
@@ -100,7 +102,7 @@ export function StoresPage({
         <Filter
           label="업종"
           value={type}
-          options={["전체", ...new Set(all.map((s) => s.type))].map(
+          options={["전체", ...industries].map(
             (v) => ({ value: v, label: v }),
           )}
           onChange={setType}

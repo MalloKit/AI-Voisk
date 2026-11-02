@@ -116,6 +116,27 @@ function fill() {
 }
 
 describe("live store registration and editing", () => {
+  it("keeps a selected industry visible after its last store changes industry, and resets normally", async () => {
+    const repo = repositories([parseStore(raw())]);
+    const { user } = await open(repo);
+    await user.selectOptions(screen.getByRole("combobox", { name: "업종" }), "카페");
+    await user.click(screen.getByRole("button", { name: "매장 상세: 등록 매장" }));
+    await user.click(await screen.findByRole("button", { name: "매장 정보 수정" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "업종 *" }), { target: { value: "음식점" } });
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await screen.findByText(/매장 정보를 저장했습니다/);
+    await user.click(screen.getByRole("button", { name: "닫기" }));
+    await screen.findByText("매장 목록 · 0곳");
+    const industry = screen.getByRole("combobox", { name: "업종" }) as HTMLSelectElement;
+    expect(industry).toHaveValue("카페");
+    expect(industry.selectedOptions[0].textContent).toBe("카페");
+    expect(within(industry).getByRole("option", { name: "음식점" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "초기화" }));
+    expect(industry).toHaveValue("전체");
+    await screen.findByText("매장 목록 · 1곳");
+    expect(screen.getByRole("table", { name: "매장 목록" })).toHaveTextContent("음식점");
+    expect(repo.update).toHaveBeenCalledWith(41, { store_type: "음식점" }, expect.any(AbortSignal));
+  });
   it("validates required fields and focuses the first failure before sending", async () => {
     const { user, repo } = await open();
     await user.click(screen.getByRole("button", { name: "매장 등록" }));
