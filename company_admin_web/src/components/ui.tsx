@@ -18,14 +18,18 @@ export function Card({
 export function Heading({
   title,
   children,
+  actions,
 }: {
   title: string;
   children: ReactNode;
+  actions?: ReactNode;
 }) {
   return (
-    <header className="page-heading">
-      <h1>{title}</h1>
-      <p>{children}</p>
+    <header className={`page-heading${actions ? " page-heading-with-actions" : ""}`}>
+      {actions ? <>
+        <div><h1>{title}</h1><p>{children}</p></div>
+        <div className="page-heading-actions">{actions}</div>
+      </> : <><h1>{title}</h1><p>{children}</p></>}
     </header>
   );
 }
@@ -129,8 +133,8 @@ export function Filter({
     </label>
   );
 }
-export function Filters({ children }: { children: ReactNode }) {
-  return <Card className="filters">{children}</Card>;
+export function Filters({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <Card className={`filters ${className}`}>{children}</Card>;
 }
 export function Loading({ text = "데이터를 불러오는 중…" }: { text?: string }) {
   return (
@@ -163,6 +167,8 @@ export function Table<T>({
   columns,
   rowId,
   label,
+  pagination = true,
+  className = "",
   emptyMessage = "조건에 맞는 결과가 없습니다. 검색어나 필터를 변경해 주세요.",
 }: {
   rows: T[];
@@ -170,18 +176,20 @@ export function Table<T>({
   rowId(row: T): string | number;
   label: string;
   emptyMessage?: string;
+  pagination?: boolean;
+  className?: string;
 }) {
   const keys = rows.map(rowId).join("|");
   const [state, setState] = useState({ keys, page: 0 });
   const page =
-    state.keys === keys
+    pagination && state.keys === keys
       ? Math.min(state.page, Math.max(0, Math.ceil(rows.length / 5) - 1))
       : 0;
   const start = page * 5,
-    end = Math.min(start + 5, rows.length);
+    end = pagination ? Math.min(start + 5, rows.length) : rows.length;
   if (!rows.length) return <Card className="empty">{emptyMessage}</Card>;
   return (
-    <div className="table-card">
+    <div className={`table-card ${className}`}>
       <div
         className="table-scroll"
         tabIndex={0}
@@ -210,7 +218,7 @@ export function Table<T>({
           </tbody>
         </table>
       </div>
-      <div className="pagination">
+      {pagination && <div className="pagination">
         <span>
           {start + 1}–{end} / {rows.length}건
         </span>
@@ -230,7 +238,7 @@ export function Table<T>({
         >
           <ChevronRight />
         </button>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -238,14 +246,19 @@ export function Modal({
   title,
   children,
   onClose,
+  closeDisabled = false,
+  footer,
 }: {
   title: string;
   children: ReactNode;
   onClose(): void;
+  closeDisabled?: boolean;
+  footer?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+    const previous = returnFocus.current;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     ref.current?.focus();
@@ -258,7 +271,7 @@ export function Modal({
     <div
       className="modal-backdrop"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (!closeDisabled && e.target === e.currentTarget) onClose();
       }}
     >
       <div
@@ -271,12 +284,12 @@ export function Modal({
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.stopPropagation();
-            onClose();
+            if (!closeDisabled) onClose();
           }
           if (e.key === "Tab") {
             const nodes = Array.from(
               ref.current!.querySelectorAll<HTMLElement>(
-                'button:not(:disabled), input, select, [tabindex="0"]',
+                'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]',
               ),
             );
             if (!nodes.length) {
@@ -306,7 +319,7 @@ export function Modal({
         <h2>{title}</h2>
         <div className="modal-content">{children}</div>
         <footer>
-          <button onClick={onClose}>닫기</button>
+          {footer ?? <button disabled={closeDisabled} onClick={onClose}>닫기</button>}
         </footer>
       </div>
     </div>
