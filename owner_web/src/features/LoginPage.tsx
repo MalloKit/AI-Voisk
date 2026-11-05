@@ -60,8 +60,7 @@ function DevAccounts({ accounts }: { accounts: MockOwnerAccount[] }) {
         개발용 Mock 계정
       </h2>
       <p>
-        서버에 점주 인증 API가 생기기 전 Mock 모드에서만 동작합니다. 실제 운영
-        계정이 아닙니다.
+        Mock 모드에서만 동작합니다. 실제 운영 계정이 아닙니다.
       </p>
       <table>
         <thead>

@@ -14,7 +14,7 @@ import type {
 } from "./models";
 
 // 화면은 이 인터페이스만 쓴다. 한 인스턴스는 매장 하나(store_id)만 다룬다.
-// 실제 API가 생기면 구현체만 바꿔 AppEntry에서 주입한다.
+// 구현체는 AppEntry에서 주입한다. 이 파일의 Mock과 ownerApiRepository.ts의 API 구현이 있다.
 export interface OwnerRepository {
   getStoreProfile(signal?: AbortSignal): Promise<StoreProfile>;
   getMenuBoard(signal?: AbortSignal): Promise<MenuBoard>;

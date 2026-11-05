@@ -140,7 +140,7 @@ export function describeChanges(saved: MenuBoard, draft: MenuBoard) {
       if (o.isActive)
         lines.push(`${menuName(o.menuId)}: 옵션 추가 (${o.name})`);
     } else if (before.isActive && !o.isActive)
-      lines.push(`${menuName(o.menuId)}: 옵션 삭제 (${before.name})`);
+      lines.push(`${menuName(o.menuId)}: 옵션 판매 중지 (${before.name})`);
     else if (before.name !== o.name || before.extraPrice !== o.extraPrice)
       lines.push(`${menuName(o.menuId)}: 옵션 변경 (${o.name})`);
   }

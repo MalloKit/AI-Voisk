@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { MenuBoard, Page } from "../data/models";
 import type { OwnerRepository } from "../data/ownerRepository";
+import { apiErrorMessage } from "../data/ownerApiRepository";
 import {
   formatDateTime,
   formatTime,
@@ -105,8 +106,13 @@ function SoldOutList({
         await repository.setOptionSoldOut(row.id, false);
         onBoardChange((b) => updateOption(b, row.id, { isSoldOut: false }));
       }
-    } catch {
-      setError("판매를 재개하지 못했습니다. 다시 시도해 주세요.");
+    } catch (failure) {
+      setError(
+        apiErrorMessage(
+          failure,
+          "판매를 재개하지 못했습니다. 다시 시도해 주세요.",
+        ),
+      );
     } finally {
       setPending(null);
     }
@@ -184,7 +190,10 @@ export function TodayPage({
       <>
         {heading}
         <ErrorState
-          message="오늘 현황을 불러오지 못했습니다."
+          message={apiErrorMessage(
+            result.failure,
+            "오늘 현황을 불러오지 못했습니다.",
+          )}
           onRetry={result.reload}
         />
       </>
@@ -200,6 +209,15 @@ export function TodayPage({
   const maxQuantity = Math.max(1, ...top.map((t) => t.quantity));
   const devices = result.data.devices.filter((d) => d.isActive);
   const offline = devices.filter((d) => d.connection === "offline");
+  // 실제 API에는 연결 상태가 없어 정상이라고 표시하지 않는다.
+  const unknown = devices.filter((d) => d.connection === "unknown");
+  const connectionSummary = offline.length
+    ? `연결 끊김 ${offline.length}대`
+    : !devices.length
+      ? "사용 중인 키오스크가 없습니다"
+      : unknown.length
+        ? `연결 상태 미확인 (${devices.length}대)`
+        : `모두 정상 (${devices.length}대)`;
 
   return (
     <>
@@ -256,11 +274,15 @@ export function TodayPage({
             <MonitorSmartphone aria-hidden="true" />
           </Section>
           <p
-            className={offline.length ? "error-text strong" : "ok-text strong"}
+            className={
+              offline.length
+                ? "error-text strong"
+                : unknown.length || !devices.length
+                  ? "muted strong"
+                  : "ok-text strong"
+            }
           >
-            {offline.length
-              ? `연결 끊김 ${offline.length}대`
-              : `모두 정상 (${devices.length}대)`}
+            {connectionSummary}
           </p>
           <ul className="today-list" aria-label="키오스크 목록">
             {devices.map((d) => (
@@ -268,13 +290,17 @@ export function TodayPage({
                 <span className="today-list-main">키오스크 {d.id}번</span>
                 {d.connection === "online" ? (
                   <Badge tone="ok">정상</Badge>
-                ) : (
+                ) : d.connection === "offline" ? (
                   <Badge tone="attention">연결 끊김</Badge>
+                ) : (
+                  <Badge>미확인</Badge>
                 )}
                 <span className="muted">
-                  {d.lastSeenAt
-                    ? `마지막 연결 ${formatTime(d.lastSeenAt)}`
-                    : "연결 기록 없음"}
+                  {!d.lastSeenAt
+                    ? "연결 기록 없음"
+                    : d.connection === "unknown"
+                      ? `마지막 확인 ${formatDateTime(d.lastSeenAt)}`
+                      : `마지막 연결 ${formatTime(d.lastSeenAt)}`}
                 </span>
               </li>
             ))}

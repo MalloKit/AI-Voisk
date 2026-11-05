@@ -22,14 +22,24 @@ npm test        # 실제 서버·DB 없는 자동 검증
 
 ## 데이터 출처
 
-- 지금은 모든 화면이 **시연 데이터(Mock)** 입니다. 서버에 점주용 API가 아직 없어서 서버와 DB에 접속하지 않습니다.
-- 화면은 `OwnerRepository` 인터페이스만 사용합니다. 실제 API가 생기면 구현체를 만들어 `App.tsx`의 기본 Repository 한 곳만 바꿉니다.
-- `MockOwnerRepository`는 메모리에만 저장합니다. 새로고침하면 처음 상태로 돌아갑니다.
+- 기본은 **시연 데이터(Mock)** 이고 서버와 DB에 접속하지 않습니다. `.env.local`로 실제 서버 API로 바꿀 수 있습니다. 비밀값은 `VITE_` 변수에 넣지 않습니다.
+
+| 설정                      | 값                     | 구현체                                                                          |
+| ------------------------- | ---------------------- | ------------------------------------------------------------------------------- |
+| `VITE_OWNER_AUTH_SOURCE`  | `mock`(기본) 또는 `api` | `MockOwnerAuthRepository` / `ApiOwnerAuthRepository`                            |
+| `VITE_OWNER_DATA_SOURCE`  | `mock`(기본) 또는 `api` | `MockOwnerRepository` / `ApiOwnerRepository`. `api`는 인증도 `api`일 때만 동작 |
+| `VITE_OWNER_API_BASE_URL` | 서버 주소              | 기본 `http://127.0.0.1:8001`                                                    |
+
+- API 계약은 `server/OWNER_API.md`입니다. API 모드에서 공용 DB에 저장하면 키오스크에 바로 반영되고, 메뉴·옵션은 지울 수 없어 판매 중지 행으로 남습니다.
+- 데이터가 `api`이면 '오늘'은 현재 시각으로 계산합니다. `mock`은 아래 시연 기준 시각을 씁니다.
+- 401은 로그인 화면으로 돌아가고, 403·503 등은 로그인을 유지한 채 오류 문구를 보여 줍니다.
+- 화면은 `OwnerRepository` 인터페이스만 사용합니다. 구현체는 `AppEntry.tsx`에서 고릅니다.
+- 아래 항목은 Mock 데이터 설명입니다. `MockOwnerRepository`는 메모리에만 저장합니다. 새로고침하면 처음 상태로 돌아갑니다.
 - 메뉴·옵션은 `server/seed_test_menus.sql`, `server/seed_test_options.sql`의 T0001 매장과 같습니다. id 값은 공용 DB와 무관한 Mock 값이고, 시드에는 없는 점주 연결(`ownerId`)을 Mock에서 붙였습니다.
 - 주문은 시연 기준 시각(`src/data/demoClock.ts`의 `DEMO_NOW`, 2026-10-29 12:00 한국 시간) 전 30일 동안 20건이고, 그중 4건이 오늘 주문입니다. 서버와 같이 `order_type`은 `takeaway` | `dine_in`, 신규 주문처럼 `table_no`는 NULL이며 한 품목에 옵션 여러 개(`order_item_option`)를 둡니다.
 - '오늘'은 브라우저 시간대가 아니라 매장 시간대(Asia/Seoul) 기준입니다.
-- 키오스크 연결 상태(`connection`, `lastSeenAt`)는 아직 DB에 없는 Mock 계약입니다.
-- 로그인은 아래 [점주 로그인](#점주-로그인)을 보세요. 서버에 점주 인증 API가 없어 지금은 Mock 인증으로 동작합니다.
+- 키오스크 연결 상태(정상·연결 끊김)는 DB에 없는 Mock 값입니다. API 모드는 `last_seen_at`과 `is_active`만 읽고 연결 상태를 "미확인"으로 표시합니다.
+- 로그인은 아래 [점주 로그인](#점주-로그인)을 보세요.
 
 ## 점주 로그인
 
@@ -45,9 +55,7 @@ npm test        # 실제 서버·DB 없는 자동 검증
 | 값            | 구현체                    | 설명                                                                                                                                        |
 | ------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mock` (기본) | `MockOwnerAuthRepository` | 개발용 Mock 계정. 세션이 메모리에만 있어 새로고침하면 로그아웃됩니다.                                                                       |
-| `api`         | `ApiOwnerAuthRepository`  | 아래 서버 API를 `VITE_OWNER_API_BASE_URL`(기본 `http://127.0.0.1:8001`)로 호출합니다. 서버 API가 아직 없어 실제 연결은 검증하지 않았습니다. |
-
-메뉴·주문 데이터는 점주용 서버 API가 없어 두 경우 모두 매장별 `MockOwnerRepository`를 씁니다.
+| `api`         | `ApiOwnerAuthRepository`  | 아래 서버 API를 `VITE_OWNER_API_BASE_URL`(기본 `http://127.0.0.1:8001`)로 호출합니다.                                                       |
 
 ### 개발용 Mock 계정
 
@@ -60,9 +68,9 @@ npm test        # 실제 서버·DB 없는 자동 검증
 
 `store.owner_id`는 매장마다 점주 한 명이라 매장 2·3은 이 계정을 위한 작은 Mock 매장입니다.
 
-## 서버에 필요한 점주 인증 API
+## 서버 점주 인증 API
 
-회사 관리자 인증(`feature/company-admin-v2`의 `server/AUTH.md`)과 같은 방식을 가정합니다. 세션은 서버 메모리 + HttpOnly 쿠키, 브라우저는 `credentials: "include"`로 요청합니다. **서버에는 아직 없습니다.** 클라이언트 구현은 `src/data/ownerAuthRepository.ts`의 `ApiOwnerAuthRepository`입니다.
+회사 관리자 인증(`server/AUTH.md`)과 같은 방식입니다. 세션은 서버 메모리 + HttpOnly 쿠키, 브라우저는 `credentials: "include"`로 요청합니다. 전체 계약은 `server/OWNER_API.md`이고, 클라이언트 구현은 `src/data/ownerAuthRepository.ts`의 `ApiOwnerAuthRepository`입니다.
 
 | 메서드 | 경로                 | 요청                                                                    | 성공 응답                                                          |
 | ------ | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -135,7 +143,7 @@ login·me의 점주 객체:
 - 변경 취소는 마지막 저장 상태로 돌리고, 되돌리기(버튼, 입력칸 밖에서 Ctrl+Z)는 한 단계씩 돌립니다. 둘 다 이미 반영한 품절은 건드리지 않습니다. 같은 입력칸을 이어서 고친 것은 한 단계로 묶습니다.
 - 저장하지 않고 다른 화면으로 가면 [계속 편집] [버리고 이동] [저장하고 이동]을 묻고, 새로고침·탭 닫기에는 브라우저 경고를 띄웁니다.
 - 저장은 `OwnerRepository.saveMenuBoard(changes)` 한 번입니다. `changes`(`MenuBoardChanges`)는 카테고리·메뉴·옵션의 create/update(카테고리는 remove 포함) 묶음이고, 새 항목은 음수 임시 id로 서로를 가리킵니다. `category_sort`, 카테고리별 `menu_sort`, 메뉴별 `menu_option_sort`는 1부터 빈틈없이 다시 매겨 보냅니다. 서버는 이 묶음을 한 트랜잭션으로 처리하고, 결과로 전체 메뉴판과 임시 id → 실제 id 대응표를 돌려줍니다. Mock도 하나라도 실패하면 아무것도 바꾸지 않습니다.
-- 메뉴가 남은 카테고리는 삭제할 수 없습니다(숨긴 메뉴 포함). DB FK에 ON DELETE 규칙이 없어 실제로도 거부됩니다. 저장된 옵션 삭제는 주문 기록을 지키기 위해 판매 중지(`is_active = FALSE`)로 처리합니다.
+- 메뉴가 남은 카테고리는 삭제할 수 없습니다(숨긴 메뉴 포함). DB FK에 ON DELETE 규칙이 없어 실제로도 거부됩니다. 옵션의 [판매 중지] 버튼은 주문 기록을 지키기 위해 삭제하지 않고 `is_active = FALSE`로 처리합니다. 저장한 뒤에는 화면에서 옵션을 다시 판매로 되돌릴 수 없습니다.
 
 ## 오늘 현황 · 주문 내역 · 매장 정보
 
@@ -159,6 +167,7 @@ src/
   data/
     models.ts                   # DB 행 기준 모델
     ownerRepository.ts          # OwnerRepository와 매장별 MockOwnerRepository
+    ownerApiRepository.ts       # 서버 API 구현 ApiOwnerRepository, 오류 문구 구분
     ownerAuth.ts                # 점주 계정 정책, 인증 오류, 만료 이벤트
     ownerAuthRepository.ts      # OwnerAuthRepository, ApiOwnerAuthRepository, MockOwnerAuthRepository
     selectors.ts                # 품절 개수, 매장 날짜 계산

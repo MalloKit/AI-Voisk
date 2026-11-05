@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { MenuBoard, MenuBoardSaveResult } from "../../data/models";
 import type { OwnerRepository } from "../../data/ownerRepository";
+import { apiErrorMessage } from "../../data/ownerApiRepository";
 import { updateMenu, updateOption } from "../../data/menuDraft";
 import {
   buildChanges,
@@ -63,8 +64,13 @@ export function useMenuDraft({
       await save();
       onSavedChange(update);
       setDraft(update);
-    } catch {
-      setSoldOutError("품절 상태를 바꾸지 못했습니다. 다시 시도해 주세요.");
+    } catch (error) {
+      setSoldOutError(
+        apiErrorMessage(
+          error,
+          "품절 상태를 바꾸지 못했습니다. 다시 시도해 주세요.",
+        ),
+      );
     } finally {
       setPending((p) => p.filter((k) => k !== key));
     }

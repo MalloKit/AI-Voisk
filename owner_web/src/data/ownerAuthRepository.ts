@@ -61,7 +61,7 @@ export function parseOwner(value: unknown): AuthOwner {
   };
 }
 
-// 서버 점주 인증 API 구현. 서버에 API가 생기면 AppEntry의 기본값을 이것으로 바꾼다.
+// 서버 점주 인증 API 구현. VITE_OWNER_AUTH_SOURCE=api일 때 쓴다.
 // 세션은 서버의 HttpOnly 쿠키에만 있으므로 credentials: include로 요청한다.
 export class ApiOwnerAuthRepository implements OwnerAuthRepository {
   constructor(

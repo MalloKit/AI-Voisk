@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import type { MenuBoard } from "../data/models";
 import type { OwnerRepository } from "../data/ownerRepository";
+import { apiErrorMessage } from "../data/ownerApiRepository";
 import {
   PERIODS,
   filterOrders,
@@ -123,7 +124,10 @@ export function OrdersPage({
       <>
         {heading}
         <ErrorState
-          message="주문 내역을 불러오지 못했습니다."
+          message={apiErrorMessage(
+            history.failure,
+            "주문 내역을 불러오지 못했습니다.",
+          )}
           onRetry={history.reload}
         />
       </>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Ban, Pencil, Plus } from "lucide-react";
 import type { MenuOption } from "../../data/models";
 import {
   LIMITS,
@@ -119,11 +119,11 @@ function OptionRow({
           <Pencil size={18} />
         </button>
         <button
-          className="icon-button"
-          aria-label={`${option.name} 삭제`}
+          aria-label={`${option.name} 판매 중지`}
           onClick={() => draft.edit((b) => removeOption(b, option.id))}
         >
-          <Trash2 size={18} />
+          <Ban size={16} aria-hidden="true" />
+          판매 중지
         </button>
       </div>
     </li>
@@ -151,8 +151,8 @@ export function OptionList({
         <p className="muted">등록된 옵션이 없습니다.</p>
       )}
       <p className="muted">
-        이미 저장된 옵션을 삭제하면 지난 주문 기록을 지키기 위해 판매 중지로
-        처리됩니다.
+        판매 중지한 옵션은 키오스크에 보이지 않습니다. 지난 주문 기록을 지키기
+        위해 삭제하지 않습니다.
       </p>
       <h4>옵션 추가</h4>
       <OptionForm

@@ -4,6 +4,7 @@ import {
   MockOwnerRepository,
   type OwnerRepository,
 } from "./data/ownerRepository";
+import { apiErrorMessage } from "./data/ownerApiRepository";
 import { soldOutMenuCount } from "./data/selectors";
 import { DEMO_NOW } from "./data/demoClock";
 import { useAsync } from "./hooks/useAsync";
@@ -71,7 +72,10 @@ export function App({
     return (
       <div className="app-state">
         <ErrorState
-          message="매장 정보를 불러오지 못했습니다."
+          message={apiErrorMessage(
+            result.failure,
+            "매장 정보를 불러오지 못했습니다.",
+          )}
           onRetry={result.reload}
         />
       </div>

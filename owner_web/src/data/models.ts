@@ -65,13 +65,13 @@ export interface OrderItemOption {
   optionId: number;
 }
 
-// 연결 상태와 마지막 접속 시각은 아직 DB에 없는 Mock 계약이다.
+// 연결 상태는 DB에 없다. online·offline은 Mock 전용이고 실제 API는 항상 unknown이다.
 export interface KioskDevice {
   id: number; // device_id
   storeId: number;
   isActive: boolean;
-  connection: "online" | "offline";
-  lastSeenAt: string | null;
+  connection: "online" | "offline" | "unknown";
+  lastSeenAt: string | null; // last_seen_at
 }
 
 export interface StoreProfile {

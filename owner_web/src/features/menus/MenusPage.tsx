@@ -12,6 +12,7 @@ import {
 } from "@dnd-kit/core";
 import type { MenuBoard } from "../../data/models";
 import type { OwnerRepository } from "../../data/ownerRepository";
+import { apiErrorMessage } from "../../data/ownerApiRepository";
 import {
   addCategory,
   addMenu,
@@ -190,9 +191,12 @@ export function MenusPage({
         typeof c === "number" && c < 0 && ids[c] ? ids[c] : c,
       );
       return true;
-    } catch {
+    } catch (error) {
       setMessage(
-        "저장하지 못했습니다. 변경 내용은 그대로 남아 있으니 다시 시도해 주세요.",
+        apiErrorMessage(
+          error,
+          "저장하지 못했습니다. 변경 내용은 그대로 남아 있으니 다시 시도해 주세요.",
+        ),
       );
       return false;
     }

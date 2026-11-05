@@ -149,7 +149,7 @@ describe("메뉴 편집", () => {
 });
 
 describe("옵션 편집", () => {
-  it("옵션을 추가하고 수정하고 삭제한다", async () => {
+  it("옵션을 추가하고 수정하고 판매 중지한다", async () => {
     const { user } = await openMenus();
     await user.click(card("만두"));
     const options = screen.getByRole("region", { name: "옵션" });
@@ -199,10 +199,10 @@ describe("옵션 편집", () => {
     ).toBeInTheDocument();
 
     await user.click(
-      within(options).getByRole("button", { name: "소스 추가 삭제" }),
+      within(options).getByRole("button", { name: "소스 추가 판매 중지" }),
     );
     await user.click(
-      within(options).getByRole("button", { name: "만두 2개 추가 삭제" }),
+      within(options).getByRole("button", { name: "만두 2개 추가 판매 중지" }),
     );
     expect(
       within(options).getByText("등록된 옵션이 없습니다."),
