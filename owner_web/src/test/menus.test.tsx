@@ -208,6 +208,155 @@ describe("옵션 편집", () => {
       within(options).getByText("등록된 옵션이 없습니다."),
     ).toBeInTheDocument();
   });
+
+  const optionsRegion = () => screen.getByRole("region", { name: "옵션" });
+  const saveBar = () => screen.getByRole("region", { name: "저장 바" });
+  async function saveChanges(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(within(saveBar()).getByRole("button", { name: /^저장/ }));
+    const dialog = screen.getByRole("dialog", { name: "변경 내용 저장" });
+    const lines = within(dialog)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+    await within(saveBar()).findByText("모든 변경이 저장됨");
+    return lines;
+  }
+  async function stopEgg(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(card("제육덮밥"));
+    await user.click(
+      within(optionsRegion()).getByRole("button", {
+        name: "계란 추가 판매 중지",
+      }),
+    );
+  }
+
+  it("판매 중지 옵션을 접어 보여 주고 다시 판매도 저장 바로 저장한다", async () => {
+    const { user, repository } = await openMenus();
+    const spy = vi.spyOn(repository, "saveMenuBoard");
+    const egg = async () =>
+      (await repository.getMenuBoard()).options.find(
+        (o) => o.name === "계란 추가",
+      )!;
+    await user.click(card("제육덮밥"));
+    expect(
+      within(optionsRegion()).queryByRole("button", {
+        name: /판매 중지된 옵션/,
+      }),
+    ).toBeNull();
+    await stopEgg(user);
+    expect(await saveChanges(user)).toEqual([
+      "제육덮밥: 옵션 판매 중지 (계란 추가)",
+    ]);
+    expect((await egg()).isActive).toBe(false);
+
+    // 처음에는 접혀 있고, 눌러야 [다시 판매]가 보인다.
+    const toggle = within(optionsRegion()).getByRole("button", {
+      name: "판매 중지된 옵션 (1개)",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      within(optionsRegion()).queryByRole("button", {
+        name: "계란 추가 다시 판매",
+      }),
+    ).toBeNull();
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    spy.mockClear();
+    await user.click(
+      within(optionsRegion()).getByRole("button", {
+        name: "계란 추가 다시 판매",
+      }),
+    );
+    // 즉시 저장하지 않는다. 옵션은 판매 목록으로 돌아오고 상자는 사라진다.
+    expect(spy).not.toHaveBeenCalled();
+    expect((await egg()).isActive).toBe(false);
+    expect(saveBar()).toHaveTextContent("저장 안 된 변경 1건");
+    expect(card("제육덮밥").querySelector(".unsaved-dot")).not.toBeNull();
+    expect(
+      within(optionsRegion()).getByRole("listitem", { name: "계란 추가" }),
+    ).toBeInTheDocument();
+    expect(
+      within(optionsRegion()).queryByRole("button", {
+        name: /판매 중지된 옵션/,
+      }),
+    ).toBeNull();
+
+    expect(await saveChanges(user)).toEqual([
+      "제육덮밥 옵션 '계란 추가' 다시 판매",
+    ]);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0].options.update).toEqual([
+      expect.objectContaining({ name: "계란 추가", isActive: true }),
+    ]);
+    expect(spy.mock.calls[0][0].options.create).toEqual([]);
+    expect((await egg()).isActive).toBe(true);
+  });
+
+  it("판매 중지 후 저장 전에 다시 판매하면 변경이 남지 않는다", async () => {
+    const { user } = await openMenus();
+    await stopEgg(user);
+    expect(saveBar()).toHaveTextContent("저장 안 된 변경 1건");
+    await user.click(
+      within(optionsRegion()).getByRole("button", {
+        name: "판매 중지된 옵션 (1개)",
+      }),
+    );
+    expect(
+      within(optionsRegion()).getByRole("listitem", {
+        name: "계란 추가 · 저장 안 됨",
+      }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(optionsRegion()).getByRole("button", {
+        name: "계란 추가 다시 판매",
+      }),
+    );
+    expect(saveBar()).toHaveTextContent("모든 변경이 저장됨");
+  });
+
+  it("판매 중지 옵션과 같은 이름을 추가하면 새로 만들지 않고 다시 판매를 안내한다", async () => {
+    const { user } = await openMenus();
+    await stopEgg(user);
+    const region = within(optionsRegion());
+    const addName = region.getAllByLabelText("옵션 이름").at(-1)!;
+    await user.type(addName, " 계란 추가 ");
+    await user.click(region.getByRole("button", { name: "추가" }));
+
+    const notice = region.getByRole("alert");
+    expect(notice).toHaveTextContent(
+      "같은 이름의 판매 중지된 옵션이 있습니다. 다시 판매할까요?",
+    );
+    // 입력칸 기본값 0원과 달라 이전 금액을 알린다.
+    expect(notice).toHaveTextContent("이전 추가 금액 +1,000원");
+
+    // 취소하면 아무것도 바뀌지 않고 입력은 그대로 남는다.
+    await user.click(within(notice).getByRole("button", { name: "취소" }));
+    expect(region.queryByRole("alert")).toBeNull();
+    expect(addName).toHaveValue(" 계란 추가 ");
+    expect(saveBar()).toHaveTextContent("저장 안 된 변경 1건");
+
+    // 이름을 바꾸면 안내가 사라지고 다른 이름은 그대로 추가된다.
+    await user.click(region.getByRole("button", { name: "추가" }));
+    expect(region.getByRole("alert")).toBeInTheDocument();
+    await user.type(addName, "x");
+    expect(region.queryByRole("alert")).toBeNull();
+    await user.clear(addName);
+    await user.type(addName, "계란 추가");
+    await user.click(region.getByRole("button", { name: "추가" }));
+
+    await user.click(
+      within(region.getByRole("alert")).getByRole("button", {
+        name: "다시 판매",
+      }),
+    );
+    expect(region.queryByRole("alert")).toBeNull();
+    expect(addName).toHaveValue("");
+    const restored = region.getByRole("listitem", { name: "계란 추가" });
+    expect(restored).toHaveTextContent("+1,000원");
+    // 저장본과 같아졌으므로 새 행도, 저장할 변경도 없다.
+    expect(saveBar()).toHaveTextContent("모든 변경이 저장됨");
+  });
 });
 
 describe("카테고리 추가와 삭제", () => {

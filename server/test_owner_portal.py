@@ -1,5 +1,6 @@
 """점주 API의 권한·입력 검증·저장·롤백을 메모리 SQLite로 검증합니다. MySQL 잠금 동작은 대신하지 않습니다."""
 import unittest
+from unittest.mock import patch
 
 from owner_test_support import ORIGIN, OwnerFixture
 
@@ -246,6 +247,26 @@ class SaveTests(OwnerPortalTestCase):
         self.assertEqual(self.f.value('SELECT is_active FROM menu_option WHERE option_id = 100'), 0)
         writes = [sql for sql in self.f.statements if sql.lstrip().upper().startswith('DELETE')]
         self.assertEqual(writes, [])
+
+    def test_inactive_option_can_be_sold_again_and_returns_to_kiosk(self):
+        def kiosk_options():
+            # 키오스크 조회의 실제 SQL을 메모리 DB에서 실행합니다.
+            def query(sql, params=()):
+                return [dict(row) for row in self.f.db.execute(sql.replace('%s', '?'), params)]
+            with patch('main._db_query', side_effect=query):
+                menus = self.client.get('/stores/1/menus').json()
+            return next(m for m in menus if m['id'] == '10')['options']
+
+        self.assertNotIn('101', [o['id'] for o in kiosk_options()])
+        before = self.f.value('SELECT is_sold_out FROM menu_option WHERE option_id = 101')
+        response = self.save({'options': {'update': [option_update(101, name='계란', extra_price=500, sort=2)]}})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.f.value('SELECT is_active FROM menu_option WHERE option_id = 101'), 1)
+        self.assertEqual(self.f.value('SELECT is_sold_out FROM menu_option WHERE option_id = 101'), before)
+        self.assertEqual(self.f.value('SELECT COUNT(*) FROM menu_option WHERE menu_id = 10'), 3)
+        self.assertTrue(next(o for o in response.json()['board']['options'] if o['option_id'] == 101)['is_active'])
+        self.assertEqual(self.versions(), {70: 4, 71: 6, 80: 9})
+        self.assertIn('101', [o['id'] for o in kiosk_options()])
 
     def test_only_allowed_tables_are_written_and_orders_stay_intact(self):
         before = self.f.snapshot()

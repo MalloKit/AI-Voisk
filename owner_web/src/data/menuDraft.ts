@@ -30,6 +30,16 @@ export const menusInCategory = (board: MenuBoard, categoryId: number) =>
 export const activeOptions = (board: MenuBoard, menuId: number) =>
   board.options.filter((o) => o.menuId === menuId && o.isActive).sort(byOrder);
 
+export const stoppedOptions = (board: MenuBoard, menuId: number) =>
+  board.options.filter((o) => o.menuId === menuId && !o.isActive).sort(byOrder);
+
+// 새 옵션을 추가하기 전에 같은 이름의 판매 중지 옵션이 있는지 찾는다.
+export const findStoppedOption = (
+  board: MenuBoard,
+  menuId: number,
+  name: string,
+) => stoppedOptions(board, menuId).find((o) => o.name.trim() === name.trim());
+
 export const nextTempId = (board: MenuBoard) =>
   Math.min(
     0,

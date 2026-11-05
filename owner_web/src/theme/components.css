@@ -698,6 +698,31 @@ dd {
   display: block;
   padding: var(--md) 0;
 }
+.stopped-options {
+  margin-top: var(--md);
+}
+.stopped-options-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--xs);
+  width: 100%;
+  text-align: left;
+}
+.option-row.stopped {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.option-row.stopped button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--xs);
+}
+.option-resell {
+  grid-column: 1 / -1;
+  color: var(--ink);
+}
+.option-resell p {
+  margin: 0 0 var(--sm);
+}
 .option-main {
   display: flex;
   flex-direction: column;

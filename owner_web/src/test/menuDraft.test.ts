@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { MockOwnerRepository } from "../data/ownerRepository";
 import {
+  activeOptions,
   addCategory,
   addOption,
   categoryDeleteBlock,
   categoryNameError,
+  findStoppedOption,
   kioskView,
   removeCategory,
   removeOption,
+  stoppedOptions,
   updateMenu,
 } from "../data/menuDraft";
 import { formatWon, parseExtraPrice, parsePrice } from "../data/validation";
@@ -78,6 +81,22 @@ describe("옵션 초안", () => {
     expect(b.options.some((o) => o.id === added.id)).toBe(false);
     b = removeOption(b, 1);
     expect(b.options.find((o) => o.id === 1)?.isActive).toBe(false);
+  });
+
+  it("판매 중지 옵션을 메뉴별로 모으고 같은 이름을 앞뒤 공백 없이 찾는다", async () => {
+    const before = await board();
+    const option = before.options.find((o) => o.id === 1)!;
+    const b = removeOption(before, 1);
+    expect(stoppedOptions(b, option.menuId).map((o) => o.id)).toEqual([1]);
+    expect(activeOptions(b, option.menuId).map((o) => o.id)).not.toContain(1);
+    expect(findStoppedOption(b, option.menuId, ` ${option.name} `)?.id).toBe(1);
+    expect(findStoppedOption(b, option.menuId, "없는 옵션")).toBeUndefined();
+    expect(
+      findStoppedOption(b, option.menuId + 1, option.name),
+    ).toBeUndefined();
+    expect(
+      findStoppedOption(before, option.menuId, option.name),
+    ).toBeUndefined();
   });
 });
 
