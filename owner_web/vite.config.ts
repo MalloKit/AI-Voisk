@@ -9,6 +9,11 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // 테스트는 서버 없이 돈다. 기본값이나 개인 .env.local의 api 설정을 따르지 않게 Mock을 명시한다.
+    env: {
+      VITE_OWNER_AUTH_SOURCE: "mock",
+      VITE_OWNER_DATA_SOURCE: "mock",
+    },
     exclude: ["node_modules/**", "dist/**"],
   },
 });

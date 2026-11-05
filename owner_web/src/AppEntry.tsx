@@ -25,19 +25,20 @@ import {
 } from "./data/ownerAuth";
 import { DEMO_NOW } from "./data/demoClock";
 
-// 인증(VITE_OWNER_AUTH_SOURCE)과 데이터(VITE_OWNER_DATA_SOURCE)는 .env.local로 고른다. 기본은 둘 다 mock이다.
-// 실제 데이터 API는 점주 세션이 필요하므로 데이터를 api로 쓰려면 인증도 api여야 한다.
+// 인증(VITE_OWNER_AUTH_SOURCE)과 데이터(VITE_OWNER_DATA_SOURCE)의 기본은 둘 다 api다.
+// Mock은 값을 mock으로 명시했을 때만 쓰고, 서버 연결에 실패해도 Mock으로 자동 전환하지 않는다.
+// 실제 데이터 API는 점주 세션이 필요하므로 인증을 mock으로 두면 데이터도 mock으로 둬야 한다.
 const API_BASE_URL =
   import.meta.env.VITE_OWNER_API_BASE_URL || "http://127.0.0.1:8001";
-const USE_API_DATA = import.meta.env.VITE_OWNER_DATA_SOURCE === "api";
+const USE_MOCK_DATA = import.meta.env.VITE_OWNER_DATA_SOURCE === "mock";
 const defaultAuth: OwnerAuthRepository =
-  import.meta.env.VITE_OWNER_AUTH_SOURCE === "api"
-    ? new ApiOwnerAuthRepository(API_BASE_URL)
-    : new MockOwnerAuthRepository();
+  import.meta.env.VITE_OWNER_AUTH_SOURCE === "mock"
+    ? new MockOwnerAuthRepository()
+    : new ApiOwnerAuthRepository(API_BASE_URL);
 const defaultCreateRepository = (storeId: number): OwnerRepository =>
-  USE_API_DATA
-    ? new ApiOwnerRepository(API_BASE_URL, storeId)
-    : new MockOwnerRepository(storeId);
+  USE_MOCK_DATA
+    ? new MockOwnerRepository(storeId)
+    : new ApiOwnerRepository(API_BASE_URL, storeId);
 
 type State =
   | { phase: "checking" }
@@ -67,7 +68,7 @@ export function AppEntry({
   authRepository = defaultAuth,
   createRepository = defaultCreateRepository,
   // Mock 주문은 시연 시각 기준이고, 실제 데이터의 '오늘'은 현재 시각으로 계산한다.
-  now = USE_API_DATA ? new Date().toISOString() : DEMO_NOW,
+  now = USE_MOCK_DATA ? DEMO_NOW : new Date().toISOString(),
 }: {
   authRepository?: OwnerAuthRepository;
   createRepository?(storeId: number): OwnerRepository;

@@ -14,23 +14,31 @@ npm run dev
 
 브라우저: **http://127.0.0.1:8081**. 8080은 회사 관리자 웹이 쓰므로 8081에 고정했고, 이미 사용 중이면 종료합니다.
 
+기본 설정은 실제 서버를 쓰므로 `server/README.md`대로 서버(`127.0.0.1:8001`)를 먼저 실행합니다. 서버의 허용 출처에 8081을 넣는 방법은 `server/OWNER_API.md`를 보세요.
+
 ```powershell
 npm run build   # TypeScript 검사 + dist 생성
 npm run preview # 127.0.0.1:8081 (dev와 동시 실행하지 않음)
-npm test        # 실제 서버·DB 없는 자동 검증
+npm test        # 실제 서버·DB 없는 자동 검증 (vite.config.ts에서 Mock을 명시)
 ```
 
 ## 데이터 출처
 
-- 기본은 **시연 데이터(Mock)** 이고 서버와 DB에 접속하지 않습니다. `.env.local`로 실제 서버 API로 바꿀 수 있습니다. 비밀값은 `VITE_` 변수에 넣지 않습니다.
+- 기본은 **실제 서버와 DB(`api`)** 입니다. 설정하지 않아도 서버에 접속하고, 서버에 연결하지 못해도 Mock으로 자동 전환하지 않습니다. 비밀값은 `VITE_` 변수에 넣지 않습니다.
+- Mock은 `.env.local`에 `mock`을 명시했을 때만 씁니다. Mock으로 보려면 아래 두 값을 모두 `mock`으로 둡니다.
 
-| 설정                      | 값                     | 구현체                                                                          |
-| ------------------------- | ---------------------- | ------------------------------------------------------------------------------- |
-| `VITE_OWNER_AUTH_SOURCE`  | `mock`(기본) 또는 `api` | `MockOwnerAuthRepository` / `ApiOwnerAuthRepository`                            |
-| `VITE_OWNER_DATA_SOURCE`  | `mock`(기본) 또는 `api` | `MockOwnerRepository` / `ApiOwnerRepository`. `api`는 인증도 `api`일 때만 동작 |
-| `VITE_OWNER_API_BASE_URL` | 서버 주소              | 기본 `http://127.0.0.1:8001`                                                    |
+```dotenv
+VITE_OWNER_AUTH_SOURCE=mock
+VITE_OWNER_DATA_SOURCE=mock
+```
 
-- API 계약은 `server/OWNER_API.md`입니다. API 모드에서 공용 DB에 저장하면 키오스크에 바로 반영되고, 메뉴·옵션은 지울 수 없어 판매 중지 행으로 남습니다.
+| 설정                      | 값                      | 구현체                                                                         |
+| ------------------------- | ----------------------- | ------------------------------------------------------------------------------ |
+| `VITE_OWNER_AUTH_SOURCE`  | `api`(기본) 또는 `mock` | `ApiOwnerAuthRepository` / `MockOwnerAuthRepository`                           |
+| `VITE_OWNER_DATA_SOURCE`  | `api`(기본) 또는 `mock` | `ApiOwnerRepository` / `MockOwnerRepository`. `api`는 인증도 `api`일 때만 동작 |
+| `VITE_OWNER_API_BASE_URL` | 서버 주소               | 기본 `http://127.0.0.1:8001`                                                   |
+
+- API 계약은 `server/OWNER_API.md`입니다. **서버가 공용 DB에 연결되어 있으면 기본 설정에서 저장한 내용이 공용 DB에 들어갑니다.** 키오스크에 바로 반영되고, 메뉴·옵션은 지울 수 없어 판매 중지 행으로 남습니다.
 - 데이터가 `api`이면 '오늘'은 현재 시각으로 계산합니다. `mock`은 아래 시연 기준 시각을 씁니다.
 - 401은 로그인 화면으로 돌아가고, 403·503 등은 로그인을 유지한 채 오류 문구를 보여 줍니다.
 - 화면은 `OwnerRepository` 인터페이스만 사용합니다. 구현체는 `AppEntry.tsx`에서 고릅니다.
@@ -52,10 +60,10 @@ npm test        # 실제 서버·DB 없는 자동 검증
 - 비밀번호·토큰·로그인 상태를 localStorage·sessionStorage에 저장하지 않습니다. 비밀번호 입력칸은 제출 뒤 비웁니다.
 - 화면은 `OwnerAuthRepository`만 씁니다. 인증 출처는 `.env.local`의 `VITE_OWNER_AUTH_SOURCE`로 고릅니다(`.env.example` 참고).
 
-| 값            | 구현체                    | 설명                                                                                                                                        |
-| ------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mock` (기본) | `MockOwnerAuthRepository` | 개발용 Mock 계정. 세션이 메모리에만 있어 새로고침하면 로그아웃됩니다.                                                                       |
-| `api`         | `ApiOwnerAuthRepository`  | 아래 서버 API를 `VITE_OWNER_API_BASE_URL`(기본 `http://127.0.0.1:8001`)로 호출합니다.                                                       |
+| 값           | 구현체                    | 설명                                                                                  |
+| ------------ | ------------------------- | ------------------------------------------------------------------------------------- |
+| `api` (기본) | `ApiOwnerAuthRepository`  | 아래 서버 API를 `VITE_OWNER_API_BASE_URL`(기본 `http://127.0.0.1:8001`)로 호출합니다. |
+| `mock`       | `MockOwnerAuthRepository` | 개발용 Mock 계정. 세션이 메모리에만 있어 새로고침하면 로그아웃됩니다.                 |
 
 ### 개발용 Mock 계정
 
@@ -152,7 +160,7 @@ login·me의 점주 객체:
 - **매장 정보**(조회 전용): 매장 이름, 업종, 매장 코드, 대표자, 전화번호, 사업자등록번호(000-00-00000), 주소. 변경은 회사 관리자에게 요청한다는 안내와 키오스크가 이 store_id로 메뉴를 불러온다는 안내가 있습니다.
 - `order_item`에 주문 당시 가격이 없어 금액은 **현재 메뉴·옵션 가격**으로 계산합니다. 메뉴 가격을 바꾸면 지난 주문 금액도 바뀌므로 화면에 "현재 메뉴 가격 기준"을 표시합니다. 정확한 매출이 필요하면 주문 시 가격을 저장하도록 DB를 바꿔야 합니다.
 - 옵션은 `order_item_option`과 이전 단일 옵션(`order_item.option_id`)을 합쳐 보여 줍니다. 주문 유형은 `order_type`을 우선하고, 없으면 `table_no`(0 포장, 양수 매장 식사)로 해석합니다.
-- 서버 시각(UTC)은 한국 시간(Asia/Seoul)으로 바꿔 보여 주고, '오늘'과 기간도 한국 날짜로 셉니다. 기준 시각은 `App`의 `now`(기본 `DEMO_NOW`)입니다.
+- 서버 시각(UTC)은 한국 시간(Asia/Seoul)으로 바꿔 보여 주고, '오늘'과 기간도 한국 날짜로 셉니다. 기준 시각은 `AppEntry`가 `App`에 넘기는 `now`입니다(`api`는 현재 시각, `mock`은 `DEMO_NOW`).
 
 ## 구성
 
