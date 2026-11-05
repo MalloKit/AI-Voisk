@@ -16,6 +16,20 @@ npm run dev
 
 기본 설정은 실제 서버를 쓰므로 `server/README.md`대로 서버(`127.0.0.1:8001`)를 먼저 실행합니다. 서버의 허용 출처에 8081을 넣는 방법은 `server/OWNER_API.md`를 보세요.
 
+### 서버와 함께 켜기
+
+`start-dev.ps1`은 새 PowerShell 창 두 개를 띄워 서버(`server`, 8001)와 점주 웹(`owner_web`, 8081)을 함께 실행합니다. `server/.venv`와 `npm install`은 미리 준비해 둡니다.
+
+```powershell
+cd owner_web
+powershell -ExecutionPolicy Bypass -File .\start-dev.ps1
+```
+
+- 8001이나 8081을 이미 쓰고 있으면 어떤 프로그램인지 보여 주고 아무것도 실행하지 않습니다.
+- `server/.env`가 없으면 만들라고 안내하고 멈춥니다. 파일이 있는지만 확인하고 내용은 읽지 않습니다.
+- 끌 때는 각 창에서 Ctrl+C를 누르거나 창을 닫습니다.
+- 스크립트의 한글이 깨지지 않도록 UTF-8 BOM으로 저장합니다.
+
 ```powershell
 npm run build   # TypeScript 검사 + dist 생성
 npm run preview # 127.0.0.1:8081 (dev와 동시 실행하지 않음)
