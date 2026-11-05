@@ -3,6 +3,7 @@ import type { ApiOwner, ApiOwnerDetail, OwnerStore } from "./models";
 
 export interface OwnerCreateInput { login_id: string; password: string; }
 export interface OwnerRepository {
+  resetPassword?(id: number, password: string, signal?: AbortSignal): Promise<void>;
   create?(input: OwnerCreateInput, signal?: AbortSignal): Promise<ApiOwner>;
   load(signal?: AbortSignal): Promise<ApiOwner[]>;
   detail(id: number, signal?: AbortSignal): Promise<ApiOwnerDetail>;
@@ -70,17 +71,32 @@ export class ApiOwnerRepository implements OwnerRepository {
         base.origin + base.pathname.replace(/\/$/, "") + path,
         { ...init, signal: controller.signal },
       );
+      const resetting = path.endsWith("/password");
       if (!response.ok)
         throw new AdminApiError(response.status, response.status === 404 ? "점주 계정이 없습니다."
           : response.status === 409 ? "이미 사용 중인 로그인 ID입니다."
-          : response.status === 422 || response.status === 413 ? "로그인 ID와 비밀번호의 형식·길이를 확인해 주세요."
+          : response.status === 422 || response.status === 413 ? (resetting ? "비밀번호의 형식·길이를 확인해 주세요." : "로그인 ID와 비밀번호의 형식·길이를 확인해 주세요.")
           : init.method === "GET" ? "실제 점주 조회에 실패했습니다."
+          : resetting ? "비밀번호 변경 결과를 확인할 수 없습니다. 연결 상태를 확인한 후 다시 시도해 주세요."
           : "계정 생성 결과를 확인할 수 없습니다. 목록을 새로고침해 확인한 뒤 다시 시도해 주세요.");
+      if (resetting) {
+        if (response.status !== 204) throw invalid();
+        return null;
+      }
       return await response.json();
     } finally {
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
     }
+  }
+  async resetPassword(id: number, password: string, signal?: AbortSignal): Promise<void> {
+    integer(id, 1);
+    const token = record(await this.get("/auth/admin/csrf", signal)).csrf_token;
+    if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("보안 요청 정보를 확인할 수 없습니다.");
+    await this.get(`/admin/owners/${id}/password`, signal, {
+      method: "PATCH", headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+      body: JSON.stringify({ password }),
+    });
   }
   async create(input: OwnerCreateInput, signal?: AbortSignal): Promise<ApiOwner> {
     const token = record(await this.get("/auth/admin/csrf", signal)).csrf_token;
