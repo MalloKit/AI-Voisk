@@ -16,17 +16,9 @@ LOGIN_ID = re.compile(r"[a-z0-9._-]{4,100}")
 Identifier = Annotated[StrictInt, Field(ge=1, le=2147483647)]
 
 
-class OwnerCreate(BaseModel):
+class OwnerPassword(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    login_id: StrictStr = Field(min_length=LOGIN_ID_MIN, max_length=LOGIN_ID_MAX)
     password: SecretStr = Field(min_length=PASSWORD_MIN, max_length=PASSWORD_MAX)
-
-    @field_validator('login_id')
-    @classmethod
-    def valid_login(cls, value):
-        if not LOGIN_ID.fullmatch(value):
-            raise ValueError('로그인 ID 형식을 확인해 주세요.')
-        return value
 
     @field_validator('password')
     @classmethod
@@ -36,17 +28,33 @@ class OwnerCreate(BaseModel):
         return value
 
 
+class OwnerCreate(OwnerPassword):
+    login_id: StrictStr = Field(min_length=LOGIN_ID_MIN, max_length=LOGIN_ID_MAX)
+
+    @field_validator('login_id')
+    @classmethod
+    def valid_login(cls, value):
+        if not LOGIN_ID.fullmatch(value):
+            raise ValueError('로그인 ID 형식을 확인해 주세요.')
+        return value
+
+
 class StoreOwnerPatch(BaseModel):
     model_config = ConfigDict(extra='forbid')
     owner_id: Identifier | None
     expected_owner_id: Identifier | None
 
 
-def create_owner(payload: OwnerCreate):
+def _password_hash(payload: OwnerPassword):
     # Reuse exactly the administrator's Argon2id policy; no owner sessions are created.
     encoded = admin_auth.hasher.hash(payload.password.get_secret_value())
     if not isinstance(encoded, str) or len(encoded) > 255 or not admin_auth.verify_password(encoded, payload.password.get_secret_value()):
         raise RuntimeError('Password encoding failed')
+    return encoded
+
+
+def create_owner(payload: OwnerCreate):
+    encoded = _password_hash(payload)
     connection = owner_service.connection_factory()
     try:
         with connection.cursor() as cursor:
@@ -104,6 +112,26 @@ def update_store_owner(store_id: int, payload: StoreOwnerPatch):
         if error.args and error.args[0] in (1062, 1451, 1452):
             raise HTTPException(409, '매장 또는 점주 정보가 변경되었습니다. 새로고침 후 확인해 주세요.') from None
         raise
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def reset_owner_password(owner_id: int, payload: OwnerPassword):
+    encoded = _password_hash(payload)
+    connection = owner_service.connection_factory()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('START TRANSACTION')
+            cursor.execute('SELECT owner_id FROM owner WHERE owner_id = %s FOR UPDATE', (owner_id,))
+            if cursor.fetchone() is None:
+                raise owner_service.OwnerNotFound()
+            cursor.execute('UPDATE owner SET own_pw = %s WHERE owner_id = %s', (encoded, owner_id))
+            if cursor.rowcount != 1:
+                raise RuntimeError('Unexpected password update result')
+        connection.commit()
     except Exception:
         connection.rollback()
         raise

@@ -10,12 +10,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 import admin_auth
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from order_service import OrderInput, save_order, list_orders, order_detail
 from store_service import StoreNotFound, list_stores, store_detail
 from store_write_service import StoreCreate, StorePatch, create_store, update_store
 from owner_service import OwnerNotFound, list_owners, owner_detail
-from owner_write_service import OwnerCreate, StoreOwnerPatch, create_owner, update_store_owner
+from owner_write_service import OwnerCreate, OwnerPassword, StoreOwnerPatch, create_owner, update_store_owner, reset_owner_password
 from device_service import DeviceNotFound, list_devices, device_detail
 from device_write_service import DeviceCreate, DeviceStatusPatch, create_device, update_device_status
 from alert_service import AlertNotFound, list_alerts, alert_detail
@@ -47,6 +47,7 @@ async def local_demo_only(request: Request, call_next):
     path = request.url.path
     admin_path = path == '/admin' or path.startswith('/admin/')
     auth_path = path == '/auth/admin' or path.startswith('/auth/admin/')
+    owner_password_path = path.startswith('/admin/owners/') and path.rstrip('/').endswith('/password')
     if (admin_path or auth_path or path == '/orders') and (
         request.client is None or request.client.host not in {'127.0.0.1', '::1', 'testclient'}
     ):
@@ -65,7 +66,7 @@ async def local_demo_only(request: Request, call_next):
                 admin_auth.clear_cookie(response)
             response.headers['Cache-Control'] = 'no-store'
             return response
-        if request.method == 'POST' and (auth_path or path.rstrip('/') == '/admin/owners'):
+        if (request.method == 'POST' and (auth_path or path.rstrip('/') == '/admin/owners')) or (request.method == 'PATCH' and owner_password_path):
             # 검증 오류가 요청 본문이나 비밀번호를 반사하지 않도록 크기도 제한합니다.
             if len(await request.body()) > 8192:
                 return JSONResponse(status_code=413, content={'detail': '인증 요청 크기를 확인해 주세요.'},
@@ -93,6 +94,9 @@ async def safe_validation_error(request: Request, error: RequestValidationError)
                             headers={'Cache-Control': 'no-store'})
     if request.url.path.rstrip('/') == '/admin/owners' and request.method == 'POST':
         return JSONResponse(status_code=422, content={'detail': '계정 입력 형식과 허용 길이를 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
+    if request.url.path.startswith('/admin/owners/') and request.url.path.rstrip('/').endswith('/password') and request.method == 'PATCH':
+        return JSONResponse(status_code=422, content={'detail': '비밀번호 입력 형식과 허용 길이를 확인해 주세요.'},
                             headers={'Cache-Control': 'no-store'})
     if request.url.path.startswith('/admin/alerts') and request.method == 'PATCH':
         return JSONResponse(status_code=422, content={'detail': '알림 확인 요청 형식을 확인해 주세요.'},
@@ -300,6 +304,17 @@ def admin_create_owner(payload: OwnerCreate):
         raise
     except Exception:
         raise HTTPException(503, '계정 생성 결과를 확인할 수 없습니다. 목록을 새로고침해 확인한 뒤 다시 시도해 주세요.') from None
+
+
+@app.patch('/admin/owners/{owner_id}/password', status_code=204, response_class=Response)
+def admin_reset_owner_password(payload: OwnerPassword, owner_id: int = ApiPath(ge=1, le=2147483647)):
+    try:
+        reset_owner_password(owner_id, payload)
+    except OwnerNotFound:
+        raise HTTPException(404, '점주 계정이 없습니다.') from None
+    except Exception:
+        raise HTTPException(503, '비밀번호 변경 결과를 확인할 수 없습니다. 연결 상태를 확인한 후 다시 시도해 주세요.') from None
+    return Response(status_code=204)
 
 
 @app.get('/admin/owners', response_model=AdminOwnerList)

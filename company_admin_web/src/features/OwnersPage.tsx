@@ -6,6 +6,7 @@ import {
   Badge, ErrorState, Filter, Filters, Heading, Loading,
   Modal, Search, Section, Table,
 } from "../components/ui";
+import { OwnerPasswordForm } from "./OwnerPasswordForm";
 import { OwnerCreateForm } from "./OwnerCreateForm";
 import { OwnerDetails } from "./details";
 
@@ -36,6 +37,7 @@ export function OwnersPage({
   const live = repository !== null;
   const formId = useId();
   const [creating, setCreating] = useState(false), [saving, setSaving] = useState(false), [notice, setNotice] = useState("");
+  const [resetting, setResetting] = useState<ApiOwner>();
   const all: ApiOwner[] = live ? (result.data ?? []) : data.owners.map((o) => ({
     ...o, storeCount: data.stores.filter((s) => s.ownerId === o.id).length,
   }));
@@ -89,10 +91,13 @@ export function OwnersPage({
                 {
                   label: "",
                   render: (o) => (
-                    <button
+                    <div className="owner-account-actions"><button
                       aria-label={`연결 매장: ${o.loginId}`}
                       onClick={() => setDetail(o)}
                     >연결 매장</button>
+                    {repository?.resetPassword && <button aria-label={`비밀번호 초기화: ${o.loginId}`}
+                      onClick={() => { setNotice(""); setResetting(o); }}>비밀번호 초기화</button>}
+                    </div>
                   ),
                 },
               ]}
@@ -104,6 +109,14 @@ export function OwnersPage({
           <button type="submit" form={formId} disabled={saving} className="button-primary">{saving ? "등록 중…" : "등록"}</button></div>}>
         <OwnerCreateForm repository={repository} formId={formId} onBusy={setSaving} onSaved={() => {
           setSaving(false); setCreating(false); setNotice("점주 계정을 생성했습니다. 목록에서 연결 매장과 상세 정보를 확인할 수 있습니다."); result.reload();
+        }} />
+      </Modal>}
+      {resetting && repository?.resetPassword && <Modal title="점주 비밀번호 초기화" closeDisabled={saving}
+        onClose={() => { if (!saving) setResetting(undefined); }}
+        footer={<div className="store-form-actions"><button disabled={saving} onClick={() => setResetting(undefined)}>취소</button>
+          <button type="submit" form={formId} disabled={saving} className="button-primary">{saving ? "변경 중…" : "변경"}</button></div>}>
+        <OwnerPasswordForm repository={repository} owner={resetting} formId={formId} onBusy={setSaving} onSaved={() => {
+          setSaving(false); setResetting(undefined); setNotice(`${resetting.loginId} 계정의 비밀번호를 변경했습니다.`);
         }} />
       </Modal>}
       {detail && (
