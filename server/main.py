@@ -9,6 +9,7 @@ from fastapi import Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 import admin_auth
+import kakaopay_test
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from order_service import OrderInput, save_order, list_orders, order_detail
@@ -45,6 +46,14 @@ app = FastAPI(title="AI 보이스크 · 연습용 메뉴 API", version="0.1.0")
 @app.middleware('http')
 async def local_demo_only(request: Request, call_next):
     path = request.url.path
+    if path.startswith('/payments/kakaopay/'):
+        if '/approval/' in path:
+            request.state.payment_pg_token = request.query_params.get('pg_token')
+            request.scope['query_string'] = b''
+        try:
+            kakaopay_test.local_only(request)
+        except HTTPException as error:
+            return JSONResponse(status_code=error.status_code, content={'detail': error.detail})
     admin_path = path == '/admin' or path.startswith('/admin/')
     auth_path = path == '/auth/admin' or path.startswith('/auth/admin/')
     owner_password_path = path.startswith('/admin/owners/') and path.rstrip('/').endswith('/password')
@@ -72,6 +81,9 @@ async def local_demo_only(request: Request, call_next):
                 return JSONResponse(status_code=413, content={'detail': '인증 요청 크기를 확인해 주세요.'},
                                     headers={'Cache-Control': 'no-store'})
     response = await call_next(request)
+    if path.startswith('/payments/kakaopay/'):
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Referrer-Policy'] = 'no-referrer'
     if admin_path or auth_path:
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Pragma'] = 'no-cache'
@@ -85,6 +97,7 @@ app.add_middleware(CORSMiddleware,
     allow_methods=['GET', 'POST', 'PATCH'],
     allow_headers=['Content-Type', 'X-CSRF-Token'])
 app.include_router(admin_auth.router)
+app.include_router(kakaopay_test.router)
 
 
 @app.exception_handler(RequestValidationError)

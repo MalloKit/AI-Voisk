@@ -9,6 +9,7 @@ import '../models/menu_item.dart';
 import '../models/menu_option.dart';
 import '../data/order_repository.dart';
 import 'checkout_dialog.dart';
+import 'payment_screen.dart';
 
 class OrderScreen extends StatefulWidget {
   const OrderScreen({
@@ -30,6 +31,20 @@ class OrderScreen extends StatefulWidget {
 
 class _OrderScreenState extends State<OrderScreen> {
   Future<void> _checkout() async {
+    if (const bool.fromEnvironment('PAYMENT_DEMO', defaultValue: true)) {
+      final completed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => PaymentScreen(
+            entries: _cart.entries,
+            orderMode: widget.orderMode,
+            storeId: widget.storeId,
+            deviceId: widget.deviceId,
+          ),
+        ),
+      );
+      if (completed == true && mounted) _cart.clear();
+      return;
+    }
     const address = String.fromEnvironment(
       'ORDER_API_BASE_URL',
       defaultValue: String.fromEnvironment('MENU_API_BASE_URL'),
@@ -942,7 +957,11 @@ class _OrderScreenState extends State<OrderScreen> {
               ),
             ),
             icon: const Icon(Icons.check_circle_outline),
-            label: const Text('주문 완료 (시연)'),
+            label: const Text(
+              bool.fromEnvironment('PAYMENT_DEMO', defaultValue: true)
+                  ? '결제하기'
+                  : '주문 완료 (시연)',
+            ),
           ),
         ),
       ],

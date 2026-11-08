@@ -11,7 +11,7 @@ void main() {
     await tester.pumpAndSettle();
     OutlinedButton payment() => tester.widget<OutlinedButton>(
       find.ancestor(
-        of: find.text('주문 완료 (시연)'),
+        of: find.text('결제하기'),
         matching: find.byType(OutlinedButton),
       ),
     );
