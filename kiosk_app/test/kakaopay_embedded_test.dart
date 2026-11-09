@@ -124,7 +124,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('남은 시간 정보 없음 · API 서버를 재시작해 주세요.'), findsOneWidget);
     expect(result, isNull);
-    await tester.tap(find.text('결제 대기 취소'));
+    expect(find.text('결제 결과 확인'), findsNothing);
+    await tester.tap(find.text('결제 취소'));
     await tester.pumpAndSettle();
     expect(find.text('결제 대기를 취소할까요?'), findsOneWidget);
     expect(result, isNull);
@@ -133,9 +134,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('공식 QR 화면 자리'), findsOneWidget);
     expect(status, 'ready');
-    await tester.tap(find.text('결제 대기 취소'));
+    await tester.tap(find.text('결제 취소'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('대기 취소하기'));
+    await tester.tap(find.text('결제 취소하기'));
     await tester.pumpAndSettle();
     expect(result?['status'], 'cancelled');
     await tester.pumpWidget(const SizedBox());

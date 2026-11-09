@@ -45,6 +45,64 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool busy = false;
   Map<String, dynamic>? kakaoSession;
   PendingOrder? kakaoOrder;
+  PendingOrder? pendingCounterOrder;
+  int? savedOrderId;
+
+  Future<void> submitCounterOrder() async {
+    if (busy) return;
+    final selected = method;
+    final saveEnabled = selected == PaymentMethod.cash
+        ? const bool.fromEnvironment('KIOSK_SAVE_CASH_ORDERS')
+        : const bool.fromEnvironment('KIOSK_SAVE_DEMO_PAYMENTS') &&
+              (selected == PaymentMethod.card ||
+                  selected == PaymentMethod.naver);
+    if (!saveEnabled) {
+      setState(() => step = 2);
+      return;
+    }
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final order = pendingCounterOrder ??= PendingOrder(
+        entries: widget.entries,
+        storeId: widget.storeId,
+        deviceId: widget.deviceId,
+        orderType: widget.orderMode == '포장' ? 'takeaway' : 'dine_in',
+      );
+      final repository = ApiOrderRepository(
+        baseUrl: const String.fromEnvironment(
+          'ORDER_API_BASE_URL',
+          defaultValue: String.fromEnvironment('MENU_API_BASE_URL'),
+        ),
+      );
+      final id = selected == PaymentMethod.cash
+          ? await repository.submitCashOrder(order, total)
+          : await repository.submitDemoPayment(
+              order,
+              selected == PaymentMethod.card ? 'card' : 'naverpay',
+              total,
+            );
+      if (!mounted) return;
+      setState(() {
+        savedOrderId = id;
+        pendingCounterOrder = null;
+        step = 2;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        if (e is OrderValidationError) pendingCounterOrder = null;
+        error = e is OrderValidationError
+            ? e.message.toString()
+            : '주문 저장 결과를 확인하지 못했습니다. 같은 버튼을 눌러 다시 시도해 주세요.';
+      });
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   bool get kakaoEnabled =>
       widget.kakaoRepository != null ||
       const bool.fromEnvironment('KAKAOPAY_TEST');
@@ -89,7 +147,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
         result = await kakao.ready(kakaoOrder!);
       } else {
         final id = kakaoSession!['payment_id'] as String;
-        result = cancel ? await kakao.abandon(id) : await kakao.status(id);
+        result = cancel
+            ? await kakao.abandon(id)
+            : kakaoSession?['status'] == 'save_failed'
+            ? await kakao.retrySave(id)
+            : await kakao.status(id);
       }
       if (!mounted) return;
       setState(() {
@@ -100,6 +162,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
           error = '서버 금액과 장바구니 금액이 다릅니다. 대기 취소 후 메뉴를 다시 불러와 주세요.';
         } else if (result['status'] == 'unknown') {
           error = '승인 결과 확인이 필요합니다. 새 결제를 만들지 말고 개발자센터에서 확인해 주세요.';
+        } else if (result['status'] == 'save_failed') {
+          error = stoppedMessage('save_failed');
         } else if ([
           'cancelled',
           'failed',
@@ -122,6 +186,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   String stoppedMessage(dynamic status) => switch (status) {
+    'save_failed' => '결제는 승인됐지만 주문 저장에 실패했습니다. 주문 저장만 다시 시도해 주세요.',
     'expired' => '결제 대기 시간이 지났습니다. 장바구니는 유지됩니다. 다시 결제해 주세요.',
     'failed' => '결제를 완료하지 못했습니다. 장바구니는 유지됩니다. 다시 시도하거나 다른 수단을 선택해 주세요.',
     _ => '결제 대기를 취소했습니다. 장바구니는 유지됩니다.',
@@ -140,7 +205,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   int get total => widget.entries.fold(0, (sum, item) => sum + item.subtotal);
 
   void changeMethod() {
-    if (busy || kakaoPending) return;
+    if (busy || kakaoPending || pendingCounterOrder != null) return;
     setState(() {
       step = 0;
       error = null;
@@ -192,11 +257,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ),
             title: Text(
               step == 2
-                  ? (cash
-                        ? '현금 결제 안내'
-                        : kakaoActive
-                        ? '테스트 결제 결과'
-                        : '결제 시연 완료')
+                  ? (cash ? '현금 결제 안내' : '결제 완료')
                   : '결제하기',
             ),
           ),
@@ -206,17 +267,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    kakaoActive
-                        ? '카카오페이 개발용 테스트 · 매장 주문 저장 없음'
-                        : '시연용 · 실제 결제 및 주문 저장 없음',
-                    style: const TextStyle(
-                      color: green,
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
+                  if (kakaoActive) ...[
+                    const Text(
+                      '카카오페이 · 실제 청구 없음',
+                      style: TextStyle(
+                        color: green,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
+                    const SizedBox(height: 8),
+                  ],
                   Expanded(
                     child: step == 2
                         ? _fitPanel(_completion(cash, green))
@@ -287,6 +348,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   Widget _completion(bool cash, Color green) {
     final statusColor = cash ? const Color(0xFF956000) : green;
+    final cashOrderId = cash ? savedOrderId : null;
     final quantity = widget.entries.fold(
       0,
       (sum, entry) => sum + entry.quantity,
@@ -305,20 +367,26 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              cash
+              cashOrderId != null
+                  ? '현금 수납 대기'
+                  : cash
                   ? '카운터에서 현금으로 결제해 주세요'
                   : kakaoActive
-                  ? '카카오페이 테스트 승인 완료'
-                  : '결제 시연이 완료되었습니다',
+                  ? '카카오페이 승인 완료'
+                  : '결제가 완료되었습니다',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
-            Text(
-              cash ? '현금 수납 전입니다. 결제 완료 상태가 아닙니다.' : '실제 금액은 청구되지 않았습니다.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 17, color: statusColor),
-            ),
+            if (cash) ...[
+              const SizedBox(height: 8),
+              Text(
+                cashOrderId != null
+                    ? '카운터에 주문번호를 보여 주고 아래 금액을 결제해 주세요.'
+                    : '현금 수납 전입니다. 결제 완료 상태가 아닙니다.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 17, color: statusColor),
+              ),
+            ],
             const SizedBox(height: 20),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
@@ -330,8 +398,25 @@ class _PaymentScreenState extends State<PaymentScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (cashOrderId != null) ...[
+                    const Text(
+                      '주문번호',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 17),
+                    ),
+                    Text(
+                      '$cashOrderId번',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 44,
+                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                      ),
+                    ),
+                    const Divider(height: 20),
+                  ],
                   Text(
-                    cash ? '카운터에서 결제할 금액' : '테스트 결제 금액',
+                    cash ? '카운터에서 결제할 금액' : '결제 금액',
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 17),
                   ),
@@ -355,12 +440,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 14),
-            const Text(
-              '테스트 화면입니다. 매장에 주문이 접수되지 않았으며 주문번호는 발급되지 않습니다.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: Color(0xFF52625B)),
-            ),
+            if (cashOrderId == null) ...[
+              const SizedBox(height: 14),
+              Text(
+                kakaoActive && kakaoSession?['order_saved'] == true
+                    ? '주문번호 ${kakaoSession!['order_id']}'
+                    : savedOrderId != null
+                    ? '주문번호 $savedOrderId'
+                    : '매장에 주문이 접수되지 않았으며 주문번호는 발급되지 않습니다.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16, color: Color(0xFF52625B)),
+              ),
+            ],
             const SizedBox(height: 18),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
@@ -497,9 +588,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
-          '카카오페이 테스트 결제',
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+        Text(
+          session?['status'] == 'failed' ? '결제 실패' : '카카오페이 결제',
+          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
         Text('결제 금액 ${formatWon(total)}', style: const TextStyle(fontSize: 22)),
@@ -509,7 +600,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ? '키오스크 안에서 카카오페이 공식 QR 결제창을 준비합니다.'
               : canOpen
               ? '서버가 이전 버전입니다. API 서버를 재시작하면 앱 안에서 QR을 표시할 수 있습니다.'
-              : '서버에서 테스트 결제 결과를 확인합니다.',
+              : '서버에서 결제 결과를 확인합니다.',
           style: const TextStyle(fontSize: 18),
         ),
         if (error != null) ...[
@@ -561,8 +652,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ? '확인 중…'
                 : stopped
                 ? '카카오페이 다시 시도'
+                : session?['status'] == 'save_failed'
+                ? '주문 저장 다시 시도'
                 : session == null
-                ? '테스트 결제 준비'
+                ? '결제 준비'
                 : '결제 결과 확인',
             style: const TextStyle(fontSize: 21),
           ),
@@ -570,7 +663,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         if (session?['status'] == 'ready')
           TextButton(
             onPressed: busy ? null : () => kakaoRequest(cancel: true),
-            child: const Text('테스트 결제 대기 취소'),
+            child: const Text('결제 취소'),
           ),
         TextButton(
           onPressed: busy || kakaoPending ? null : changeMethod,
@@ -610,12 +703,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
             style: const TextStyle(fontSize: 21),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
-          const Text(
-            '결제 서비스와 단말기는 아직 연결되지 않았습니다.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 17),
-          ),
           if (error != null) ...[
             const SizedBox(height: 20),
             Text(
@@ -632,27 +719,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
               backgroundColor: green,
               minimumSize: const Size(0, 64),
             ),
-            onPressed: () => setState(() {
-              step = 2;
-              error = null;
-            }),
+            onPressed: busy ? null : submitCounterOrder,
             child: Text(
-              cash ? '현금 결제 안내 확인' : '결제 성공 시연',
+              busy
+                  ? '저장 중…'
+                  : cash
+                  ? '현금 결제 안내 확인'
+                  : '결제',
               style: const TextStyle(fontSize: 21),
             ),
           ),
-          if (!cash) ...[
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: () => setState(
-                () => error = '결제 실패 시연입니다. 다시 시도하거나 다른 결제 수단을 선택해 주세요.',
-              ),
-              child: const Text('결제 실패 시연'),
-            ),
-          ],
           const SizedBox(height: 12),
           TextButton(
-            onPressed: changeMethod,
+            onPressed: busy || pendingCounterOrder != null
+                ? null
+                : changeMethod,
             child: const Text(
               '취소 · 결제 수단 다시 선택',
               style: TextStyle(fontSize: 18),

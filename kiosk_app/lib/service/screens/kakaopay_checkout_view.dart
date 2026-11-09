@@ -46,6 +46,7 @@ class _KakaoCheckoutViewState extends State<KakaoCheckoutView>
   bool terminal = false;
   String? error;
   int failures = 0;
+  static const connectionDelay = '서버 연결이 지연되고 있습니다. 결제 상태를 계속 확인합니다.';
 
   @override
   void initState() {
@@ -228,7 +229,7 @@ class _KakaoCheckoutViewState extends State<KakaoCheckoutView>
       accept(await widget.repository.finishCallback(url, widget.paymentId));
     } catch (_) {
       if (mounted) {
-        setState(() => error = '승인 응답이 지연되고 있습니다. 새 결제를 만들지 말고 결과 확인을 눌러 주세요.');
+        setState(() => error = '승인 응답이 지연되고 있습니다. 결제 상태를 자동으로 확인합니다.');
       }
     } finally {
       handlingCallback = false;
@@ -243,13 +244,13 @@ class _KakaoCheckoutViewState extends State<KakaoCheckoutView>
     try {
       accept(await widget.repository.status(widget.paymentId));
       failures = 0;
+      if (mounted && error == connectionDelay) {
+        setState(() => error = null);
+      }
     } catch (_) {
       failures++;
-      if (failures >= 3) {
-        timer?.cancel();
-        if (mounted) {
-          setState(() => error = '서버 연결이 지연됩니다. 서버 실행 상태를 확인하고 결과 확인을 눌러 주세요.');
-        }
+      if (failures >= 3 && mounted && error != connectionDelay) {
+        setState(() => error = connectionDelay);
       }
     } finally {
       checking = false;
@@ -272,7 +273,7 @@ class _KakaoCheckoutViewState extends State<KakaoCheckoutView>
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('대기 취소하기'),
+            child: const Text('결제 취소하기'),
           ),
         ],
       ),
@@ -290,7 +291,7 @@ class _KakaoCheckoutViewState extends State<KakaoCheckoutView>
         accept(await widget.repository.status(widget.paymentId));
       } catch (_) {}
       if (mounted && !terminal) {
-        setState(() => error = '취소 여부를 확인하지 못했습니다. 결과 확인을 눌러 주세요.');
+        setState(() => error = '취소 응답이 지연되고 있습니다. 결제 상태를 자동으로 확인합니다.');
       }
     } finally {
       if (mounted) setState(() => stopping = false);
@@ -394,24 +395,10 @@ class _KakaoCheckoutViewState extends State<KakaoCheckoutView>
           ),
         ),
       const SizedBox(height: 8),
-      Row(
-        children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: stopping ? null : cancel,
-              style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
-              child: Text(stopping ? '취소 확인 중…' : '결제 대기 취소'),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: OutlinedButton(
-              onPressed: stopping ? null : check,
-              style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
-              child: const Text('결제 결과 확인'),
-            ),
-          ),
-        ],
+      OutlinedButton(
+        onPressed: stopping ? null : cancel,
+        style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+        child: Text(stopping ? '취소 확인 중…' : '결제 취소'),
       ),
     ],
   );

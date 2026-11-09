@@ -79,10 +79,10 @@ void main() {
       );
       await tester.tap(find.text('카드 결제'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('결제 성공 시연'));
+      await tester.tap(find.text('결제'));
       await tester.pumpAndSettle();
       expect(requests, isEmpty);
-      expect(find.text('결제 시연이 완료되었습니다'), findsOneWidget);
+      expect(find.text('결제가 완료되었습니다'), findsOneWidget);
       await tester.tap(find.text('확인 · 장바구니 비우기'));
       await tester.pumpAndSettle();
       expect(find.text('0원'), findsOneWidget);

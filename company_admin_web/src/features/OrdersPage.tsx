@@ -71,6 +71,9 @@ export function LiveDetail({
     [id, repository],
   );
   const result = useAsync(load);
+  const [confirming, setConfirming] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [cashError, setCashError] = useState(false);
   if (result.loading) return <Loading text="주문 상세를 불러오는 중…" />;
   if (result.error)
     return (
@@ -79,7 +82,44 @@ export function LiveDetail({
         onRetry={result.reload}
       />
     );
-  return <OrderDetails order={result.data!} live />;
+  const order = result.data!;
+  const cash = order.cash_payment;
+  async function receiveCash() {
+    if (!repository.confirmCash || saving) return;
+    setSaving(true);
+    setCashError(false);
+    try {
+      await repository.confirmCash(id);
+      setConfirming(false);
+      result.reload();
+    } catch {
+      setCashError(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <>
+      <OrderDetails order={order} live />
+      {cash && (
+        <section aria-label="현금 결제">
+          <p>현금 {cash.amount.toLocaleString("ko-KR")}원 · {cash.received ? "수납 완료" : "수납 대기"}</p>
+          {!cash.received && repository.confirmCash && (
+            confirming ? (
+              <>
+                <p>이 주문의 현금을 받았나요?</p>
+                <button disabled={saving} onClick={() => void receiveCash()}>
+                  {saving ? "저장 중…" : "받은 현금 기록하기"}
+                </button>
+                <button disabled={saving} onClick={() => setConfirming(false)}>돌아가기</button>
+              </>
+            ) : <button onClick={() => setConfirming(true)}>현금 수납 확인</button>
+          )}
+          {cashError && <p role="alert">수납 결과를 확인하지 못했습니다. 같은 주문에서 다시 시도해 주세요.</p>}
+        </section>
+      )}
+    </>
+  );
 }
 export function OrdersPage({
   data,

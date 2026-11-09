@@ -90,7 +90,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('수단 선택 즉시 이동, 실패 후 재선택, 현금은 수납 대기', (tester) async {
+  testWidgets('수단 선택 즉시 이동, 결제 버튼과 재선택, 현금은 수납 대기', (tester) async {
     await open(tester, size: const Size(960, 600));
     final sizes = PaymentMethod.values
         .map(
@@ -103,9 +103,8 @@ void main() {
     for (final method in ['카카오페이', '네이버페이']) {
       await tester.tap(find.text(method));
       await tester.pump();
-      await tester.tap(find.text('결제 실패 시연'));
-      await tester.pump();
-      expect(find.textContaining('결제 실패 시연입니다.'), findsOneWidget);
+      expect(find.text('결제'), findsOneWidget);
+      expect(find.text('결제 실패 시연'), findsNothing);
       await tester.tap(find.text('취소 · 결제 수단 다시 선택'));
       await tester.pumpAndSettle();
     }

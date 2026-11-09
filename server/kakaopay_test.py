@@ -1,8 +1,9 @@
-"""카카오페이 개발 CID 전용. 결제 세션은 메모리이며 공용 DB에는 쓰지 않습니다."""
+"""카카오페이 개발 CID 전용. 별도 설정 시 승인된 테스트 주문을 저장합니다."""
 import os
 import secrets
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 from threading import RLock
@@ -13,7 +14,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from order_service import OrderInput
+from order_service import OrderPayment, OrderInput, save_order
 
 router = APIRouter(prefix='/payments/kakaopay', tags=['카카오페이 테스트'])
 BASE = 'http://localhost:8001'
@@ -31,6 +32,9 @@ class Session:
     redirect: str
     created: float
     status: str = 'ready'
+    save_enabled: bool = False
+    payment: OrderPayment | None = None
+    order_id: int | None = None
 
 
 sessions: dict[str, Session] = {}
@@ -119,9 +123,12 @@ def find(token):
 
 
 def public(session):
-    return {'payment_id': session.token, 'status': session.status, 'total_amount': session.total,
+    status = session.status
+    if status == 'approved' and session.save_enabled and session.order_id is None:
+        status = 'save_failed'
+    return {'payment_id': session.token, 'status': status, 'total_amount': session.total,
             'expires_in': max(0, int(TTL - (time.monotonic() - session.created) + 0.999999)) if session.status == 'ready' else 0,
-            'test_only': True, 'order_saved': False,
+            'test_only': True, 'order_saved': session.order_id is not None, 'order_id': session.order_id,
             'browser_url': f'{BASE}/payments/kakaopay/browser/{session.token}',
             'checkout_url': session.redirect if session.status == 'ready' else None}
 
@@ -156,7 +163,8 @@ def ready(order: OrderInput, request: Request):
         url = urlparse(redirect)
         if url.scheme != 'https' or not url.hostname or not any(url.hostname.endswith('.' + h) for h in ('kakaopay.com', 'kakao.com')) or not result.get('tid'):
             raise HTTPException(502, '카카오페이 결제 준비 응답이 올바르지 않습니다.')
-        session = Session(token, order, total, result['tid'], redirect, time.monotonic())
+        session = Session(token, order, total, result['tid'], redirect, time.monotonic(),
+                          save_enabled=os.getenv('KAKAOPAY_SAVE_TEST_ORDERS') == '1')
         sessions[token] = session
         return public(session)
 
@@ -166,6 +174,26 @@ def status(token: str, request: Request):
     local_only(request)
     with lock:
         return public(find(token))
+
+
+def save_approved(session):
+    if session.save_enabled and session.payment is not None and session.order_id is None:
+        try:
+            session.order_id = save_order(session.order, payment=session.payment)['order_id']
+        except Exception:
+            # 승인 상태를 유지하고, 앱에서 저장만 다시 요청할 수 있게 합니다.
+            return
+
+
+@router.post('/save/{token}')
+def retry_save(token: str, request: Request):
+    local_only(request)
+    with lock:
+        session = find(token)
+        if session.status != 'approved' or not session.save_enabled or session.payment is None:
+            raise HTTPException(409, '저장할 수 있는 승인된 테스트 결제가 없습니다.')
+        save_approved(session)
+        return public(session)
 
 
 @router.post('/abandon/{token}')
@@ -184,7 +212,7 @@ def page(title, body):
     return HTMLResponse('<!doctype html><html lang="ko"><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<title>AI-Voisk 카카오페이 테스트</title><body style="font:20px sans-serif;max-width:640px;margin:60px auto;padding:24px">'
-        f'<h1>{escape(title)}</h1>{body}<p>개발용 결제 테스트 · 매장 주문은 저장하지 않습니다.</p></body></html>',
+        f'<h1>{escape(title)}</h1>{body}<p>카카오페이 개발용 결제 테스트</p></body></html>',
         headers={'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
                  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'"})
 
@@ -221,10 +249,13 @@ def approve(token: str, request: Request):
                     and type(result.get('amount', {}).get('total')) is int
                     and result['amount']['total'] == session.total):
                     session.status = 'approved'
+                    session.payment = OrderPayment(
+                        session.tid, session.total, datetime.now(timezone.utc).replace(tzinfo=None))
+                    save_approved(session)
             except HTTPException:
                 pass
         if session.status == 'approved':
-            return page('테스트 결제 승인 완료', '<p>키오스크로 돌아가 결제 결과 확인을 눌러주세요.</p>')
+            return page('테스트 결제 승인 완료', '<p>키오스크로 돌아가 결과를 확인해 주세요.</p>')
         return page('승인 결과 확인 필요', '<p>승인 여부를 확정할 수 없습니다. 새 결제를 만들지 말고 개발자센터에서 확인해 주세요.</p>')
 
 

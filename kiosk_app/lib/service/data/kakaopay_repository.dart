@@ -38,7 +38,7 @@ class KakaoTestRepository {
         throw StateError(
           result is Map && result['detail'] is String
               ? result['detail'] as String
-              : '테스트 결제 요청을 확인해 주세요.',
+              : '결제 요청을 확인해 주세요.',
         );
       }
       return result as Map<String, dynamic>;
@@ -53,6 +53,8 @@ class KakaoTestRepository {
       request('status/${Uri.encodeComponent(id)}');
   Future<Map<String, dynamic>> abandon(String id) =>
       request('abandon/${Uri.encodeComponent(id)}', body: '{}');
+  Future<Map<String, dynamic>> retrySave(String id) =>
+      request('save/${Uri.encodeComponent(id)}', body: '{}');
 
   static bool isProviderUrl(Uri uri) =>
       uri.scheme == 'https' &&

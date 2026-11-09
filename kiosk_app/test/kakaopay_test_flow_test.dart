@@ -67,14 +67,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('결제 성공 시연'), findsNothing);
     expect(find.text('PC 결제 주소 복사'), findsOneWidget);
-    expect(find.text('카카오페이 테스트 승인 완료'), findsNothing);
+    expect(find.text('카카오페이 승인 완료'), findsNothing);
     await tester.tap(find.text('결제 결과 확인'));
     await tester.pumpAndSettle();
-    expect(find.text('카카오페이 테스트 승인 완료'), findsNothing);
+    expect(find.text('카카오페이 승인 완료'), findsNothing);
     approved = true;
     await tester.tap(find.text('결제 결과 확인'));
     await tester.pumpAndSettle();
-    expect(find.text('카카오페이 테스트 승인 완료'), findsOneWidget);
+    expect(find.text('카카오페이 승인 완료'), findsOneWidget);
     expect(
       paths.every((path) => path.startsWith('/payments/kakaopay/')),
       isTrue,
@@ -136,7 +136,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('결제 결과 확인'));
       await tester.pumpAndSettle();
-      expect(find.text('카카오페이 테스트 승인 완료'), findsNothing);
+      expect(find.text('카카오페이 승인 완료'), findsNothing);
       expect(find.text('비빔밥 · 2개'), findsOneWidget);
       if (outcome == 'unknown') {
         expect(find.text('카카오페이 다시 시도'), findsNothing);

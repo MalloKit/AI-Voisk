@@ -9,6 +9,7 @@ import kakaopay_test as pay
 
 class KakaoTest(unittest.TestCase):
     def setUp(self):
+        patch.dict('os.environ', {'KAKAOPAY_SAVE_TEST_ORDERS': '0'}).start()
         pay.sessions.clear()
         self.client = TestClient(app)
         self.payload = dict(store_id=1, device_id=1, client_order_id=str(uuid4()), order_type='takeaway',

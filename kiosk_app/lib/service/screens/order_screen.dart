@@ -960,7 +960,7 @@ class _OrderScreenState extends State<OrderScreen> {
             label: const Text(
               bool.fromEnvironment('PAYMENT_DEMO', defaultValue: true)
                   ? '결제하기'
-                  : '주문 완료 (시연)',
+                  : '주문 완료',
             ),
           ),
         ),
