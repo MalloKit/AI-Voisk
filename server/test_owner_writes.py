@@ -11,6 +11,10 @@ import admin_auth
 import test_store_writes as store_tests
 from auth_test_support import authenticated_client
 from main import app
+from starlette import testclient as _testclient
+
+# TestClient가 httpx 또는 httpx2를 쓰므로 실제 모듈의 로거를 확인합니다.
+HTTP_LOGGER = _testclient.httpx.__name__
 
 _PASSWORD = secrets.token_urlsafe(24)
 
@@ -82,7 +86,7 @@ class OwnerWriteTests(unittest.TestCase):
         return self.client.patch(f'/admin/stores/{store}/owner', json={'owner_id': owner, 'expected_owner_id': expected, **changes})
 
     def test_create_contract_hash_verification_and_safe_logs(self):
-        with self.assertLogs('httpx', level='INFO') as captured:
+        with self.assertLogs(HTTP_LOGGER, level='INFO') as captured:
             response = self.create()
         self.assertEqual(response.status_code, 201)
         row = response.json()

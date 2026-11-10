@@ -15,6 +15,8 @@ import admin_auth
 import owner_auth
 import owner_router
 import kakaopay_test
+import device_auth
+import kiosk_router
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from order_service import OrderPayment, OrderInput, save_order, list_orders, order_detail, confirm_cash
@@ -61,6 +63,10 @@ async def local_demo_only(request: Request, call_next):
             kakaopay_test.local_only(request)
         except HTTPException as error:
             return JSONResponse(status_code=error.status_code, content={'detail': error.detail})
+    kiosk_path = path == '/kiosk' or path.startswith('/kiosk/')
+    if kiosk_path and request.method == 'POST' and len(await request.body()) > 64 * 1024:
+        return JSONResponse(status_code=413, content={'detail': '요청 크기를 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
     admin_path = path == '/admin' or path.startswith('/admin/')
     auth_path = path == '/auth/admin' or path.startswith('/auth/admin/')
     owner_password_path = path.startswith('/admin/owners/') and path.rstrip('/').endswith('/password')
@@ -112,7 +118,7 @@ async def local_demo_only(request: Request, call_next):
     if path.startswith('/payments/kakaopay/'):
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Referrer-Policy'] = 'no-referrer'
-    if admin_path or auth_path or owner_path or owner_auth_path:
+    if admin_path or auth_path or owner_path or owner_auth_path or kiosk_path:
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Pragma'] = 'no-cache'
     return response
@@ -128,6 +134,7 @@ app.include_router(admin_auth.router)
 app.include_router(owner_auth.router)
 app.include_router(owner_router.router)
 app.include_router(kakaopay_test.router)
+app.include_router(kiosk_router.router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -135,6 +142,10 @@ async def safe_validation_error(request: Request, error: RequestValidationError)
     # 기본 422 응답은 입력값을 그대로 돌려주므로 비밀번호·본문이 반사되지 않게 바꿉니다.
     if request.url.path.startswith('/auth/owner/'):
         return JSONResponse(status_code=422, content={'detail': '로그인 입력 형식을 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
+    if request.url.path.startswith('/kiosk/'):
+        # 발화 텍스트가 오류 응답에 되돌아가지 않도록 입력값을 싣지 않습니다.
+        return JSONResponse(status_code=422, content={'detail': {'code': 'invalid_request', 'message': '요청 형식을 확인해 주세요.'}},
                             headers={'Cache-Control': 'no-store'})
     if request.url.path.startswith('/owner/'):
         return JSONResponse(status_code=422, content={'detail': '입력 형식과 허용 범위를 확인해 주세요.'},
@@ -455,6 +466,23 @@ def admin_create_device(payload: DeviceCreate):
 @app.patch('/admin/devices/{device_id}/status', response_model=AdminDeviceView)
 def admin_update_device_status(payload: DeviceStatusPatch, device_id: int = ApiPath(ge=1, le=2147483647)):
     return _device_write_call(update_device_status, device_id, payload)
+
+
+class AdminDeviceToken(BaseModel):
+    device_id: int
+    store_id: int
+    token: str
+
+
+@app.post('/admin/devices/{device_id}/token', response_model=AdminDeviceToken)
+def admin_issue_device_token(device_id: int = ApiPath(ge=1, le=2147483647)):
+    """새 토큰을 발급하고 이전 토큰을 무효로 합니다. 토큰은 이 응답에서 한 번만 보여 줍니다."""
+    try:
+        return device_auth.issue_token(device_id)
+    except LookupError:
+        raise HTTPException(404, '기기가 없습니다.') from None
+    except Exception:
+        raise HTTPException(503, '토큰 발급 결과를 확인할 수 없습니다. 다시 발급해 주세요.') from None
 
 
 @app.get('/admin/devices', response_model=AdminDeviceList)

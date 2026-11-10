@@ -5,7 +5,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
 
 class OrderItemInput(BaseModel):
@@ -13,6 +13,8 @@ class OrderItemInput(BaseModel):
     menu_id: StrictInt = Field(ge=1)
     quantity: StrictInt = Field(ge=1, le=99)
     option_ids: list[StrictInt] = Field(default_factory=list, max_length=50)
+    # 추천 카드에서 고른 품목. AI 마이그레이션 전 DB에는 저장하지 않습니다.
+    is_recommended: StrictBool = False
 
     @model_validator(mode='after')
     def options_unique(self):
@@ -29,6 +31,8 @@ class OrderInput(BaseModel):
     order_type: Literal['takeaway', 'dine_in']
     table_no: None = None
     items: list[OrderItemInput] = Field(min_length=1, max_length=100)
+    # 음성 대화로 완성한 주문은 voice. 생략하면 기록하지 않습니다(구버전 키오스크 호환).
+    order_channel: Literal['touch', 'voice'] | None = None
 
 def connection_factory():
     from database import connect
@@ -40,6 +44,16 @@ def _order_schema(cursor):
         FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()
         AND TABLE_NAME='orders' AND COLUMN_NAME IN ('order_type','table_no')''')
     return {row['name']: row['nullable'] for row in cursor.fetchall()}
+
+
+def _has_column(cursor, table, column):
+    # 실패한 SELECT는 MySQL·SQLite 모두 트랜잭션을 깨지 않습니다.
+    try:
+        cursor.execute(f'SELECT {column} FROM {table} WHERE 1 = 0')
+        cursor.fetchall()
+        return True
+    except Exception:
+        return False
 
 
 def _type(row):
@@ -157,12 +171,23 @@ def save_order(request: OrderInput, *, payment: OrderPayment | None = None):
                 if total != payment.amount:
                     raise HTTPException(409 if payment.method == 'kakaopay' else 422,
                                         '결제 금액과 현재 주문 금액이 일치하지 않습니다.')
-            cursor.execute('INSERT INTO orders (store_id,table_no,device_id,client_order_id,order_type) VALUES (%s,NULL,%s,%s,%s)',
-                           (request.store_id,request.device_id,str(request.client_order_id),request.order_type))
+            channel = request.order_channel is not None and _has_column(cursor, 'orders', 'order_channel')
+            recommended = any(i.is_recommended for i in request.items) and _has_column(cursor, 'order_item', 'is_recommended')
+            if channel:
+                cursor.execute('''INSERT INTO orders (store_id,table_no,device_id,client_order_id,order_type,order_channel)
+                    VALUES (%s,NULL,%s,%s,%s,%s)''',
+                    (request.store_id,request.device_id,str(request.client_order_id),request.order_type,request.order_channel))
+            else:
+                cursor.execute('INSERT INTO orders (store_id,table_no,device_id,client_order_id,order_type) VALUES (%s,NULL,%s,%s,%s)',
+                               (request.store_id,request.device_id,str(request.client_order_id),request.order_type))
             order_id = cursor.lastrowid
             for item in request.items:
-                cursor.execute('INSERT INTO order_item (order_id,menu_id,item_quantity,option_id) VALUES (%s,%s,%s,NULL)',
-                               (order_id,item.menu_id,item.quantity))
+                if recommended:
+                    cursor.execute('''INSERT INTO order_item (order_id,menu_id,item_quantity,option_id,is_recommended)
+                        VALUES (%s,%s,%s,NULL,%s)''', (order_id,item.menu_id,item.quantity,item.is_recommended))
+                else:
+                    cursor.execute('INSERT INTO order_item (order_id,menu_id,item_quantity,option_id) VALUES (%s,%s,%s,NULL)',
+                                   (order_id,item.menu_id,item.quantity))
                 item_id = cursor.lastrowid
                 for option_id in sorted(item.option_ids):
                     cursor.execute('INSERT INTO order_item_option (item_id,option_id) VALUES (%s,%s)', (item_id,option_id))

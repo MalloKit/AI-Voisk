@@ -147,7 +147,8 @@ class ReadTests(OwnerPortalTestCase):
 
 
 class SoldOutTests(OwnerPortalTestCase):
-    def test_changes_immediately_without_menu_version_bump(self):
+    def test_changes_immediately_and_bumps_only_own_store_menu_version(self):
+        # 품절도 키오스크가 바로 반영해야 하므로 해당 매장 기기의 메뉴 버전을 올립니다(AI 음성 작업에서 변경).
         before = self.versions()
         self.assertEqual(self.client.patch('/owner/menus/10/sold-out', json={'is_sold_out': True}).json(),
                          {'menu_id': 10, 'is_sold_out': True})
@@ -155,7 +156,8 @@ class SoldOutTests(OwnerPortalTestCase):
                          {'option_id': 100, 'is_sold_out': True})
         self.assertEqual(self.f.value('SELECT is_sold_out FROM menu WHERE menu_id = 10'), 1)
         self.assertEqual(self.f.value('SELECT is_sold_out FROM menu_option WHERE option_id = 100'), 1)
-        self.assertEqual(self.versions(), before)
+        self.assertEqual(self.versions(), {device: version + (2 if device in (70, 71) else 0)
+                                           for device, version in before.items()})
 
     def test_repeating_same_value_succeeds(self):
         for _ in range(2):

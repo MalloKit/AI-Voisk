@@ -25,3 +25,6 @@ venv/
 # 임시 파일
 *.tmp
 *.temp
+
+# DB 백업(비밀번호 해시 포함) - 커밋 금지
+server/backups/

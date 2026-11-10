@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from pydantic import BaseModel
 
+import owner_ai_service as ai
 import owner_auth
 import owner_menu_write_service as writes
 import owner_portal_service as portal
@@ -82,3 +83,38 @@ def order(request: Request, store_id: Id, order_id: Id):
 @router.get('/stores/{store_id}/devices', response_model=OwnerDeviceList)
 def devices(request: Request, store_id: Id):
     return _call(READ_FAILED, portal.list_devices, store_id, _owner_id(request))
+
+
+@router.get('/stores/{store_id}/ai-settings')
+def ai_settings(request: Request, store_id: Id):
+    return _call(READ_FAILED, ai.get_settings, store_id, _owner_id(request))
+
+
+@router.patch('/stores/{store_id}/ai-settings')
+def save_ai_settings(payload: ai.AiSettingsInput, request: Request, store_id: Id):
+    return _call(WRITE_FAILED, ai.save_settings, store_id, _owner_id(request), payload)
+
+
+@router.get('/stores/{store_id}/menu-ai')
+def menu_ai(request: Request, store_id: Id):
+    return _call(READ_FAILED, ai.get_menu_ai, store_id, _owner_id(request))
+
+
+@router.patch('/stores/{store_id}/menu-ai')
+def save_menu_ai(payload: ai.MenuAiChanges, request: Request, store_id: Id):
+    return _call(WRITE_FAILED, ai.save_menu_ai, store_id, _owner_id(request), payload)
+
+
+@router.get('/stores/{store_id}/stats')
+def stats(request: Request, store_id: Id, days: int = Query(7, ge=1, le=90)):
+    return _call(READ_FAILED, ai.stats, store_id, _owner_id(request), days)
+
+
+@router.get('/stores/{store_id}/staff-calls')
+def staff_calls(request: Request, store_id: Id):
+    return _call(READ_FAILED, ai.staff_calls, store_id, _owner_id(request))
+
+
+@router.patch('/stores/{store_id}/staff-calls/{alert_id}/resolve')
+def resolve_staff_call(request: Request, store_id: Id, alert_id: Id):
+    return _call(WRITE_FAILED, ai.resolve_staff_call, store_id, _owner_id(request), alert_id)

@@ -8,6 +8,10 @@ from argon2 import Type, extract_parameters
 import admin_auth
 from main import app
 import test_owner_writes as owner_tests
+from starlette import testclient as _testclient
+
+# TestClient가 httpx 또는 httpx2를 쓰므로 실제 모듈의 로거를 확인합니다.
+HTTP_LOGGER = _testclient.httpx.__name__
 
 
 class OwnerPasswordTests(unittest.TestCase):
@@ -21,7 +25,7 @@ class OwnerPasswordTests(unittest.TestCase):
         previous = self.db.execute('SELECT * FROM owner WHERE owner_id=8').fetchone()
         before = self.client.get('/admin/owners/7').json()
         relations = [tuple(r) for r in self.db.execute('SELECT * FROM store')]
-        with self.assertLogs('httpx', level='INFO') as logs:
+        with self.assertLogs(HTTP_LOGGER, level='INFO') as logs:
             response = self.reset(new)
         self.assertEqual(response.status_code, 204)
         self.assertEqual(response.content, b'')

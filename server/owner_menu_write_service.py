@@ -6,6 +6,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictBool, S
 from pymysql.err import IntegrityError
 
 import owner_portal_service as portal
+import sync_hub
 from owner_portal_service import OwnerResourceNotFound
 
 INT_MAX = 2147483647
@@ -304,6 +305,7 @@ def save_menu_board(store_id, owner_id, changes):
                            (store_id,))
             board = portal.read_board(cursor, store_id)
         connection.commit()
+        sync_hub.menu_changed(store_id)
         return {'board': board, 'ids': ids, 'devices_updated': len(devices)}
     except IntegrityError as error:
         connection.rollback()
@@ -318,25 +320,30 @@ def save_menu_board(store_id, owner_id, changes):
 
 
 def _set_sold_out(owner_id, target_id, value, select_sql, update_sql):
+    # 품절도 키오스크가 즉시 반영해야 하므로 메뉴 버전을 올리고 알립니다.
     connection = portal.connection_factory()
     try:
         with connection.cursor() as cursor:
             cursor.execute('START TRANSACTION')
             cursor.execute(select_sql, (target_id, owner_id))
-            if cursor.fetchone() is None:
+            row = cursor.fetchone()
+            if row is None:
                 raise OwnerResourceNotFound()
             cursor.execute(update_sql, (value, target_id))
+            cursor.execute('UPDATE kiosk_device SET current_menu_version = current_menu_version + 1 WHERE store_id = %s',
+                           (row['store_id'],))
         connection.commit()
     except Exception:
         connection.rollback()
         raise
     finally:
         connection.close()
+    sync_hub.menu_changed(row['store_id'])
 
 
 def set_menu_sold_out(menu_id, owner_id, value):
     _set_sold_out(owner_id, menu_id, value, """
-        SELECT m.menu_id FROM menu m JOIN category c ON c.category_id = m.category_id
+        SELECT m.menu_id, s.store_id FROM menu m JOIN category c ON c.category_id = m.category_id
         JOIN store s ON s.store_id = c.store_id WHERE m.menu_id = %s AND s.owner_id = %s
     """, 'UPDATE menu SET is_sold_out = %s WHERE menu_id = %s')
     return {'menu_id': menu_id, 'is_sold_out': value}
@@ -344,7 +351,7 @@ def set_menu_sold_out(menu_id, owner_id, value):
 
 def set_option_sold_out(option_id, owner_id, value):
     _set_sold_out(owner_id, option_id, value, """
-        SELECT o.option_id FROM menu_option o JOIN menu m ON m.menu_id = o.menu_id
+        SELECT o.option_id, s.store_id FROM menu_option o JOIN menu m ON m.menu_id = o.menu_id
         JOIN category c ON c.category_id = m.category_id
         JOIN store s ON s.store_id = c.store_id WHERE o.option_id = %s AND s.owner_id = %s
     """, 'UPDATE menu_option SET is_sold_out = %s WHERE option_id = %s')
