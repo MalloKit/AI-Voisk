@@ -79,19 +79,32 @@ def read_board(cursor, store_id):
         ORDER BY c.category_sort, c.category_id, m.menu_sort, m.menu_id
     """, (store_id,))
     menus = cursor.fetchall()
-    cursor.execute("""
+    group = ', o.option_group' if _has_option_group(cursor) else ''
+    cursor.execute(f"""
         SELECT o.option_id, o.menu_id, o.option_nm AS option_name, o.extra_price,
-               o.is_active, o.is_sold_out, o.menu_option_sort
+               o.is_active, o.is_sold_out, o.menu_option_sort{group}
         FROM menu_option o JOIN menu m ON m.menu_id = o.menu_id
         JOIN category c ON c.category_id = m.category_id
         WHERE c.store_id = %s
         ORDER BY o.menu_id, o.menu_option_sort, o.option_id
     """, (store_id,))
     options = cursor.fetchall()
+    for row in options:
+        row['option_group'] = row.get('option_group') or None
     for row in menus + options:
         row['is_active'] = bool(row['is_active'])
         row['is_sold_out'] = bool(row['is_sold_out'])
     return {'categories': categories, 'menus': menus, 'options': options}
+
+
+def _has_option_group(cursor):
+    # 옵션 그룹 열은 AI_MIGRATION 마지막 단계에서 추가합니다. 없으면 모든 옵션을 자유 추가로 봅니다.
+    try:
+        cursor.execute('SELECT option_group FROM menu_option WHERE 1 = 0')
+        cursor.fetchall()
+        return True
+    except Exception:
+        return False
 
 
 def menu_board(store_id, owner_id):
@@ -171,10 +184,29 @@ def list_devices(store_id, owner_id):
     with read_cursor() as cursor:
         require_store(cursor, store_id, owner_id)
         # 인증 값이 섞이지 않도록 열과 응답을 모두 명시합니다.
-        cursor.execute("""
-            SELECT device_id, device_code, is_active, last_seen_at
+        extra = ''
+        for column in ('app_version', 'last_synced_at', 'current_menu_version', 'applied_menu_version'):
+            try:
+                cursor.execute(f'SELECT {column} FROM kiosk_device WHERE 1 = 0')
+                cursor.fetchall()
+                extra += f', {column}'
+            except Exception:
+                pass
+        cursor.execute(f"""
+            SELECT device_id, device_code, is_active, last_seen_at{extra}
             FROM kiosk_device WHERE store_id = %s ORDER BY device_id
         """, (store_id,))
         return {'devices': [{'device_id': row['device_id'], 'device_code': row['device_code'],
-                             'is_active': bool(row['is_active']), 'last_seen_at': _utc(row['last_seen_at'])}
+                             'is_active': bool(row['is_active']), 'last_seen_at': _utc(row['last_seen_at']),
+                             'app_version': row.get('app_version'),
+                             'last_synced_at': _utc(_parse_time(row.get('last_synced_at'))),
+                             'current_menu_version': row.get('current_menu_version'),
+                             'applied_menu_version': row.get('applied_menu_version')}
                             for row in cursor.fetchall()]}
+
+
+def _parse_time(value):
+    # SQLite 테스트 DB는 시각을 문자열로 돌려줍니다.
+    if isinstance(value, str):
+        return datetime.fromisoformat(value)
+    return value

@@ -53,6 +53,19 @@ Price = Annotated[StrictInt, Field(ge=1, le=PRICE_MAX)]
 ExtraPrice = Annotated[StrictInt, Field(ge=0, le=PRICE_MAX)]
 CategoryName = Annotated[StrictStr, _name(100)]
 ItemName = Annotated[StrictStr, _name(50)]
+
+
+def _group(value):
+    if value is None:
+        return None
+    value = _no_control(value).strip()
+    if len(value) > 20:
+        raise ValueError('옵션 그룹 이름은 20자 이하로 입력해 주세요.')
+    return value or None
+
+
+# 같은 그룹 옵션은 하나를 꼭 고릅니다(맵기·사이즈). 비우면 자유롭게 더하는 옵션입니다.
+OptionGroup = Annotated[StrictStr | None, AfterValidator(_group)]
 Description = Annotated[StrictStr | None, AfterValidator(_description)]
 
 
@@ -112,6 +125,7 @@ class OptionCreate(_Input):
     extra_price: ExtraPrice
     is_sold_out: StrictBool = False
     sort: Sort
+    group: OptionGroup = None
 
 
 class OptionUpdate(_Input):
@@ -120,6 +134,8 @@ class OptionUpdate(_Input):
     extra_price: ExtraPrice
     is_active: StrictBool
     sort: Sort
+    # 보내지 않으면 기존 그룹을 유지합니다(이전 점주 웹 호환).
+    group: OptionGroup = None
 
 
 class OptionChanges(_Input):
@@ -262,15 +278,22 @@ def _apply(cursor, store_id, changes):
                           is_active = %s, menu_sort = %s WHERE menu_id = %s""",
                        (_resolve(m.category_id, ids, category_ids), m.name, m.price, m.description,
                         m.is_active, m.sort, m.id))
+    groups = portal._has_option_group(cursor)
+    if not groups and any(o.group for o in [*changes.options.create, *changes.options.update]):
+        raise HTTPException(503, '옵션 그룹 DB 변경이 아직 적용되지 않았습니다.')
     for o in changes.options.create:
         cursor.execute("""INSERT INTO menu_option (menu_id, option_nm, extra_price, is_sold_out, menu_option_sort)
                           VALUES (%s, %s, %s, %s, %s)""",
                        (_resolve(o.menu_id, ids, menu_ids), o.name, o.extra_price, o.is_sold_out, o.sort))
         ids[o.temp_id] = _inserted(cursor)
+        if groups and o.group:
+            cursor.execute('UPDATE menu_option SET option_group = %s WHERE option_id = %s', (o.group, ids[o.temp_id]))
     for o in changes.options.update:
         cursor.execute("""UPDATE menu_option SET option_nm = %s, extra_price = %s, is_active = %s,
                           menu_option_sort = %s WHERE option_id = %s""",
                        (o.name, o.extra_price, o.is_active, o.sort, o.id))
+        if groups and 'group' in o.model_fields_set:
+            cursor.execute('UPDATE menu_option SET option_group = %s WHERE option_id = %s', (o.group, o.id))
     # 메뉴를 옮긴 뒤에 삭제합니다. 판매 중지 메뉴가 남아 있어도 FK가 거부하므로 삭제하지 않습니다.
     for category_id in changes.categories.remove:
         cursor.execute('SELECT COUNT(*) AS count FROM menu WHERE category_id = %s', (category_id,))

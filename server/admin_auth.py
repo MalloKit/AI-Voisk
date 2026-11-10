@@ -111,7 +111,12 @@ class SessionStore:
                     raise HTTPException(403, '인증 요청이 만료되었습니다. 다시 시도해 주세요.')
                 self._sessions.pop(self._key(replace), None)
             if len(self._sessions) >= self.maximum:
-                raise HTTPException(503, '인증 서비스를 잠시 사용할 수 없습니다.')
+                # 로그인 전 세션이 가득 차면 가장 오래된 것부터 지웁니다. 다른 사이트가 CSRF 발급을
+                # 반복 호출해 로그인한 사람까지 막지 못하게 하려는 것입니다.
+                anonymous = [(s.created, k) for k, s in self._sessions.items() if s.admin is None]
+                if not anonymous:
+                    raise HTTPException(503, '인증 서비스를 잠시 사용할 수 없습니다.')
+                del self._sessions[min(anonymous)[1]]
             token = secrets.token_urlsafe(32)
             now = self.clock()
             session = Session(admin, secrets.token_urlsafe(32), now, now)
@@ -122,6 +127,14 @@ class SessionStore:
         if isinstance(token, str) and TOKEN.fullmatch(token):
             with self._lock:
                 self._sessions.pop(self._key(token), None)
+
+    def revoke_matching(self, predicate):
+        """로그인한 세션 중 조건에 맞는 것을 모두 끊습니다(비밀번호 재설정 등). 끊은 수를 돌려줍니다."""
+        with self._lock:
+            keys = [k for k, s in self._sessions.items() if s.admin is not None and predicate(s.admin)]
+            for key in keys:
+                del self._sessions[key]
+            return len(keys)
 
 
 class AttemptLimiter:

@@ -67,9 +67,47 @@ MENUS = [
     ('세트', '어린이 세트', 8000, '돈가스, 주먹밥, 아이스티 구성', 30, ['아이와함께', '세트', '안매운'], ['키즈 세트'], False, False, []),
 ]
 
+# 필수 옵션 그룹(같은 그룹에서 하나를 꼭 고름). 음성 주문에서 말하지 않으면 키오스크가 되묻습니다.
+GROUP_OPTIONS = [
+    ('분식', '떡볶이', '맵기', [('순한맛', 0), ('보통맛', 0), ('매운맛', 0)]),
+    ('분식', '라면', '맵기', [('순한맛', 0), ('보통맛', 0), ('매운맛', 0)]),
+    ('음료', '아이스 아메리카노', '사이즈', [('레귤러', 0), ('라지', 500)]),
+    ('음료', '따뜻한 아메리카노', '사이즈', [('레귤러', 0), ('라지', 500)]),
+]
+
+
+def seed_option_groups(cursor, store_id, changes):
+    try:
+        cursor.execute('SELECT option_group FROM menu_option WHERE 1 = 0')
+        cursor.fetchall()
+    except Exception:
+        return  # 옵션 그룹 열이 없는 DB(AI_MIGRATION 마지막 단계 전)
+    for category, name, group, options in GROUP_OPTIONS:
+        cursor.execute('''SELECT m.menu_id FROM menu m JOIN category c ON c.category_id = m.category_id
+            WHERE c.store_id = %s AND c.category_nm = %s AND m.menu_nm = %s''', (store_id, category, name))
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError(f'기존 메뉴가 없음: {name}')
+        menu_id = row['menu_id']
+        cursor.execute('SELECT COALESCE(MAX(menu_option_sort), 0) AS last FROM menu_option WHERE menu_id = %s', (menu_id,))
+        sort = cursor.fetchone()['last']
+        for option_name, extra in options:
+            cursor.execute('SELECT option_id, option_group FROM menu_option WHERE menu_id = %s AND option_nm = %s',
+                           (menu_id, option_name))
+            existing = cursor.fetchone()
+            if existing is None:
+                sort += 1
+                cursor.execute('''INSERT INTO menu_option (menu_id, option_nm, menu_option_sort, is_active, is_sold_out,
+                    extra_price, option_group) VALUES (%s, %s, %s, 1, 0, %s, %s)''', (menu_id, option_name, sort, extra, group))
+                changes['group_options_added'] += 1
+            elif existing['option_group'] is None:
+                cursor.execute('UPDATE menu_option SET option_group = %s WHERE option_id = %s', (group, existing['option_id']))
+                changes['group_options_added'] += 1
+
 
 def seed(cursor, store_id):
-    changes = {'menus_added': 0, 'options_added': 0, 'ai_filled': 0, 'tags_added': 0, 'synonyms_added': 0}
+    changes = {'menus_added': 0, 'options_added': 0, 'ai_filled': 0, 'tags_added': 0, 'synonyms_added': 0,
+               'group_options_added': 0}
     cursor.execute('SELECT category_id, category_nm FROM category WHERE store_id = %s', (store_id,))
     categories = {row['category_nm']: row['category_id'] for row in cursor.fetchall()}
     for category, name, price, description, cost, tags, synonyms, pick, excluded, options in MENUS:
@@ -107,6 +145,7 @@ def seed(cursor, store_id):
             for value in values:
                 cursor.execute(f'INSERT INTO {table} (menu_id, {column}) VALUES (%s, %s)', (menu_id, value))
                 changes[key] += 1
+    seed_option_groups(cursor, store_id, changes)
     if any(changes.values()):
         cursor.execute('UPDATE kiosk_device SET current_menu_version = current_menu_version + 1 WHERE store_id = %s', (store_id,))
     return changes

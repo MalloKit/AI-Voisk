@@ -133,8 +133,11 @@ class ReadTests(OwnerPortalTestCase):
     def test_devices_never_expose_token_hash(self):
         response = self.client.get(STORE + '/devices')
         self.assertEqual(response.json(), {'devices': [
-            {'device_id': 70, 'device_code': 'K-70', 'is_active': True, 'last_seen_at': '2026-10-29T01:02:03+00:00'},
-            {'device_id': 71, 'device_code': 'K-71', 'is_active': False, 'last_seen_at': None}]})
+            # 이 픽스처 DB에는 current_menu_version만 있고 나머지 상태 열은 없어 None입니다.
+            {'device_id': 70, 'device_code': 'K-70', 'is_active': True, 'last_seen_at': '2026-10-29T01:02:03+00:00',
+             'app_version': None, 'last_synced_at': None, 'current_menu_version': 3, 'applied_menu_version': None},
+            {'device_id': 71, 'device_code': 'K-71', 'is_active': False, 'last_seen_at': None,
+             'app_version': None, 'last_synced_at': None, 'current_menu_version': 5, 'applied_menu_version': None}]})
         self.assertNotIn('token', response.text)
         self.assertFalse(any('device_token_hash' in sql for sql in self.f.statements))
 

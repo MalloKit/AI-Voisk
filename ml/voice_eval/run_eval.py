@@ -38,9 +38,9 @@ def profit_scores(menus):
             for m in menus if m['costRate'] is not None}
 
 
-def rank(recommendations, catalog, limit=3):
+def rank(recommendations, catalog, limit=3, settings=None):
     """kiosk_app/lib/domain/recommendation_engine.dart와 같은 규칙."""
-    settings = catalog['settings']
+    settings = settings or catalog['settings']
     menus = {m['id']: m for m in catalog['menus']}
     profits = profit_scores(catalog['menus'])
     w_profit = settings['policy_profit'] / 100 * 0.5
@@ -102,7 +102,7 @@ def evaluate(case, catalog, by_name, by_id):
         ranked = rank(result['recommendations'], catalog)
         top = [name for name, _ in ranked]
         good = [name for name in top if name in case['fit']]
-        record.update(top3=top, reasons=[reason for _, reason in ranked],
+        record.update(top3=top, reasons=[reason for _, reason in ranked], candidates=result['recommendations'],
                       rec_hit=bool(good), rec_precision=(len(good) / len(top)) if top else 0.0)
     return record
 
@@ -170,6 +170,24 @@ def main():
     for r in wrong:
         lines.append(f'- `{r["id"]}` "{r["text"]}" → 의도 `{r["intent"]}`, 품목 {r.get("items")}, '
                      f'상위3 {r.get("top3")}, 되묻기 "{r.get("question") or ""}"{", 오류 " + r["error"] if r["error"] else ""}')
+    # 정책 반영(구상안 14장): 같은 적합도 결과를 정책만 바꿔 다시 순위를 매기고 1순위 원가율을 비교합니다.
+    by_name_cost = {m['name']: m['costRate'] for m in catalog['menus']}
+    fit_cases = {c['id']: c for c in cases if 'fit' in c}
+    lines += ['', '## 추천 정책별 비교', '',
+              '같은 Haiku 적합도 결과에 정책 슬라이더만 바꿔 적용했습니다. 원가율이 낮을수록 매장 이익이 큽니다.', '',
+              '| 정책 | policy_profit | 1순위 평균 원가율 | 추천 적합률 |', '|---|---|---|---|']
+    for label, policy in (('고객 적합 우선', 0), ('균형', 50), ('매장 이익 우선', 100)):
+        settings = dict(catalog['settings'], policy_profit=policy)
+        costs, hits = [], []
+        for r in records:
+            if 'candidates' not in r:
+                continue
+            top = [name for name, _ in rank(r['candidates'], catalog, settings=settings)]
+            if top and by_name_cost.get(top[0]) is not None:
+                costs.append(by_name_cost[top[0]])
+            hits.append(any(name in fit_cases[r['id']]['fit'] for name in top))
+        lines.append(f'| {label} | {policy} | {statistics.mean(costs) if costs else 0:.1f}% ({len(costs)}개) | '
+                     f'{(sum(hits) / len(hits)) if hits else 0:.1%} |')
     lines += ['', '## 추천 결과', '']
     for r in records:
         if 'top3' in r:

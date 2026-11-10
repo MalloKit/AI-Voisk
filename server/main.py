@@ -52,6 +52,18 @@ class Menu(BaseModel):
 app = FastAPI(title="AI 보이스크 · 연습용 메뉴 API", version="0.1.0")
 # 메뉴판 저장 한 번의 본문 상한입니다. 인증 POST는 8KB로 더 작게 제한합니다.
 OWNER_BODY_LIMIT = 1024 * 1024
+# 로컬 전용 경로가 받는 Host. DNS 리바인딩(외부 도메인을 127.0.0.1로 바꿔 브라우저가 보내는 요청)을 막습니다.
+# 10.0.2.2는 안드로이드 에뮬레이터가 PC 서버를 부르는 주소, testserver는 테스트 클라이언트입니다.
+LOOPBACK_HOSTS = {'127.0.0.1', 'localhost', '::1', '10.0.2.2', 'testserver'}
+
+
+def _loopback_host(request):
+    host = request.headers.get('host', '').strip().lower()
+    if host.startswith('['):
+        host = host[1:].split(']', 1)[0]
+    elif host.count(':') == 1:
+        host = host.split(':', 1)[0]
+    return host in LOOPBACK_HOSTS
 
 
 @app.middleware('http')
@@ -77,8 +89,11 @@ async def local_demo_only(request: Request, call_next):
     owner_password_path = path.startswith('/admin/owners/') and path.rstrip('/').endswith('/password')
     owner_path = path == '/owner' or path.startswith('/owner/')
     owner_auth_path = path == '/auth/owner' or path.startswith('/auth/owner/')
-    if (admin_path or auth_path or owner_path or owner_auth_path or path == '/orders') and (
+    # 기기 토큰 없이 쓰는 이전 시연 경로(메뉴·주문·결제)도 노트북 자신만 씁니다. 키오스크는 /kiosk를 씁니다.
+    legacy_path = path in ('/orders', '/stores', '/db/health') or path.startswith(('/stores/', '/payments/'))
+    if (admin_path or auth_path or owner_path or owner_auth_path or legacy_path) and (
         request.client is None or request.client.host not in {'127.0.0.1', '::1', 'testclient'}
+        or not _loopback_host(request)
     ):
         return JSONResponse(status_code=403, content={'detail': '인증 전에는 로컬 시연만 허용합니다.'})
     if owner_path or owner_auth_path:
@@ -444,6 +459,8 @@ class AdminDeviceView(BaseModel):
     app_version: str | None
     last_seen_at: str | None
     last_synced_at: str | None
+    current_menu_version: int | None = None
+    applied_menu_version: int | None = None
 
 
 class AdminDeviceList(BaseModel):

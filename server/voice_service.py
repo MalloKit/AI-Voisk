@@ -111,6 +111,8 @@ intent 정의:
 - "이거", "이걸로"는 viewing_menu_id(지금 보고 있는 메뉴)를 뜻할 수 있습니다. "아까 그거", "그거 하나 더"는 장바구니를 참고합니다.
 - "이거 두 개로 바꿔줘"처럼 수량을 바꾸라는데 그 메뉴가 장바구니에 있으면 modify, 없으면 그 수량으로 order입니다. 되묻지 않습니다.
 - 고객이 메뉴를 직접 말하면 recommend가 아니라 order입니다.
+- 옵션 이름 뒤 [그룹]은 그 그룹에서 하나를 꼭 고르는 필수 옵션입니다(맵기·사이즈 등). 고객이 말한 옵션만 option_ids에 넣고,
+  말하지 않은 필수 그룹은 비워 둡니다(키오스크가 따로 묻습니다). 같은 그룹에서 둘을 넣지 않습니다. [그룹]이 없는 옵션은 말한 것만 넣습니다.
 - recommend일 때만 recommendations를 채웁니다. 추천 제외·품절 메뉴는 넣지 않습니다. 상황에 맞는 메뉴를 최대 6개,
   fit은 상황 적합도 0~100(정수), reason은 메뉴 태그·설명에 근거한 20자 안팎의 짧은 이유(예: "국물이 있어 속 풀기 좋아요")입니다.
   가격·이익은 고려하지 않습니다. 맞는 메뉴가 없으면 빈 배열입니다.
@@ -120,10 +122,11 @@ intent 정의:
 
 def catalog_text(catalog):
     """메뉴 정보를 결정적 순서로 직렬화합니다. 바뀌지 않으면 프롬프트 캐시가 그대로 맞습니다."""
-    lines = ['[메뉴] id | 이름 | 분류 | 가격 | 상태 | 옵션(id:이름) | 태그 | 동의어 | 설명']
+    lines = ['[메뉴] id | 이름 | 분류 | 가격 | 상태 | 옵션(id:이름[필수 그룹]) | 태그 | 동의어 | 설명']
     for menu in catalog['menus']:
         state = '품절' if menu['isSoldOut'] else ('추천 제외' if menu['recExcluded'] else '판매')
-        options = ', '.join(f"{o['id']}:{o['name']}{'(품절)' if o['isSoldOut'] else ''}" for o in menu['options'])
+        options = ', '.join(f"{o['id']}:{o['name']}{f'[{g}]' if (g := o.get('group')) else ''}"
+                            f"{'(품절)' if o['isSoldOut'] else ''}" for o in menu['options'])
         lines.append(' | '.join([
             menu['id'], menu['name'], menu['category'], f"{menu['price']}원", state, options or '-',
             ', '.join(menu['tags']) or '-', ', '.join(menu['synonyms']) or '-',
@@ -282,8 +285,19 @@ def sanitize(raw, catalog, request: InterpretInput):
         quantity = 1 if quantity is None else quantity
         if not 1 <= quantity <= 99:
             continue
-        allowed = {int(o['id']) for o in menu['options'] if not o['isSoldOut']}
-        option_ids = sorted({o for o in (item.get('option_ids') or []) if _int(o) in allowed})
+        allowed = {int(o['id']): o.get('group') for o in menu['options'] if not o['isSoldOut']}
+        option_ids, groups = set(), set()
+        for value in item.get('option_ids') or []:
+            option_id = _int(value)
+            if option_id not in allowed:
+                continue
+            group = allowed[option_id]
+            # 같은 필수 그룹에서는 먼저 말한 하나만 남깁니다.
+            if group and group in groups:
+                continue
+            groups.add(group)
+            option_ids.add(option_id)
+        option_ids = sorted(option_ids)
         if menu['isSoldOut'] and entry_id is None:
             continue
         items.append({'menu_id': menu_id, 'quantity': quantity, 'option_ids': option_ids, 'entry_id': entry_id})

@@ -1,6 +1,7 @@
 """키오스크용 매장 메뉴·AI 설정 묶음. 키오스크 부트스트랩과 음성 해석이 같은 데이터를 씁니다."""
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 
 import ai_db
 import menu_image_service
@@ -48,8 +49,9 @@ def read_catalog(cursor, store_id):
         ORDER BY c.category_sort, c.category_id, m.menu_sort, m.menu_id
     ''', (store_id,))
     rows = cursor.fetchall()
-    cursor.execute('''
-        SELECT o.option_id, o.menu_id, o.option_nm, o.extra_price, o.is_sold_out
+    groups = ai_db.has_columns(cursor, 'menu_option', ('option_group',))
+    cursor.execute(f'''
+        SELECT o.option_id, o.menu_id, o.option_nm, o.extra_price, o.is_sold_out{', o.option_group' if groups else ''}
         FROM menu_option o JOIN menu m ON m.menu_id = o.menu_id
         JOIN category c ON c.category_id = m.category_id
         WHERE c.store_id = %s AND m.is_active = TRUE AND o.is_active = TRUE
@@ -59,7 +61,9 @@ def read_catalog(cursor, store_id):
     for option in cursor.fetchall():
         options.setdefault(option['menu_id'], []).append({
             'id': str(option['option_id']), 'name': option['option_nm'],
-            'price': int(option['extra_price']), 'isSoldOut': bool(option['is_sold_out'])})
+            'price': int(option['extra_price']), 'isSoldOut': bool(option['is_sold_out']),
+            # 같은 group은 하나를 꼭 골라야 합니다. None이면 자유롭게 더하는 옵션입니다.
+            'group': option.get('option_group') or None})
     tags, synonyms = {}, {}
     if ai_ready:
         for table, column, target in (('menu_tag', 'tag_nm', tags), ('menu_synonym', 'synonym_nm', synonyms)):
@@ -90,7 +94,21 @@ def read_catalog(cursor, store_id):
         'ai_ready': ai_ready,
         'settings': read_settings(cursor, store_id, ai_ready),
         'menus': menus,
+        'popular_menu_ids': popular_menu_ids(cursor, store_id),
     }
+
+
+def popular_menu_ids(cursor, store_id, days=30, limit=5):
+    """최근 30일 많이 팔린 메뉴(판매 중인 것만). 추천 후보가 없을 때 키오스크가 먼저 보여 줍니다."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    cursor.execute('''
+        SELECT oi.menu_id, SUM(oi.item_quantity) AS sold
+        FROM order_item oi JOIN orders o ON o.order_id = oi.order_id
+        JOIN menu m ON m.menu_id = oi.menu_id
+        WHERE o.store_id = %s AND o.ordered_at >= %s AND m.is_active = TRUE AND m.is_sold_out = FALSE
+        GROUP BY oi.menu_id ORDER BY sold DESC, oi.menu_id LIMIT %s
+    ''', (store_id, since, limit))
+    return [str(row['menu_id']) for row in cursor.fetchall()]
 
 
 class CatalogCache:

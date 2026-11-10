@@ -82,6 +82,9 @@ STEPS = [
      "ALTER TABLE order_item ADD COLUMN is_recommended TINYINT(1) NOT NULL DEFAULT 0 COMMENT '추천 경유'"),
     ('orders.idx_orders_store_ordered', "index", ('orders', 'idx_orders_store_ordered'),
      'ALTER TABLE orders ADD INDEX idx_orders_store_ordered (store_id, ordered_at)'),
+    ('menu_option.option_group', "column", ('menu_option', 'option_group'),
+     "ALTER TABLE menu_option ADD COLUMN option_group VARCHAR(20) NULL "
+     "COMMENT '옵션 그룹. 같은 그룹에서 하나를 꼭 고름(맵기·사이즈). NULL이면 선택 추가 옵션'"),
 ]
 
 

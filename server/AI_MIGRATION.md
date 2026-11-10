@@ -9,6 +9,7 @@
 2. 아래 12단계를 순서대로 적용하고 단계마다 information_schema로 적용 여부를 확인했습니다.
 3. 호출어 기능을 빼기로 결정한 뒤, 방금 만든 빈 테이블 `store_ai_setting`에서 `wake_mode`, `wake_sensitivity` 열을 지웠습니다(행 0건 확인 후).
 4. `seed_demo_ai.py`로 시연 매장(store 1) 메뉴를 14개에서 40개로 보강하고 태그·동의어·원가율을 채웠습니다. 기존 14개 메뉴의 이름·가격·설명·품절·판매 상태는 그대로입니다.
+5. 2026-11-11 08:30 KST: 다시 전체 백업(`voisk_backup_20261110T233023Z.json`) 뒤 13단계 `menu_option.option_group`을 추가하고, `seed_demo_ai.py`로 필수 옵션 10개(떡볶이·라면 맵기 순한맛/보통맛/매운맛, 아이스·따뜻한 아메리카노 사이즈 레귤러/라지 +500원)를 넣었습니다. 기존 옵션은 그룹 없음(자유 추가)으로 그대로입니다.
 
 ## 변경 내용
 
@@ -25,6 +26,7 @@
 | `orders` | `order_channel ENUM('touch','voice') NULL` | 주문 방식 |
 | `order_item` | `is_recommended TINYINT(1) DEFAULT 0` | 추천 경유 품목 |
 | `orders` | 인덱스 `idx_orders_store_ordered(store_id, ordered_at)` | 기간별 통계 |
+| `menu_option` | `option_group VARCHAR(20) NULL` | 필수 옵션 그룹(맵기·사이즈). 같은 그룹에서 하나를 꼭 고름. NULL이면 자유 추가 옵션 |
 
 ## 다시 실행·다른 DB에 적용
 
@@ -48,6 +50,7 @@ DROP TABLE recommendation_log, store_ai_setting, menu_synonym, menu_tag;
 ALTER TABLE order_item DROP COLUMN is_recommended;
 ALTER TABLE orders DROP INDEX idx_orders_store_ordered, DROP COLUMN order_channel;
 ALTER TABLE kiosk_device DROP COLUMN applied_menu_version;
+ALTER TABLE menu_option DROP COLUMN option_group;
 ALTER TABLE menu DROP CHECK ck_menu_cost_rate, DROP COLUMN cost_rate, DROP COLUMN is_rec_excluded, DROP COLUMN is_store_pick;
 ```
 

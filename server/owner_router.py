@@ -21,6 +21,10 @@ class OwnerDeviceView(BaseModel):
     device_code: str
     is_active: bool
     last_seen_at: str | None
+    app_version: str | None = None
+    last_synced_at: str | None = None
+    current_menu_version: int | None = None
+    applied_menu_version: int | None = None
 
 
 class OwnerDeviceList(BaseModel):

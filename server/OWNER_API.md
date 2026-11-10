@@ -47,7 +47,7 @@
 | `GET /owner/stores/{id}/menu-board` | 아래 메뉴판. `is_active=false` 포함 |
 | `GET /owner/stores/{id}/orders?limit=100&offset=0` | `{ orders, total, limit, offset }`. limit 1~200, 최신순 |
 | `GET /owner/stores/{id}/orders/{order_id}` | 주문 하나. 이 매장의 주문이 아니면 404 |
-| `GET /owner/stores/{id}/devices` | `{ devices: [{ device_id, device_code, is_active, last_seen_at }] }` |
+| `GET /owner/stores/{id}/devices` | `{ devices: [{ device_id, device_code, is_active, last_seen_at, app_version, last_synced_at, current_menu_version, applied_menu_version }] }`. 열이 없는 DB에서는 뒤의 넷이 null |
 
 메뉴판:
 
@@ -119,6 +119,15 @@
 어느 단계든 실패하면 전부 롤백합니다. 변경이 하나도 없는 묶음은 쓰지 않고 버전도 올리지 않습니다.
 
 삭제 규칙: 메뉴·옵션은 삭제하지 않고 `is_active=false`로만 처리합니다. `is_active=true`로 다시 보내면 다시 판매합니다. 카테고리는 판매 중지 메뉴까지 포함해 메뉴가 하나도 없을 때만 삭제하며, 남아 있으면 409입니다. `orders`, `order_item`, `order_item_option`, `owner`, `store`에는 쓰지 않습니다.
+
+### 옵션 그룹(필수 선택)
+
+메뉴판의 옵션에는 `option_group`(문자열 또는 null)이 있습니다. 저장할 때 옵션 `create`·`update`에 `group`(앞뒤 공백 제거, 20자 이하, 빈 값은 null)을 보냅니다. `update`에서 `group`을 아예 보내지 않으면 기존 값을 유지합니다.
+
+- 같은 메뉴에서 그룹 이름이 같은 옵션들은 **하나를 꼭 고르는** 필수 선택입니다(예: 맵기 순한맛/보통맛/매운맛, 사이즈 레귤러/라지).
+- 그룹이 null인 옵션은 여러 개를 자유롭게 더하는 추가 옵션입니다(곱빼기, 치즈 추가).
+- 주문 저장은 그룹마다 정확히 하나를 골랐는지 확인하고, 아니면 422 `option_required`입니다. 그룹의 선택지가 모두 품절이면 키오스크는 그 메뉴를 품절로 보여 줍니다.
+- `option_group` 열이 없는 DB(`AI_MIGRATION.md` 13단계 전)에서는 그룹을 보내면 503입니다.
 
 ## 품절 즉시 변경
 

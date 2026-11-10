@@ -137,7 +137,7 @@ class KioskOrderTests(unittest.TestCase):
     def test_voice_order_records_channel_and_recommended_items(self):
         body = order_body(order_channel='voice', items=[
             {'menu_id': 10, 'quantity': 1, 'option_ids': [100]},
-            {'menu_id': 12, 'quantity': 1, 'option_ids': [], 'is_recommended': True}])
+            {'menu_id': 12, 'quantity': 1, 'option_ids': [110, 113], 'is_recommended': True}])
         response = self.client.post('/kiosk/orders', json=body)
         self.assertEqual(response.status_code, 200, response.text)
         order_id = response.json()['order_id']
@@ -645,3 +645,126 @@ class ReviewRegressionTests(unittest.TestCase):
             bad.get('/kiosk/menu-version')
         self.assertEqual(bad.get('/kiosk/menu-version').status_code, 429)
         self.assertEqual(self.f.kiosk().get('/kiosk/menu-version').status_code, 200)
+
+
+class OptionGroupTests(unittest.TestCase):
+    """같은 그룹(맵기·사이즈) 옵션은 하나를 꼭 고르고, 그룹 없는 옵션은 자유 추가입니다."""
+
+    def setUp(self):
+        self.f = AiFixture(self)
+
+    def order(self, option_ids):
+        return self.f.kiosk().post('/kiosk/orders', json=order_body(items=[
+            {'menu_id': 12, 'quantity': 1, 'option_ids': option_ids}]))
+
+    def test_bootstrap_sends_option_groups(self):
+        menus = {m['id']: m for m in self.f.kiosk().get('/kiosk/bootstrap').json()['menus']}
+        self.assertEqual({o['name']: o['group'] for o in menus['12']['options']},
+                         {'순한맛': '맵기', '매운맛': '맵기', '라지': '사이즈', '레귤러': '사이즈'})
+        self.assertIsNone(menus['10']['options'][0]['group'])
+
+    def test_order_needs_exactly_one_choice_per_group(self):
+        self.assertEqual(self.order([110]).status_code, 422)            # 사이즈 빠짐
+        self.assertEqual(self.order([110, 111, 113]).status_code, 422)  # 맵기 둘
+        response = self.order([111, 112])
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['total_at_submission'], 7500 + 500)
+
+    def test_owner_sets_and_clears_group_and_kiosk_version_bumps(self):
+        owner = self.f.owner()
+        board = owner.get('/owner/stores/1/menu-board').json()
+        option = next(o for o in board['options'] if o['option_id'] == 100)
+        self.assertIsNone(option['option_group'])
+        before = self.f.value('SELECT current_menu_version FROM kiosk_device WHERE device_id = 70')
+        update = {'id': 100, 'name': '곱빼기', 'extra_price': 1000, 'is_active': True, 'sort': 1, 'group': '  양  '}
+        response = owner.patch('/owner/stores/1/menu-board', json={'options': {'update': [update]}})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.f.value('SELECT option_group FROM menu_option WHERE option_id = 100'), '양')
+        self.assertGreater(self.f.value('SELECT current_menu_version FROM kiosk_device WHERE device_id = 70'), before)
+        # group을 보내지 않으면 유지, 빈 문자열이면 해제합니다.
+        del update['group']
+        owner.patch('/owner/stores/1/menu-board', json={'options': {'update': [dict(update, name='곱빼기 ')]}})
+        self.assertEqual(self.f.value('SELECT option_group FROM menu_option WHERE option_id = 100'), '양')
+        owner.patch('/owner/stores/1/menu-board', json={'options': {'update': [dict(update, group='')]}})
+        self.assertIsNone(self.f.value('SELECT option_group FROM menu_option WHERE option_id = 100'))
+        too_long = dict(update, group='가' * 21)
+        self.assertEqual(owner.patch('/owner/stores/1/menu-board', json={'options': {'update': [too_long]}}).status_code, 422)
+
+
+class LegacyRouteTests(unittest.TestCase):
+    def setUp(self):
+        self.f = AiFixture(self)
+
+    def test_loopback_routes_reject_foreign_host_header(self):
+        # DNS 리바인딩: 외부 도메인 이름이 127.0.0.1로 풀려도 Host가 달라 거절합니다.
+        client = self.f.client()
+        for path in ('/stores', '/db/health', '/admin/orders'):
+            self.assertEqual(client.get(path, headers={'Host': 'rebind.example'}).status_code, 403, path)
+        self.assertEqual(client.post('/orders', json=order_body(), headers={'Host': 'rebind.example:8001'}).status_code, 403)
+        self.assertNotEqual(client.get('/stores', headers={'Host': '127.0.0.1:8001'}).status_code, 403)
+        self.assertNotEqual(client.get('/stores', headers={'Host': '10.0.2.2:8001'}).status_code, 403)
+
+    def test_order_locks_menus_in_id_order(self):
+        self.f.statements.clear()
+        response = self.f.kiosk().post('/kiosk/orders', json=order_body(items=[
+            {'menu_id': 12, 'quantity': 1, 'option_ids': [110, 113]}, {'menu_id': 10, 'quantity': 1, 'option_ids': []}]))
+        self.assertEqual(response.status_code, 200, response.text)
+        locked = [sql for sql in self.f.statements if 'FOR UPDATE' in sql and 'FROM menu m' in sql]
+        self.assertEqual(len(locked), 2)
+        # 실행 순서에서 메뉴 10이 12보다 먼저 잠깁니다(파라미터는 statements에 없으므로 순서만 확인).
+        params = [p for sql, p in self.f.executed if 'FOR UPDATE' in sql and 'FROM menu m' in sql]
+        self.assertEqual([p[0] for p in params], [10, 12])
+
+
+class VoiceOptionGroupTests(unittest.TestCase):
+    def test_keeps_first_option_per_required_group_and_shows_groups_in_prompt(self):
+        catalog = {'menus': [{'id': '12', 'name': '떡볶이', 'category': '분식', 'price': 5000, 'isSoldOut': False,
+                              'recExcluded': False, 'tags': [], 'synonyms': [], 'description': None, 'options': [
+                                  {'id': '110', 'name': '순한맛', 'isSoldOut': False, 'group': '맵기'},
+                                  {'id': '111', 'name': '매운맛', 'isSoldOut': False, 'group': '맵기'},
+                                  {'id': '120', 'name': '치즈 추가', 'isSoldOut': False, 'group': None}]}],
+                   'settings': {'voice_enabled': True}}
+        raw = {'intent': 'order', 'items': [{'menu_id': 12, 'quantity': 1, 'option_ids': [111, 110, 120], 'entry_id': None}]}
+        result = voice_service.sanitize(raw, catalog, voice_service.InterpretInput(text='주문'))
+        self.assertEqual(result['items'][0]['option_ids'], [111, 120])
+        self.assertIn('110:순한맛[맵기]', voice_service.catalog_text(catalog))
+        self.assertIn('120:치즈 추가 |', voice_service.catalog_text(catalog))
+
+
+class PopularMenuTests(unittest.TestCase):
+    def test_bootstrap_lists_recent_best_sellers_that_are_on_sale(self):
+        f = AiFixture(self)
+        kiosk = f.kiosk()
+        for menu_id, quantity in ((11, 1), (10, 3), (11, 4), (14, 9)):
+            kiosk.post('/kiosk/orders', json=order_body(items=[{'menu_id': menu_id, 'quantity': quantity, 'option_ids': []}]))
+        f.db.execute('UPDATE menu SET is_sold_out = 1 WHERE menu_id = 14')
+        f.db.execute("INSERT INTO orders (store_id, ordered_at, order_type, device_id, client_order_id) VALUES (1, '2020-01-01 00:00:00', 'takeaway', 70, 'old')")
+        f.db.execute('INSERT INTO order_item (order_id, menu_id, item_quantity) VALUES (last_insert_rowid(), 13, 50)')
+        kiosk_catalog.cache.invalidate()
+        self.assertEqual(kiosk.get('/kiosk/bootstrap').json()['popular_menu_ids'], ['11', '10'])
+
+
+class DeviceVersionViewTests(unittest.TestCase):
+    def test_owner_sees_applied_and_current_menu_version(self):
+        f = AiFixture(self)
+        f.kiosk().post('/kiosk/heartbeat', json={'applied_menu_version': 1, 'app_version': '1.2.0+3'})
+        device = next(d for d in f.owner().get('/owner/stores/1/devices').json()['devices'] if d['device_id'] == 70)
+        current = f.value('SELECT current_menu_version FROM kiosk_device WHERE device_id = 70')
+        self.assertEqual((device['applied_menu_version'], device['current_menu_version']), (1, current))
+        self.assertEqual(device['app_version'], '1.2.0+3')
+        self.assertNotIn('device_token_hash', str(device))
+
+
+class OrderErrorCodeTests(unittest.TestCase):
+    def test_price_change_and_unavailable_menu_return_machine_codes(self):
+        f = AiFixture(self)
+        kiosk = f.kiosk()
+        with patch.dict('os.environ', {'KIOSK_SAVE_DEMO_PAYMENTS': '1'}):
+            stale = kiosk.post('/kiosk/payments/demo/card', json={'order': order_body(), 'expected_amount': 1})
+        self.assertEqual(stale.status_code, 422)
+        self.assertEqual(stale.json()['detail']['code'], 'amount_mismatch')
+        f.db.execute('UPDATE menu SET is_sold_out = 1 WHERE menu_id = 10')
+        sold_out = kiosk.post('/kiosk/orders', json=order_body())
+        self.assertEqual(sold_out.json()['detail']['code'], 'menu_unavailable')
+        missing = kiosk.post('/kiosk/orders', json=order_body(items=[{'menu_id': 12, 'quantity': 1, 'option_ids': [110]}]))
+        self.assertEqual(missing.json()['detail']['code'], 'option_required')

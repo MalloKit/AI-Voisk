@@ -32,7 +32,7 @@ SCHEMA = """
         cost_rate INTEGER, is_rec_excluded INTEGER NOT NULL DEFAULT 0, is_store_pick INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE menu_option (option_id INTEGER PRIMARY KEY AUTOINCREMENT, menu_id INTEGER NOT NULL REFERENCES menu(menu_id),
         option_nm TEXT NOT NULL, menu_option_sort INTEGER NOT NULL, is_active INTEGER NOT NULL DEFAULT 1,
-        is_sold_out INTEGER NOT NULL DEFAULT 0, extra_price INTEGER NOT NULL DEFAULT 0);
+        is_sold_out INTEGER NOT NULL DEFAULT 0, extra_price INTEGER NOT NULL DEFAULT 0, option_group TEXT NULL);
     CREATE TABLE menu_tag (menu_id INTEGER NOT NULL REFERENCES menu(menu_id), tag_nm TEXT NOT NULL, PRIMARY KEY (menu_id, tag_nm));
     CREATE TABLE menu_synonym (menu_id INTEGER NOT NULL REFERENCES menu(menu_id), synonym_nm TEXT NOT NULL,
         PRIMARY KEY (menu_id, synonym_nm));
@@ -75,8 +75,10 @@ SCHEMA = """
         (15, 1, '판매중지', 6000, NULL, 0, 0, 6, NULL, 0, 0),
         (20, 2, '콜라', 2000, '시원한 콜라', 1, 0, 1, 40, 0, 0),
         (30, 3, '다른 매장 메뉴', 5000, NULL, 1, 0, 1, NULL, 0, 0);
-    INSERT INTO menu_option VALUES (100, 10, '곱빼기', 1, 1, 0, 1000), (101, 10, '품절옵션', 2, 1, 1, 500),
-        (102, 11, '공깃밥', 1, 1, 0, 1000), (300, 30, '다른 매장 옵션', 1, 1, 0, 100);
+    INSERT INTO menu_option VALUES (100, 10, '곱빼기', 1, 1, 0, 1000, NULL), (101, 10, '품절옵션', 2, 1, 1, 500, NULL),
+        (102, 11, '공깃밥', 1, 1, 0, 1000, NULL), (300, 30, '다른 매장 옵션', 1, 1, 0, 100, NULL),
+        (110, 12, '순한맛', 1, 1, 0, 0, '맵기'), (111, 12, '매운맛', 2, 1, 0, 0, '맵기'),
+        (112, 12, '라지', 3, 1, 0, 500, '사이즈'), (113, 12, '레귤러', 4, 1, 0, 0, '사이즈');
     INSERT INTO menu_tag VALUES (11, '해장'), (11, '매운'), (12, '해장'), (12, '국물');
     INSERT INTO menu_synonym VALUES (10, '제육'), (20, '코크');
     INSERT INTO kiosk_device VALUES (70, 'K-70', 1, '__TOKEN__', 1, NULL, NULL, NULL, 3, NULL),
@@ -107,6 +109,7 @@ class Cursor:
         fixture = self.fixture
         self.schema_rows = None
         fixture.statements.append(sql)
+        fixture.executed.append((sql, tuple(params or ())))
         if sql.startswith('SET '):
             return
         if 'information_schema.COLUMNS' in sql:
@@ -177,6 +180,7 @@ class AiFixture:
 
     def __init__(self, testcase, schema=SCHEMA):
         self.statements = []
+        self.executed = []
         self.commits = 0
         self.fail_on = None
         self.db = sqlite3.connect(':memory:', check_same_thread=False, isolation_level=None)

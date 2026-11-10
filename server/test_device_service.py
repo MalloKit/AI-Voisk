@@ -132,7 +132,7 @@ class DeviceServiceTests(DeviceFixture, unittest.TestCase):
         self.assertNotIn('fixture-secret', str(result))
         expected = {'device_id','device_code','store_id','store_name','store_address',
                     'store_address_detail','is_active','registered_at','app_version',
-                    'last_seen_at','last_synced_at'}
+                    'last_seen_at','last_synced_at','current_menu_version','applied_menu_version'}
         self.assertEqual(set(result['devices'][0]), expected)
         self.assertTrue(all('device_token_hash' not in sql.lower() for sql, _ in self.statements))
 

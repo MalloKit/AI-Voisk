@@ -112,3 +112,17 @@ class OwnerPasswordTests(unittest.TestCase):
         admin_auth.sessions.revoke(self.client.cookies.get(admin_auth.settings.cookie))
         self.assertEqual(self.reset().status_code,401)
         self.assertFalse(self.statements)
+
+
+class OwnerPasswordSessionTests(unittest.TestCase):
+    setUp = owner_tests.OwnerWriteTests.setUp
+
+    def test_reset_signs_out_existing_owner_sessions(self):
+        import owner_auth
+        token, _ = owner_auth.sessions.create(admin=owner_auth.Owner(7, 'kim.owner'))
+        other, _ = owner_auth.sessions.create(admin=owner_auth.Owner(8, 'lee.owner'))
+        self.addCleanup(owner_auth.sessions.revoke, other)
+        response = self.client.patch('/admin/owners/7/password', json={'password': secrets.token_urlsafe(24)})
+        self.assertEqual(response.status_code, 204, response.text)
+        self.assertIsNone(owner_auth.sessions.get(token))
+        self.assertIsNotNone(owner_auth.sessions.get(other))
