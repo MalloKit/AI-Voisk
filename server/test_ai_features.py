@@ -180,7 +180,7 @@ class VoiceSanitizeTests(unittest.TestCase):
         self.catalog = {'menus': [
             {'id': '10', 'name': '제육덮밥', 'isSoldOut': False, 'recExcluded': False,
              'options': [{'id': '100', 'isSoldOut': False}, {'id': '101', 'isSoldOut': True}]},
-            {'id': '11', 'name': '순두부찌개', 'isSoldOut': False, 'recExcluded': False, 'options': []},
+            {'id': '11', 'name': '순두부찌개', 'isSoldOut': False, 'recExcluded': False, 'options': [], 'tags': ['해장']},
             {'id': '13', 'name': '품절메뉴', 'isSoldOut': True, 'recExcluded': False, 'options': []},
             {'id': '14', 'name': '추천제외', 'isSoldOut': False, 'recExcluded': True, 'options': []},
         ], 'settings': {'voice_enabled': True}}
@@ -226,7 +226,8 @@ class VoiceSanitizeTests(unittest.TestCase):
         result = voice_service.sanitize(raw, self.catalog, self.request())
         self.assertEqual(result['recommendations'], [{'menu_id': 11, 'fit': 100, 'reason': '국물이 있어 속 풀기 좋아요'},
                                                      {'menu_id': 10, 'fit': 0, 'reason': ''}])
-        self.assertEqual(result['situation'], ['해장', 'x' * 20])
+        # 매장 메뉴 태그에 없는 값은 버립니다(발화 일부가 추천 로그에 남지 않게).
+        self.assertEqual(result['situation'], ['해장'])
 
     def test_select_index_must_point_to_shown_recommendation(self):
         raw = {'intent': 'select', 'select_index': 5}
@@ -323,7 +324,8 @@ class VoiceApiTests(unittest.TestCase):
         output = {'is_error': False, 'structured_output': {'intent': 'help', 'items': [], 'situation': [],
                                                           'recommendations': [], 'select_index': None, 'question': '말씀해 주세요'}}
         completed = SimpleNamespace(stdout=json.dumps(output), returncode=0)
-        with patch.dict('os.environ', {'VOICE_LLM_BACKEND': 'claude_cli', 'CLAUDE_CLI_PATH': 'claude.exe'}), \
+        with patch.dict('os.environ', {'VOICE_LLM_BACKEND': 'claude_cli'}), \
+             patch('voice_service._cli_path', return_value='claude.exe'), \
              patch('subprocess.run', return_value=completed) as run:
             response = self.interpret()
         self.assertEqual(response.json()['question'], '말씀해 주세요')
@@ -555,3 +557,91 @@ class OrderChannelTests(unittest.TestCase):
                      "VALUES (1, 1, 'takeaway', 70, 'a', 'voice'), (2, 1, 'dine_in', 70, 'b', NULL)")
         orders = f.owner().get('/owner/stores/1/orders').json()['orders']
         self.assertEqual({o['order_id']: o['order_channel'] for o in orders}, {1: 'voice', 2: None})
+
+
+class ReviewRegressionTests(unittest.TestCase):
+    """공격자 관점 리뷰(2026-11-11)에서 나온 지적의 회귀 테스트."""
+
+    def setUp(self):
+        self.f = AiFixture(self)
+
+    def test_sold_out_locks_devices_before_menu(self):
+        # 주문 저장과 같은 잠금 순서(기기 → 메뉴)여야 MySQL에서 교착이 생기지 않습니다.
+        owner = self.f.owner()
+        self.f.statements.clear()
+        self.assertEqual(owner.patch('/owner/menus/10/sold-out', json={'is_sold_out': True}).status_code, 200)
+        locks = [sql for sql in self.f.statements if 'FOR UPDATE' in sql]
+        self.assertIn('kiosk_device', locks[0])
+        self.assertTrue(any('menu m' in sql for sql in locks[1:]))
+
+    def test_staff_call_locks_device_row_first(self):
+        self.f.statements.clear()
+        self.f.kiosk().post('/kiosk/staff-call', json={'reason': 'touch'})
+        locks = [sql for sql in self.f.statements if 'FOR UPDATE' in sql]
+        self.assertIn('kiosk_device', locks[0])
+
+    def test_selection_must_be_in_stored_impression(self):
+        kiosk = self.f.kiosk()
+        log_id = str(uuid4())
+        kiosk.post('/kiosk/rec-logs', json={'client_log_id': log_id, 'shown_menu_ids': [11], 'policy_profit': 30})
+        # 두 번째 요청이 목록을 바꿔 보내도 처음 저장한 노출 목록과 대조합니다.
+        response = kiosk.post('/kiosk/rec-logs', json={'client_log_id': log_id, 'shown_menu_ids': [10, 11],
+                                                       'selected_menu_id': 10, 'policy_profit': 30})
+        self.assertEqual(response.status_code, 422)
+        self.assertIsNone(self.f.value('SELECT selected_menu_id FROM recommendation_log'))
+
+    def test_situation_keeps_only_store_tags(self):
+        self.f.kiosk().post('/kiosk/rec-logs', json={'client_log_id': str(uuid4()), 'situation': ['해장', '홍길동', '01012345678'],
+                                                     'shown_menu_ids': [11], 'policy_profit': 30})
+        self.assertEqual(self.f.value('SELECT situation FROM recommendation_log'), '해장')
+
+    def test_kiosk_post_without_declared_length_is_rejected_before_auth(self):
+        def chunks():
+            yield b'{"text": "a"}'
+        response = self.f.client().post('/kiosk/voice/interpret', content=chunks(),
+                                        headers={'Content-Type': 'application/json'})
+        self.assertEqual(response.status_code, 413)
+
+    def test_failed_reupload_or_foreign_upload_keeps_existing_photo(self):
+        import tempfile
+        from pathlib import Path
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        root = Path(folder.name)
+        media = patch('menu_image_service.MEDIA_ROOT', root)
+        media.start()
+        self.addCleanup(media.stop)
+        jpeg = b'\xff\xd8\xff\xe0' + b'\x01' * 64
+        owner = self.f.owner()
+        url = owner.put('/owner/menus/10/image', content=jpeg, headers={'Content-Type': 'image/jpeg'}).json()['image_url']
+        stored = root / 'menu' / url.rsplit('/', 1)[1]
+        self.assertTrue(stored.exists())
+        # 다른 점주가 같은 바이트를 이 메뉴로 올려도 404이고 파일은 남습니다.
+        other = self.f.owner('owner.two')
+        self.assertEqual(other.put('/owner/menus/10/image', content=jpeg, headers={'Content-Type': 'image/jpeg'}).status_code, 404)
+        self.assertTrue(stored.exists())
+        # 같은 사진을 다시 올리다 DB 저장이 실패해도 쓰이던 파일은 지우지 않습니다.
+        with patch('menu_image_service._replace', side_effect=RuntimeError('db')):
+            self.assertEqual(owner.put('/owner/menus/10/image', content=jpeg, headers={'Content-Type': 'image/jpeg'}).status_code, 503)
+        self.assertTrue(stored.exists())
+
+    def test_tags_differing_only_in_case_are_saved_once(self):
+        body = {'menus': [{'menu_id': 11, 'cost_rate': None, 'is_rec_excluded': False, 'is_store_pick': False,
+                           'tags': ['Spicy', 'spicy', '해장'], 'synonyms': []}]}
+        response = self.f.owner().patch('/owner/stores/1/menu-ai', json=body)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.f.rows('SELECT tag_nm FROM menu_tag WHERE menu_id = 11 ORDER BY tag_nm'), [('Spicy',), ('해장',)])
+
+    def test_media_serves_only_menu_folder_with_cache_on_success(self):
+        missing = self.f.client().get('/media/menu/10_0000000000000000.jpg')
+        self.assertEqual(missing.status_code, 404)
+        self.assertNotIn('immutable', missing.headers.get('cache-control', ''))
+        self.assertEqual(missing.headers['x-content-type-options'], 'nosniff')
+        self.assertEqual(self.f.client().get('/media/.env').status_code, 404)
+
+    def test_bad_tokens_from_one_device_do_not_lock_other_devices(self):
+        bad = self.f.kiosk(81, 'y' * 43)
+        for _ in range(10):
+            bad.get('/kiosk/menu-version')
+        self.assertEqual(bad.get('/kiosk/menu-version').status_code, 429)
+        self.assertEqual(self.f.kiosk().get('/kiosk/menu-version').status_code, 200)

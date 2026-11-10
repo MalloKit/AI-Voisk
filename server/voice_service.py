@@ -318,7 +318,9 @@ def sanitize(raw, catalog, request: InterpretInput):
         intent = 'clarify'
     if intent in ('modify', 'remove') and not any(item['entry_id'] for item in items):
         intent = 'clarify'
-    situation = [tag for tag in (_short(value, 20) for value in raw.get('situation') or []) if tag][:5]
+    # 상황 태그는 매장 메뉴 태그에 있는 값만 남깁니다(이름·번호 같은 발화 내용이 기록되지 않게).
+    known_tags = {tag for menu in catalog['menus'] for tag in menu.get('tags', [])}
+    situation = [tag for tag in (_short(value, 20) for value in raw.get('situation') or []) if tag in known_tags][:5]
     question = _short(raw.get('question'), 120) if intent in ('clarify', 'help') else None
     return {
         'intent': intent,

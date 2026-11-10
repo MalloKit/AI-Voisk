@@ -32,11 +32,13 @@ class SyncHub:
     async def _broadcast(self, store_id, message):
         with self._lock:
             sockets = list(self._subscribers.get(store_id, ()))
-        for websocket in sockets:
+        async def send(websocket):
+            # 읽지 않는 소켓 하나가 같은 매장 알림을 막지 않도록 동시에, 시간 제한을 두고 보냅니다.
             try:
-                await websocket.send_json(message)
+                await asyncio.wait_for(websocket.send_json(message), timeout=2)
             except Exception:
                 self.unregister(store_id, websocket)
+        await asyncio.gather(*(send(websocket) for websocket in sockets))
 
     def notify(self, store_id, version):
         """동기 엔드포인트(스레드풀)에서도 안전하게 호출할 수 있습니다. 실패해도 저장 결과에는 영향이 없습니다."""

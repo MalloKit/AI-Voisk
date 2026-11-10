@@ -174,7 +174,8 @@ def save_menu_ai(store_id, owner_id, changes: MenuAiChanges):
                            (item.cost_rate, item.is_rec_excluded, item.is_store_pick, item.menu_id))
             for table, column, values in (('menu_tag', 'tag_nm', item.tags), ('menu_synonym', 'synonym_nm', item.synonyms)):
                 cursor.execute(f'DELETE FROM {table} WHERE menu_id = %s', (item.menu_id,))
-                for value in dict.fromkeys(values):
+                # MySQL 비교 규칙(utf8mb4_0900_ai_ci)은 대소문자를 구분하지 않으므로 같은 값으로 봅니다.
+                for value in {v.casefold(): v for v in reversed(values)}.values():
                     cursor.execute(f'INSERT INTO {table} (menu_id, {column}) VALUES (%s, %s)', (item.menu_id, value))
         return _menu_ai(cursor, store_id)
     return _write(store_id, owner_id, work)

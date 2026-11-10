@@ -198,6 +198,7 @@ class AiFixture:
             patch.object(voice_service, 'limiter', voice_service.RateLimiter()),
             patch.object(kiosk_catalog, 'cache', kiosk_catalog.CatalogCache()),
             patch('voice_service._anthropic_client', side_effect=AssertionError('Claude API forbidden in tests')),
+            patch('voice_service._cli_path', side_effect=AssertionError('Claude CLI forbidden in tests')),
         ):
             target.start()
             testcase.addCleanup(target.stop)

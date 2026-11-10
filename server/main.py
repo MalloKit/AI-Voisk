@@ -66,7 +66,10 @@ async def local_demo_only(request: Request, call_next):
         except HTTPException as error:
             return JSONResponse(status_code=error.status_code, content={'detail': error.detail})
     kiosk_path = path == '/kiosk' or path.startswith('/kiosk/')
-    if kiosk_path and request.method == 'POST' and len(await request.body()) > 64 * 1024:
+    # 인증 전이므로 본문을 읽기 전에 선언된 크기로 먼저 거절합니다(크기를 밝히지 않는 요청도 거절).
+    kiosk_length = request.headers.get('content-length', '')
+    if kiosk_path and request.method == 'POST' and (
+            not kiosk_length.isdigit() or int(kiosk_length) > 64 * 1024 or len(await request.body()) > 64 * 1024):
         return JSONResponse(status_code=413, content={'detail': '요청 크기를 확인해 주세요.'},
                             headers={'Cache-Control': 'no-store'})
     admin_path = path == '/admin' or path.startswith('/admin/')
@@ -118,8 +121,9 @@ async def local_demo_only(request: Request, call_next):
                                     headers={'Cache-Control': 'no-store'})
     response = await call_next(request)
     if path.startswith('/media/'):
-        response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
         response.headers['X-Content-Type-Options'] = 'nosniff'
+        if response.status_code == 200:
+            response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     if path.startswith('/payments/kakaopay/'):
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Referrer-Policy'] = 'no-referrer'
@@ -142,7 +146,8 @@ app.include_router(kakaopay_test.router)
 app.include_router(kiosk_router.router)
 # 메뉴 사진은 공개 자료입니다. 파일 이름에 내용 해시가 있어 오래 캐시해도 됩니다.
 (menu_image_service.MEDIA_ROOT / menu_image_service.MENU_DIR).mkdir(parents=True, exist_ok=True)
-app.mount('/media', StaticFiles(directory=menu_image_service.MEDIA_ROOT), name='media')
+# 메뉴 사진 폴더만 공개합니다(MEDIA_ROOT를 잘못 지정해도 다른 파일이 나가지 않게).
+app.mount('/media/menu', StaticFiles(directory=menu_image_service.MEDIA_ROOT / menu_image_service.MENU_DIR), name='media')
 
 
 @app.exception_handler(RequestValidationError)

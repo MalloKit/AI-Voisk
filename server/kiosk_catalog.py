@@ -100,24 +100,31 @@ class CatalogCache:
         self.ttl, self.clock = ttl, clock
         self._lock = threading.Lock()
         self._items = {}
+        self._generation = {}
 
     def get(self, store_id):
         with self._lock:
             hit = self._items.get(store_id)
             if hit and self.clock() - hit[0] < self.ttl:
                 return hit[1]
+            generation = self._generation.get(store_id, 0)
         with ai_db.read_cursor() as cursor:
             catalog = read_catalog(cursor, store_id)
         with self._lock:
-            self._items[store_id] = (self.clock(), catalog)
+            # 읽는 동안 메뉴가 바뀌었으면 이번 결과는 쓰기만 하고 저장하지 않습니다.
+            if self._generation.get(store_id, 0) == generation:
+                self._items[store_id] = (self.clock(), catalog)
         return catalog
 
     def invalidate(self, store_id=None):
         with self._lock:
             if store_id is None:
                 self._items.clear()
+                for key in list(self._generation):
+                    self._generation[key] += 1
             else:
                 self._items.pop(store_id, None)
+                self._generation[store_id] = self._generation.get(store_id, 0) + 1
 
 
 cache = CatalogCache()

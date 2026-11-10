@@ -324,10 +324,20 @@ def _set_sold_out(owner_id, target_id, value, select_sql, update_sql):
     connection = portal.connection_factory()
     try:
         with connection.cursor() as cursor:
-            cursor.execute('START TRANSACTION')
+            # 소유는 잠그지 않고 먼저 확인합니다. 잠금 순서는 주문·메뉴판 저장과 같은 기기 → 메뉴입니다
+            # (반대 순서면 같은 메뉴를 주문하는 키오스크와 교착이 생깁니다).
+            cursor.execute('START TRANSACTION READ ONLY')
             cursor.execute(select_sql, (target_id, owner_id))
             row = cursor.fetchone()
+            connection.rollback()
             if row is None:
+                raise OwnerResourceNotFound()
+            cursor.execute('START TRANSACTION')
+            cursor.execute('SELECT device_id FROM kiosk_device WHERE store_id = %s ORDER BY device_id FOR UPDATE',
+                           (row['store_id'],))
+            cursor.fetchall()
+            cursor.execute(select_sql + ' FOR UPDATE', (target_id, owner_id))
+            if cursor.fetchone() is None:
                 raise OwnerResourceNotFound()
             cursor.execute(update_sql, (value, target_id))
             cursor.execute('UPDATE kiosk_device SET current_menu_version = current_menu_version + 1 WHERE store_id = %s',

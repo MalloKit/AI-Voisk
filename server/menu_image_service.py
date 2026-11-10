@@ -41,12 +41,27 @@ def _owned_menu(cursor, menu_id, owner_id):
     return row
 
 
-def _replace(menu_id, owner_id, new_name):
+def owned_store(menu_id, owner_id):
+    """점주의 메뉴면 매장 번호. 잠그지 않는 확인입니다."""
+    with portal.read_cursor() as cursor:
+        cursor.execute('''SELECT c.store_id FROM menu m JOIN category c ON c.category_id = m.category_id
+            JOIN store s ON s.store_id = c.store_id WHERE m.menu_id = %s AND s.owner_id = %s''', (menu_id, owner_id))
+        row = cursor.fetchone()
+    if row is None:
+        raise portal.OwnerResourceNotFound()
+    return row['store_id']
+
+
+def _replace(menu_id, owner_id, new_name, store_id):
     """menu_img 행을 바꾸고 이전 파일 이름 목록을 돌려줍니다. 파일 삭제는 커밋 뒤에 합니다."""
     connection = portal.connection_factory()
     try:
         with connection.cursor() as cursor:
             cursor.execute('START TRANSACTION')
+            # 잠금 순서: 기기 → 메뉴(주문·메뉴판 저장과 같음)
+            cursor.execute('SELECT device_id FROM kiosk_device WHERE store_id = %s ORDER BY device_id FOR UPDATE',
+                           (store_id,))
+            cursor.fetchall()
             row = _owned_menu(cursor, menu_id, owner_id)
             cursor.execute('SELECT img_nm FROM menu_img WHERE menu_id = %s', (menu_id,))
             old = [r['img_nm'] for r in cursor.fetchall()]
@@ -83,16 +98,23 @@ def save_image(menu_id, owner_id, data):
     extension = detect(data)
     if extension is None:
         raise HTTPException(415, 'JPG, PNG, WEBP 사진만 올릴 수 있습니다.')
+    # 소유를 먼저 확인해 다른 점주의 요청이 파일을 만들거나 지우지 못하게 합니다.
+    store_id = owned_store(menu_id, owner_id)
     name = f'{menu_id}_{hashlib.sha256(data).hexdigest()[:16]}.{extension}'
     folder = MEDIA_ROOT / MENU_DIR
     folder.mkdir(parents=True, exist_ok=True)
-    temporary = folder / f'.{name}.tmp'
-    temporary.write_bytes(data)
-    os.replace(temporary, folder / name)
+    target = folder / name
+    # 같은 사진을 다시 올리면 이미 쓰이는 파일과 이름이 같습니다. 실패해도 원래 있던 파일은 지우지 않습니다.
+    existed = target.exists()
+    if not existed:
+        temporary = folder / f'.{name}.{os.getpid()}.tmp'
+        temporary.write_bytes(data)
+        os.replace(temporary, target)
     try:
-        store_id, old = _replace(menu_id, owner_id, name)
+        store_id, old = _replace(menu_id, owner_id, name, store_id)
     except Exception:
-        _remove_files([name])
+        if not existed:
+            _remove_files([name])
         raise
     _remove_files(old)
     sync_hub.menu_changed(store_id)
@@ -100,7 +122,7 @@ def save_image(menu_id, owner_id, data):
 
 
 def delete_image(menu_id, owner_id):
-    store_id, old = _replace(menu_id, owner_id, None)
+    store_id, old = _replace(menu_id, owner_id, None, owned_store(menu_id, owner_id))
     _remove_files(old)
     sync_hub.menu_changed(store_id)
     return {'menu_id': menu_id, 'image_url': None}

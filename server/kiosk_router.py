@@ -20,6 +20,8 @@ DeviceDep = Annotated[Device, Depends(device_auth.require_device)]
 MenuId = Annotated[StrictInt, Field(ge=1, le=2147483647)]
 
 READ_FAILED = '서버에서 매장 정보를 읽지 못했습니다. 잠시 후 다시 시도해 주세요.'
+# 매장당 동시 WebSocket 연결 상한. 키오스크 대수보다 넉넉하게 둡니다.
+MAX_SOCKETS_PER_STORE = 30
 
 
 def _db(failure, function, *args):
@@ -91,12 +93,17 @@ async def menu_changes(websocket: WebSocket):
     except Exception:
         await websocket.close(code=4401)
         return
+    if hub.count(device.store_id) >= MAX_SOCKETS_PER_STORE:
+        await websocket.close(code=4429)
+        return
     await websocket.accept()
     await hub.register(device.store_id, websocket)
     try:
         while True:
-            # 키오스크가 보내는 ping 문자열은 연결 유지용이며 내용을 쓰지 않습니다.
-            await websocket.receive_text()
+            # 키오스크가 보내는 메시지는 연결 유지용이며 내용을 쓰지 않습니다(텍스트·바이너리 모두 무시).
+            message = await websocket.receive()
+            if message.get('type') == 'websocket.disconnect':
+                break
     except WebSocketDisconnect:
         pass
     finally:
@@ -164,6 +171,9 @@ def staff_call(payload: StaffCallInput, device: DeviceDep):
     """기기 알림(device_alert)에 기록합니다. 처리되지 않은 호출이 있으면 새로 만들지 않습니다."""
     def save():
         with ai_db.write_cursor() as cursor:
+            # 두 번 빠르게 눌러도 호출이 하나만 생기도록 기기 행을 먼저 잠급니다.
+            cursor.execute('SELECT device_id FROM kiosk_device WHERE device_id = %s FOR UPDATE', (device.device_id,))
+            cursor.fetchone()
             cursor.execute('''SELECT alert_id FROM device_alert WHERE device_id = %s AND alert_type = 'STAFF_CALL'
                 AND alert_status = 'UNREAD' ORDER BY alert_id DESC LIMIT 1''', (device.device_id,))
             existing = cursor.fetchone()
@@ -212,10 +222,19 @@ def recommendation_log(payload: RecLogInput, device: DeviceDep):
                 WHERE c.store_id = %s AND m.menu_id IN ({", ".join(["%s"] * len(ids))})''', (device.store_id, *ids))
             if cursor.fetchone()['n'] != len(ids):
                 raise HTTPException(422, '매장 메뉴가 아닌 추천 기록입니다.')
-            cursor.execute('SELECT rec_log_id, selected_menu_id FROM recommendation_log WHERE device_id = %s AND client_log_id = %s',
-                           (device.device_id, str(payload.client_log_id)))
+            cursor.execute('''SELECT DISTINCT t.tag_nm FROM menu_tag t JOIN menu m ON m.menu_id = t.menu_id
+                JOIN category c ON c.category_id = m.category_id WHERE c.store_id = %s''', (device.store_id,))
+            known_tags = {row['tag_nm'] for row in cursor.fetchall()}
+            # 매장 태그에 없는 값(발화 일부일 수 있음)은 저장하지 않습니다.
+            situation = [tag for tag in payload.situation if tag in known_tags]
+            cursor.execute('''SELECT rec_log_id, selected_menu_id, shown_menu_ids FROM recommendation_log
+                WHERE device_id = %s AND client_log_id = %s FOR UPDATE''', (device.device_id, str(payload.client_log_id)))
             existing = cursor.fetchone()
             if existing:
+                # 선택은 처음 저장한 노출 목록과 대조합니다(두 번째 요청이 보낸 목록은 믿지 않음).
+                shown = {int(v) for v in existing['shown_menu_ids'].split(',') if v.strip().isdigit()}
+                if payload.selected_menu_id is not None and payload.selected_menu_id not in shown:
+                    raise HTTPException(422, '보여준 추천 메뉴 중에서만 선택할 수 있습니다.')
                 if payload.selected_menu_id is not None and existing['selected_menu_id'] is None:
                     cursor.execute('UPDATE recommendation_log SET selected_menu_id = %s WHERE rec_log_id = %s',
                                    (payload.selected_menu_id, existing['rec_log_id']))
@@ -223,7 +242,7 @@ def recommendation_log(payload: RecLogInput, device: DeviceDep):
             cursor.execute('''INSERT INTO recommendation_log
                 (store_id, device_id, client_log_id, situation, shown_menu_ids, selected_menu_id, policy_profit)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)''',
-                (device.store_id, device.device_id, str(payload.client_log_id), ','.join(payload.situation)[:100] or None,
+                (device.store_id, device.device_id, str(payload.client_log_id), ','.join(situation)[:100] or None,
                  ','.join(str(i) for i in payload.shown_menu_ids), payload.selected_menu_id, payload.policy_profit))
             return {'rec_log_id': cursor.lastrowid, 'replayed': False}
     try:

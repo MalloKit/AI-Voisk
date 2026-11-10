@@ -39,6 +39,10 @@ class FailureLimiter:
         values = self._failures[host]
         while values and values[0] <= now - self.window:
             values.popleft()
+        if not values:
+            # 비운 키는 지워 메모리가 늘지 않게 합니다.
+            del self._failures[host]
+            return self._failures[host]
         return values
 
     def check(self, host):
@@ -68,7 +72,9 @@ def _credentials(device_id_text, authorization):
 
 def verify(device_id_text, authorization, host):
     """활성 기기이고 토큰 해시가 맞으면 Device. 실패 사유는 응답에서 구분하지 않습니다."""
-    failures.check(host)
+    # 같은 주소(NAT)를 쓰는 다른 키오스크가 함께 잠기지 않도록 기기 번호별로 셉니다.
+    key = f'{host}#{(device_id_text or "")[:12]}'
+    failures.check(key)
     credentials = _credentials(device_id_text, authorization)
     row = None
     if credentials is not None:
@@ -81,7 +87,7 @@ def verify(device_id_text, authorization, host):
     expected = stored if len(stored) == 64 else '0' * 64
     supplied = hash_token(credentials[1]) if credentials else '1' * 64
     if not (hmac.compare_digest(expected, supplied) and row and stored and row['is_active']):
-        failures.fail(host)
+        failures.fail(key)
         raise HTTPException(401, '기기 인증이 필요합니다. 관리자에게 기기 토큰 발급을 요청해 주세요.')
     return Device(row['device_id'], row['store_id'])
 
