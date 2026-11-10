@@ -7,6 +7,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictBool, S
 
 import ai_db
 import kiosk_catalog
+import menu_image_service
 import owner_portal_service as portal
 import sync_hub
 
@@ -136,6 +137,7 @@ def _menu_ai(cursor, store_id):
             WHERE c.store_id = %s ORDER BY t.menu_id, t.{column}''', (store_id,))
         for row in cursor.fetchall():
             labels.setdefault((row['menu_id'], key), []).append(row['value'])
+    images = menu_image_service.images_for_store(cursor, store_id)
     return {'menus': [{
         'menu_id': row['menu_id'], 'menu_name': row['menu_nm'], 'category_name': row['category_nm'],
         'menu_price': int(row['menu_price']), 'is_active': bool(row['is_active']),
@@ -144,6 +146,7 @@ def _menu_ai(cursor, store_id):
         'is_rec_excluded': bool(row['is_rec_excluded']), 'is_store_pick': bool(row['is_store_pick']),
         'tags': labels.get((row['menu_id'], 'tags'), []),
         'synonyms': labels.get((row['menu_id'], 'synonyms'), []),
+        'image_url': images.get(row['menu_id']),
     } for row in menus]}
 
 

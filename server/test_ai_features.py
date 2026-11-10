@@ -497,3 +497,52 @@ class SyncTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MenuImageTests(unittest.TestCase):
+    JPEG = b'\xff\xd8\xff\xe0' + b'\x00' * 100
+    PNG = b'\x89PNG\r\n\x1a\n' + b'\x01' * 100
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self.f = AiFixture(self)
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        media = patch('menu_image_service.MEDIA_ROOT', self.root)
+        media.start()
+        self.addCleanup(media.stop)
+        self.owner = self.f.owner()
+
+    def upload(self, data, menu=10, content_type='image/jpeg', client=None):
+        return (client or self.owner).put(f'/owner/menus/{menu}/image', content=data, headers={'Content-Type': content_type})
+
+    def files(self):
+        return sorted(path.name for path in (self.root / 'menu').glob('*') if not path.name.startswith('.'))
+
+    def test_upload_replace_and_delete(self):
+        before = self.f.value('SELECT current_menu_version FROM kiosk_device WHERE device_id = 70')
+        first = self.upload(self.JPEG)
+        self.assertEqual(first.status_code, 200, first.text)
+        url = first.json()['image_url']
+        self.assertRegex(url, r'^/media/menu/10_[0-9a-f]{16}\.jpg$')
+        self.assertEqual(self.files(), [url.rsplit('/', 1)[1]])
+        kiosk_menu = next(m for m in self.f.kiosk().get('/kiosk/bootstrap').json()['menus'] if m['id'] == '10')
+        self.assertEqual(kiosk_menu['imageUrl'], url)
+        second = self.upload(self.PNG, content_type='image/png').json()['image_url']
+        self.assertTrue(second.endswith('.png'))
+        self.assertEqual(self.files(), [second.rsplit('/', 1)[1]])
+        self.assertEqual(self.f.value('SELECT COUNT(*) FROM menu_img WHERE menu_id = 10'), 1)
+        self.assertEqual(self.owner.delete('/owner/menus/10/image').json(), {'menu_id': 10, 'image_url': None})
+        self.assertEqual((self.files(), self.f.value('SELECT COUNT(*) FROM menu_img')), ([], 0))
+        self.assertEqual(self.f.value('SELECT current_menu_version FROM kiosk_device WHERE device_id = 70'), before + 3)
+
+    def test_rejects_wrong_signature_type_size_and_foreign_menu(self):
+        self.assertEqual(self.upload(b'<svg onload=alert(1)>', content_type='image/jpeg').status_code, 415)
+        self.assertEqual(self.upload(self.JPEG, content_type='text/html').status_code, 415)
+        self.assertEqual(self.upload(self.JPEG + b'\x00' * (900 * 1024)).status_code, 413)
+        self.assertEqual(self.upload(self.JPEG, menu=30).status_code, 404)
+        self.assertEqual(self.upload(self.JPEG, client=self.f.client()).status_code, 401)
+        self.assertEqual((self.files() if (self.root / 'menu').exists() else []), [])
+        self.assertEqual(self.f.value('SELECT COUNT(*) FROM menu_img'), 0)

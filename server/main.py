@@ -17,6 +17,8 @@ import owner_router
 import kakaopay_test
 import device_auth
 import kiosk_router
+import menu_image_service
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from order_service import OrderPayment, OrderInput, save_order, list_orders, order_detail, confirm_cash
@@ -90,7 +92,7 @@ async def local_demo_only(request: Request, call_next):
                 owner_auth.clear_cookie(response)
             response.headers['Cache-Control'] = 'no-store'
             return response
-        if request.method in ('POST', 'PATCH'):
+        if request.method in ('POST', 'PATCH', 'PUT'):
             limit = 8192 if owner_auth_path else OWNER_BODY_LIMIT
             if len(await request.body()) > limit:
                 return JSONResponse(status_code=413, content={'detail': '요청 크기를 확인해 주세요.'},
@@ -115,6 +117,9 @@ async def local_demo_only(request: Request, call_next):
                 return JSONResponse(status_code=413, content={'detail': '인증 요청 크기를 확인해 주세요.'},
                                     headers={'Cache-Control': 'no-store'})
     response = await call_next(request)
+    if path.startswith('/media/'):
+        response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
     if path.startswith('/payments/kakaopay/'):
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Referrer-Policy'] = 'no-referrer'
@@ -128,13 +133,16 @@ async def local_demo_only(request: Request, call_next):
 app.add_middleware(CORSMiddleware,
     allow_origins=list(admin_auth.settings.origins),
     allow_credentials=True,
-    allow_methods=['GET', 'POST', 'PATCH'],
+    allow_methods=['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
     allow_headers=['Content-Type', 'X-CSRF-Token'])
 app.include_router(admin_auth.router)
 app.include_router(owner_auth.router)
 app.include_router(owner_router.router)
 app.include_router(kakaopay_test.router)
 app.include_router(kiosk_router.router)
+# 메뉴 사진은 공개 자료입니다. 파일 이름에 내용 해시가 있어 오래 캐시해도 됩니다.
+(menu_image_service.MEDIA_ROOT / menu_image_service.MENU_DIR).mkdir(parents=True, exist_ok=True)
+app.mount('/media', StaticFiles(directory=menu_image_service.MEDIA_ROOT), name='media')
 
 
 @app.exception_handler(RequestValidationError)

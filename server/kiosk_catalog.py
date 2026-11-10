@@ -3,6 +3,7 @@ import threading
 import time
 
 import ai_db
+import menu_image_service
 
 DEFAULT_SETTINGS = {
     'policy_profit': 30,      # 0 = 고객 적합 우선, 100 = 매장 이익 우선
@@ -69,6 +70,7 @@ def read_catalog(cursor, store_id):
             ''', (store_id,))
             for row in cursor.fetchall():
                 target.setdefault(row['menu_id'], []).append(row['value'])
+    images = menu_image_service.images_for_store(cursor, store_id)
     menus = []
     for row in rows:
         menu_id = row['menu_id']
@@ -80,6 +82,7 @@ def read_catalog(cursor, store_id):
             'costRate': None if not ai_ready or row['cost_rate'] is None else int(row['cost_rate']),
             'recExcluded': bool(ai_ready and row['is_rec_excluded']),
             'storePick': bool(ai_ready and row['is_store_pick']),
+            'imageUrl': images.get(menu_id),
         })
     return {
         'store_id': store_id,

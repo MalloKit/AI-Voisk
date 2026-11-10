@@ -2,11 +2,13 @@
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 import owner_ai_service as ai
 import owner_auth
 import owner_menu_write_service as writes
+import menu_image_service as images
 import owner_portal_service as portal
 from owner_menu_write_service import MenuBoardChanges, SoldOutInput
 
@@ -118,3 +120,16 @@ def staff_calls(request: Request, store_id: Id):
 @router.patch('/stores/{store_id}/staff-calls/{alert_id}/resolve')
 def resolve_staff_call(request: Request, store_id: Id, alert_id: Id):
     return _call(WRITE_FAILED, ai.resolve_staff_call, store_id, _owner_id(request), alert_id)
+
+
+@router.put('/menus/{menu_id}/image')
+async def upload_menu_image(request: Request, menu_id: Id):
+    if request.headers.get('content-type', '').split(';')[0].strip() not in ('image/jpeg', 'image/png', 'image/webp'):
+        raise HTTPException(415, 'JPG, PNG, WEBP 사진만 올릴 수 있습니다.')
+    data = await request.body()
+    return await run_in_threadpool(_call, WRITE_FAILED, images.save_image, menu_id, _owner_id(request), data)
+
+
+@router.delete('/menus/{menu_id}/image')
+def delete_menu_image(request: Request, menu_id: Id):
+    return _call(WRITE_FAILED, images.delete_image, menu_id, _owner_id(request))

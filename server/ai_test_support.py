@@ -57,6 +57,8 @@ SCHEMA = """
         option_id INTEGER REFERENCES menu_option(option_id), is_recommended INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE order_item_option (item_id INTEGER NOT NULL REFERENCES order_item(item_id),
         option_id INTEGER NOT NULL REFERENCES menu_option(option_id), PRIMARY KEY (item_id, option_id));
+    CREATE TABLE menu_img (img_id INTEGER PRIMARY KEY AUTOINCREMENT, menu_id INTEGER NOT NULL REFERENCES menu(menu_id),
+        img_nm TEXT NOT NULL, is_main INTEGER NOT NULL);
     CREATE TABLE device_alert (alert_id INTEGER PRIMARY KEY AUTOINCREMENT, device_id INTEGER NOT NULL REFERENCES kiosk_device(device_id),
         alert_type TEXT NOT NULL, severity TEXT NOT NULL, message TEXT NOT NULL, alert_status TEXT NOT NULL DEFAULT 'UNREAD',
         occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, acknowledged_at TEXT, acknowledged_by INTEGER, resolved_at TEXT);
