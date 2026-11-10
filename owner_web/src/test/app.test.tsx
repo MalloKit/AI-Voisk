@@ -23,7 +23,7 @@ describe("점주 웹 레이아웃", () => {
       within(nav())
         .getAllByRole("button")
         .map((b) => b.textContent),
-    ).toEqual(["오늘 현황", "메뉴 관리1", "주문 내역", "매장 정보"]);
+    ).toEqual(["오늘 현황", "메뉴 관리1", "AI 추천·음성", "주문 내역", "통계", "매장 정보"]);
     expect(screen.getByText("시연 데이터")).toBeInTheDocument();
     expect(
       within(nav()).getByRole("button", { current: "page" }),

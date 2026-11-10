@@ -7,6 +7,7 @@ import {
   ApiOwnerRepository,
   OwnerApiError,
   apiErrorMessage,
+  deviceConnection,
   toServerChanges,
 } from "../data/ownerApiRepository";
 import { MockOwnerRepository } from "../data/ownerRepository";
@@ -180,7 +181,16 @@ describe("ApiOwnerRepository 조회", () => {
     expect(transport).toHaveBeenCalledTimes(1);
   });
 
-  it("기기는 last_seen_at이 있어도 온라인으로 판정하지 않는다", async () => {
+  // 키오스크가 60초마다 상태를 보고하므로(/kiosk/heartbeat) 3분 기준으로 연결 상태를 판정한다.
+  it("기기 연결 상태는 마지막 보고 시각으로 판정한다", () => {
+    const now = Date.parse("2026-11-11T03:00:00Z");
+    expect(deviceConnection("2026-11-11T02:58:30+00:00", now)).toBe("online");
+    expect(deviceConnection("2026-11-11T02:56:59+00:00", now)).toBe("offline");
+    expect(deviceConnection(null, now)).toBe("unknown");
+    expect(deviceConnection("not-a-date", now)).toBe("unknown");
+  });
+
+  it("오래전 보고만 있는 기기는 연결 끊김으로 본다", async () => {
     const { repository } = repositoryWith(() =>
       json({
         devices: [
@@ -198,7 +208,7 @@ describe("ApiOwnerRepository 조회", () => {
         id: 70,
         storeId: 5,
         isActive: true,
-        connection: "unknown",
+        connection: "offline",
         lastSeenAt: "2026-10-29T01:00:00+00:00",
       },
     ]);

@@ -1,5 +1,5 @@
 // DB 행 기준 모델. 컬럼 이름 변환(snake_case → camelCase)은 Repository에서만 한다.
-export type Page = "today" | "menus" | "orders" | "store";
+export type Page = "today" | "menus" | "ai" | "orders" | "stats" | "store";
 
 export interface Owner {
   id: number; // owner_id

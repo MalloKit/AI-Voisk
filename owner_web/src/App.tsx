@@ -14,10 +14,18 @@ import { TodayPage } from "./features/TodayPage";
 import { MenusPage, type MenusGuard } from "./features/menus/MenusPage";
 import { OrdersPage } from "./features/OrdersPage";
 import { StorePage } from "./features/StorePage";
+import { AiPage } from "./features/AiPage";
+import { StatsPage } from "./features/StatsPage";
+import { StaffCallAlert } from "./components/StaffCallAlert";
+import {
+  MockOwnerAiRepository,
+  type OwnerAiRepository,
+} from "./data/aiRepository";
 
 // 로그인 뒤 화면. 실제 진입점은 AppEntry이고, 매장별 Repository를 받아 이 화면을 그린다.
 // 단독 렌더링(테스트)용 기본값만 여기 둔다.
 const defaultRepository = new MockOwnerRepository();
+const defaultAiRepository = new MockOwnerAiRepository();
 
 // 저장 안 된 변경이 있을 때 확인을 받고 할 일
 type Leave =
@@ -37,10 +45,16 @@ export interface Account {
 
 export function App({
   repository = defaultRepository,
+  aiRepository = defaultAiRepository,
   now = DEMO_NOW,
   account,
+  demo = true,
 }: {
   repository?: OwnerRepository;
+  // AI 추천·음성 설정, 통계, 직원 호출
+  aiRepository?: OwnerAiRepository;
+  // 시연(Mock) 데이터 여부. 상단 배지에만 쓴다.
+  demo?: boolean;
   // '오늘' 기준 시각. 시연에서는 고정 시각을 쓰고, 실제 API로 바꿀 때 현재 시각을 넘긴다.
   now?: string;
   // 로그인한 점주. 사이드바의 로그인 ID·로그아웃·매장 바꾸기에 쓴다.
@@ -117,6 +131,8 @@ export function App({
         onNavigate={navigate}
         storeName={profile.store.name}
         soldOutCount={soldOutMenuCount(board)}
+        demo={demo}
+        alert={<StaffCallAlert repository={aiRepository} />}
         account={
           account && {
             loginId: account.loginId,
@@ -147,6 +163,8 @@ export function App({
         {page === "orders" && (
           <OrdersPage repository={repository} board={board} now={now} />
         )}
+        {page === "ai" && <AiPage repository={aiRepository} />}
+        {page === "stats" && <StatsPage repository={aiRepository} />}
         {page === "store" && <StorePage profile={profile} />}
       </OwnerShell>
       {leavingTo && (

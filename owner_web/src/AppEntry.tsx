@@ -24,6 +24,11 @@ import {
   type OwnerLoginInput,
 } from "./data/ownerAuth";
 import { DEMO_NOW } from "./data/demoClock";
+import {
+  ApiOwnerAiRepository,
+  MockOwnerAiRepository,
+  type OwnerAiRepository,
+} from "./data/aiRepository";
 
 // 인증(VITE_OWNER_AUTH_SOURCE)과 데이터(VITE_OWNER_DATA_SOURCE)의 기본은 둘 다 api다.
 // Mock은 값을 mock으로 명시했을 때만 쓰고, 서버 연결에 실패해도 Mock으로 자동 전환하지 않는다.
@@ -39,6 +44,10 @@ const defaultCreateRepository = (storeId: number): OwnerRepository =>
   USE_MOCK_DATA
     ? new MockOwnerRepository(storeId)
     : new ApiOwnerRepository(API_BASE_URL, storeId);
+const defaultCreateAiRepository = (storeId: number): OwnerAiRepository =>
+  USE_MOCK_DATA
+    ? new MockOwnerAiRepository()
+    : new ApiOwnerAiRepository(API_BASE_URL, storeId);
 
 type State =
   | { phase: "checking" }
@@ -67,11 +76,13 @@ const enter = (owner: AuthOwner): State =>
 export function AppEntry({
   authRepository = defaultAuth,
   createRepository = defaultCreateRepository,
+  createAiRepository = defaultCreateAiRepository,
   // Mock 주문은 시연 시각 기준이고, 실제 데이터의 '오늘'은 현재 시각으로 계산한다.
   now = USE_MOCK_DATA ? DEMO_NOW : new Date().toISOString(),
 }: {
   authRepository?: OwnerAuthRepository;
   createRepository?(storeId: number): OwnerRepository;
+  createAiRepository?(storeId: number): OwnerAiRepository;
   now?: string;
 }) {
   const [state, setState] = useState<State>({ phase: "checking" });
@@ -79,10 +90,12 @@ export function AppEntry({
   const operation = useRef<AbortController | null>(null);
   // 로그인한 동안 매장별 Repository를 유지한다. 로그아웃·만료 때 비운다.
   const repositories = useRef(new Map<number, OwnerRepository>());
+  const aiRepositories = useRef(new Map<number, OwnerAiRepository>());
 
   const expire = useCallback(() => {
     operation.current?.abort();
     repositories.current.clear();
+    aiRepositories.current.clear();
     setState({ phase: "login", feedback: EXPIRED });
   }, []);
 
@@ -175,6 +188,7 @@ export function AppEntry({
       const owner = await authRepository.login(input, controller.signal);
       if (!controller.signal.aborted) {
         repositories.current.clear();
+        aiRepositories.current.clear();
         setState(enter(owner));
       }
     } catch (error) {
@@ -192,6 +206,7 @@ export function AppEntry({
     // 화면을 바로 내려 진행 중인 조회와 편집 상태를 버린다.
     setState({ phase: "logout" });
     repositories.current.clear();
+    aiRepositories.current.clear();
     try {
       await authRepository.logout(controller.signal);
       if (!controller.signal.aborted)
@@ -256,10 +271,13 @@ export function AppEntry({
   // me가 돌려준 매장만 열 수 있다.
   const { owner, storeId } = state;
   let repository = repositories.current.get(storeId);
-  if (!repository) {
+  let aiRepository = aiRepositories.current.get(storeId);
+  if (!repository || !aiRepository) {
     try {
       repository = createRepository(storeId);
+      aiRepository = createAiRepository(storeId);
       repositories.current.set(storeId, repository);
+      aiRepositories.current.set(storeId, aiRepository);
     } catch {
       return (
         <div className="app-state">
@@ -272,6 +290,8 @@ export function AppEntry({
     <App
       key={`${owner.ownerId}-${storeId}`}
       repository={repository}
+      aiRepository={aiRepository}
+      demo={USE_MOCK_DATA}
       now={now}
       account={{
         loginId: owner.loginId,
