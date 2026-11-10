@@ -21,26 +21,41 @@ class PendingOrder {
     required int deviceId,
     required String orderType,
     String? clientOrderId,
-  }) : body = jsonEncode({
-         'store_id': storeId,
-         'device_id': deviceId,
-         'client_order_id': clientOrderId ?? newOrderUuid(),
-         'order_type': orderType,
-         'table_no': null,
-         'items': entries
-             .map(
-               (entry) => {
-                 'menu_id': int.parse(entry.menu.id),
-                 'quantity': entry.quantity,
-                 'option_ids': entry.options
-                     .map((o) => int.parse(o.id))
-                     .toList(),
-               },
-             )
-             .toList(),
-       });
+    String? orderChannel,
+  }) : clientOrderId = clientOrderId ?? newOrderUuid(),
+       total = entries.fold(0, (sum, entry) => sum + entry.subtotal),
+       summary = entries
+           .map((entry) => '${entry.menu.name} ${entry.quantity}')
+           .join(', ') {
+    body = jsonEncode({
+      'store_id': storeId,
+      'device_id': deviceId,
+      'client_order_id': this.clientOrderId,
+      'order_type': orderType,
+      'table_no': null,
+      // 음성 대화로 완성한 주문은 voice. 생략하면 서버가 기록하지 않습니다.
+      'order_channel': ?orderChannel,
+      'items': entries
+          .map(
+            (entry) => {
+              'menu_id': int.parse(entry.menu.id),
+              'quantity': entry.quantity,
+              'option_ids': entry.options.map((o) => int.parse(o.id)).toList(),
+              if (entry.recommended) 'is_recommended': true,
+            },
+          )
+          .toList(),
+    });
+  }
+
+  final String clientOrderId;
+  final int total;
+
+  /// 주문내역 화면용 요약. 서버에는 보내지 않습니다.
+  final String summary;
+
   // Encoded once: a failed retry cannot mutate the UUID or cart payload.
-  final String body;
+  late final String body;
 }
 
 abstract class OrderRepository {

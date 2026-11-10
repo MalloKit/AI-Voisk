@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/l10n.dart';
 import '../service/screens/order_screen.dart';
 import '../service/data/menu_repository.dart';
 import '../service/data/order_repository.dart';
@@ -18,35 +19,70 @@ class RoleSelectScreen extends StatelessWidget {
   final int storeId, deviceId;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFFF5F7F5),
-    body: SafeArea(
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          physics: const ClampingScrollPhysics(),
-          child: Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 20,
-            runSpacing: 20,
-            children: [
-              for (final mode in ['포장', '매장 식사'])
-                _RoleButton(
-                  label: mode,
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => OrderScreen(
-                        orderMode: mode,
-                        repository: menuRepository,
-                        orderRepository: orderRepository,
-                        storeId: storeId,
-                        deviceId: deviceId,
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: L10n.instance,
+    builder: (context, _) => Scaffold(
+      backgroundColor: const Color(0xFFF5F7F5),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                physics: const ClampingScrollPhysics(),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 20,
+                  runSpacing: 20,
+                  children: [
+                    // 주문 방식 값은 한국어 코드('포장'·'매장 식사')로 넘기고 화면에서만 번역합니다.
+                    for (final mode in ['포장', '매장 식사'])
+                      _RoleButton(
+                        mode: mode,
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => OrderScreen(
+                              orderMode: mode,
+                              repository: menuRepository,
+                              orderRepository: orderRepository,
+                              storeId: storeId,
+                              deviceId: deviceId,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: PopupMenuButton<AppLanguage>(
+                key: const Key('start-language'),
+                tooltip: 'Language',
+                onSelected: (language) => L10n.instance.language = language,
+                itemBuilder: (_) => [
+                  for (final language in AppLanguage.values)
+                    PopupMenuItem(value: language, child: Text(language.label)),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.language),
+                      const SizedBox(width: 8),
+                      Text(
+                        L10n.instance.language.label,
+                        style: const TextStyle(fontSize: 18),
+                      ),
+                    ],
                   ),
                 ),
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     ),
@@ -54,8 +90,8 @@ class RoleSelectScreen extends StatelessWidget {
 }
 
 class _RoleButton extends StatelessWidget {
-  const _RoleButton({required this.label, required this.onPressed});
-  final String label;
+  const _RoleButton({required this.mode, required this.onPressed});
+  final String mode;
   final VoidCallback onPressed;
 
   @override
@@ -74,11 +110,11 @@ class _RoleButton extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            label == '포장' ? Icons.shopping_bag_outlined : Icons.restaurant,
+            mode == '포장' ? Icons.shopping_bag_outlined : Icons.restaurant,
             size: 56,
           ),
           const SizedBox(height: 16),
-          Text(label),
+          Text(tr(mode), textAlign: TextAlign.center),
         ],
       ),
     ),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,6 +8,8 @@ import '../models/menu_item.dart';
 import '../data/kakaopay_repository.dart';
 import '../data/order_repository.dart';
 import 'kakaopay_checkout_view.dart';
+import '../../core/kiosk_services.dart';
+import '../../core/l10n.dart';
 
 enum PaymentMethod {
   card('카드 결제', Icons.credit_card),
@@ -13,9 +17,10 @@ enum PaymentMethod {
   naver('네이버페이', Icons.account_balance_wallet_outlined),
   cash('현금 결제', Icons.payments_outlined);
 
-  const PaymentMethod(this.label, this.icon);
-  final String label;
+  const PaymentMethod(this.koreanLabel, this.icon);
+  final String koreanLabel;
   final IconData icon;
+  String get label => tr(koreanLabel);
 }
 
 /// 외부 결제·주문 API를 호출하지 않는 화면 시연입니다.
@@ -27,12 +32,20 @@ class PaymentScreen extends StatefulWidget {
     this.storeId = 0,
     this.deviceId = 0,
     this.kakaoRepository,
+    this.orderChannel,
+    this.gateway,
   });
   final List<CartEntry> entries;
   final String? orderMode;
   final int storeId;
   final int deviceId;
   final KakaoTestRepository? kakaoRepository;
+
+  /// touch | voice. 서버 통계의 음성 주문 비율에 씁니다.
+  final String? orderChannel;
+
+  /// 기기 토큰 모드의 주문 전송(Outbox). 없으면 기존 로컬 시연 방식입니다.
+  final OrderGateway? gateway;
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -48,9 +61,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
   PendingOrder? pendingCounterOrder;
   int? savedOrderId;
 
+  /// 서버 연결이 끊겨 기기에 저장해 둔 주문. 연결되면 자동으로 보냅니다.
+  bool queuedOrder = false;
+
   Future<void> submitCounterOrder() async {
     if (busy) return;
     final selected = method;
+    final gateway = widget.gateway;
+    if (gateway != null) {
+      await _submitThroughGateway(gateway, selected!);
+      return;
+    }
     final saveEnabled = selected == PaymentMethod.cash
         ? const bool.fromEnvironment('KIOSK_SAVE_CASH_ORDERS')
         : const bool.fromEnvironment('KIOSK_SAVE_DEMO_PAYMENTS') &&
@@ -96,8 +117,60 @@ class _PaymentScreenState extends State<PaymentScreen> {
         if (e is OrderValidationError) pendingCounterOrder = null;
         error = e is OrderValidationError
             ? e.message.toString()
-            : '주문 저장 결과를 확인하지 못했습니다. 같은 버튼을 눌러 다시 시도해 주세요.';
+            : tr('주문 저장 결과를 확인하지 못했습니다. 같은 버튼을 눌러 다시 시도해 주세요.');
       });
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _submitThroughGateway(
+    OrderGateway gateway,
+    PaymentMethod selected,
+  ) async {
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    final order = pendingCounterOrder ??= PendingOrder(
+      entries: widget.entries,
+      storeId: widget.storeId,
+      deviceId: widget.deviceId,
+      orderType: widget.orderMode == '포장' ? 'takeaway' : 'dine_in',
+      orderChannel: widget.orderChannel,
+    );
+    // 카카오페이 테스트 결제는 PC 로컬에서만 쓰므로 여기서는 카드·네이버페이 시연과 현금 주문만 보냅니다.
+    final path = selected == PaymentMethod.cash
+        ? '/kiosk/payments/cash/pending'
+        : '/kiosk/payments/demo/${selected == PaymentMethod.naver ? 'naverpay' : 'card'}';
+    final body = jsonEncode({
+      'order': jsonDecode(order.body),
+      'expected_amount': total,
+    });
+    try {
+      final result = await gateway.submit(order, path: path, body: body);
+      if (!mounted) return;
+      setState(() {
+        switch (result) {
+          case OrderSent(:final orderId):
+            savedOrderId = orderId;
+            pendingCounterOrder = null;
+            step = 2;
+          case OrderQueued():
+            queuedOrder = true;
+            pendingCounterOrder = null;
+            step = 2;
+          case OrderRejected(:final message):
+            pendingCounterOrder = null;
+            error = message;
+        }
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => error = tr('주문 저장 결과를 확인하지 못했습니다. 같은 버튼을 눌러 다시 시도해 주세요.'),
+        );
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -249,17 +322,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
             leading: step == 2
                 ? null
                 : IconButton(
-                    tooltip: step == 0 ? '주문으로 돌아가기' : '결제 수단 다시 선택',
+                    tooltip: step == 0 ? tr('주문으로 돌아가기') : tr('결제 수단 다시 선택'),
                     icon: const Icon(Icons.arrow_back),
                     onPressed: step == 0
                         ? () => Navigator.pop(context, false)
                         : changeMethod,
                   ),
-            title: Text(
-              step == 2
-                  ? (cash ? '현금 결제 안내' : '결제 완료')
-                  : '결제하기',
-            ),
+            title: Text(step == 2 ? (cash ? tr('현금 결제 안내') : '결제 완료') : '결제하기'),
           ),
           body: SafeArea(
             child: Padding(
@@ -368,12 +437,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
             const SizedBox(height: 12),
             Text(
               cashOrderId != null
-                  ? '현금 수납 대기'
+                  ? tr('현금 수납 대기')
                   : cash
-                  ? '카운터에서 현금으로 결제해 주세요'
+                  ? tr('카운터에서 현금으로 결제해 주세요')
                   : kakaoActive
-                  ? '카카오페이 승인 완료'
-                  : '결제가 완료되었습니다',
+                  ? tr('카카오페이 승인 완료')
+                  : tr('결제가 완료되었습니다'),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
             ),
@@ -381,8 +450,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
               const SizedBox(height: 8),
               Text(
                 cashOrderId != null
-                    ? '카운터에 주문번호를 보여 주고 아래 금액을 결제해 주세요.'
-                    : '현금 수납 전입니다. 결제 완료 상태가 아닙니다.',
+                    ? tr('카운터에 주문번호를 보여 주고 아래 금액을 결제해 주세요.')
+                    : tr('현금 수납 전입니다. 결제 완료 상태가 아닙니다.'),
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 17, color: statusColor),
               ),
@@ -399,13 +468,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (cashOrderId != null) ...[
-                    const Text(
-                      '주문번호',
+                    Text(
+                      tr('주문번호'),
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 17),
                     ),
                     Text(
-                      '$cashOrderId번',
+                      tr('{id}번', {'id': cashOrderId}),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 44,
@@ -416,7 +485,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     const Divider(height: 20),
                   ],
                   Text(
-                    cash ? '카운터에서 결제할 금액' : '결제 금액',
+                    cash ? tr('카운터에서 결제할 금액') : tr('결제 금액'),
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 17),
                   ),
@@ -432,11 +501,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     ),
                   ),
                   const Divider(height: 24),
-                  _completionDetail('결제 수단', method!.label),
+                  _completionDetail(tr('결제 수단'), method!.label),
                   const SizedBox(height: 8),
-                  _completionDetail('주문 방식', widget.orderMode ?? '미선택'),
+                  _completionDetail(tr('주문 방식'), tr(widget.orderMode ?? '미선택')),
                   const SizedBox(height: 8),
-                  _completionDetail('메뉴 수량', '총 $quantity개'),
+                  _completionDetail(
+                    tr('메뉴 수량'),
+                    tr('총 {count}개', {'count': quantity}),
+                  ),
                 ],
               ),
             ),
@@ -444,10 +516,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
               const SizedBox(height: 14),
               Text(
                 kakaoActive && kakaoSession?['order_saved'] == true
-                    ? '주문번호 ${kakaoSession!['order_id']}'
+                    ? tr('주문번호 {id}', {'id': kakaoSession!['order_id']})
                     : savedOrderId != null
-                    ? '주문번호 $savedOrderId'
-                    : '매장에 주문이 접수되지 않았으며 주문번호는 발급되지 않습니다.',
+                    ? tr('주문번호 {id}', {'id': savedOrderId})
+                    : queuedOrder
+                    ? tr('주문을 접수했습니다. 서버 연결이 복구되면 자동으로 전송됩니다.')
+                    : tr('매장에 주문이 접수되지 않았으며 주문번호는 발급되지 않습니다.'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 16, color: Color(0xFF52625B)),
               ),
@@ -459,10 +533,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 backgroundColor: green,
                 minimumSize: const Size(0, 56),
               ),
-              child: const Text(
-                '확인 · 장바구니 비우기',
-                style: TextStyle(fontSize: 21),
-              ),
+              child: Text(tr('확인 · 장바구니 비우기'), style: TextStyle(fontSize: 21)),
             ),
           ],
         ),
@@ -493,13 +564,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Widget _summary() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const Text(
-        '주문 내용',
+      Text(
+        tr('주문 내용'),
         style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
       ),
       const SizedBox(height: 12),
       Text(
-        widget.orderMode ?? '주문 방식 미선택',
+        tr(widget.orderMode ?? '주문 방식 미선택'),
         style: const TextStyle(fontSize: 18),
       ),
       const Divider(height: 32),
@@ -512,7 +583,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             children: [
               for (final entry in widget.entries) ...[
                 Text(
-                  '${entry.menu.name} · ${entry.quantity}개',
+                  '${entry.menu.name} · ${tr('{count}개', {'count': entry.quantity})}',
                   style: const TextStyle(fontSize: 20),
                 ),
                 if (entry.options.isNotEmpty)
@@ -537,7 +608,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         ),
       ),
       const Divider(),
-      const Text('총 결제 금액', style: TextStyle(fontSize: 19)),
+      Text(tr('총 결제 금액'), style: TextStyle(fontSize: 19)),
       Text(
         formatWon(total),
         key: const Key('payment-total'),
@@ -593,7 +664,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
           style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
-        Text('결제 금액 ${formatWon(total)}', style: const TextStyle(fontSize: 22)),
+        Text(
+          tr('결제 금액 {price}', {'price': formatWon(total)}),
+          style: const TextStyle(fontSize: 22),
+        ),
         const SizedBox(height: 12),
         Text(
           session == null
@@ -667,7 +741,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
         TextButton(
           onPressed: busy || kakaoPending ? null : changeMethod,
-          child: const Text('결제 수단 다시 선택'),
+          child: Text(tr('결제 수단 다시 선택')),
         ),
         if (kakaoPending)
           const Text(
@@ -694,11 +768,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
           const SizedBox(height: 24),
           Text(
             switch (method!) {
-              PaymentMethod.card => '실제 서비스에서는 카드 단말기 안내에 따라 결제합니다.',
-              PaymentMethod.kakao ||
-              PaymentMethod.naver => '실제 서비스에서는 결제 서비스가 제공하는 QR 또는 바코드로 진행합니다.',
-              PaymentMethod.cash =>
+              PaymentMethod.card => tr('실제 서비스에서는 카드 단말기 안내에 따라 결제합니다.'),
+              PaymentMethod.kakao || PaymentMethod.naver => tr(
+                '실제 서비스에서는 결제 서비스가 제공하는 QR 또는 바코드로 진행합니다.',
+              ),
+              PaymentMethod.cash => tr(
                 '현금은 카운터에서 직원에게 지불합니다.\n키오스크에서는 현금을 받지 않습니다.',
+              ),
             },
             style: const TextStyle(fontSize: 21),
             textAlign: TextAlign.center,
@@ -722,10 +798,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
             onPressed: busy ? null : submitCounterOrder,
             child: Text(
               busy
-                  ? '저장 중…'
+                  ? tr('저장 중…')
                   : cash
-                  ? '현금 결제 안내 확인'
-                  : '결제',
+                  ? tr('현금 결제 안내 확인')
+                  : tr('결제'),
               style: const TextStyle(fontSize: 21),
             ),
           ),
@@ -734,10 +810,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             onPressed: busy || pendingCounterOrder != null
                 ? null
                 : changeMethod,
-            child: const Text(
-              '취소 · 결제 수단 다시 선택',
-              style: TextStyle(fontSize: 18),
-            ),
+            child: Text(tr('취소 · 결제 수단 다시 선택'), style: TextStyle(fontSize: 18)),
           ),
         ],
       );
@@ -748,8 +821,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
           : MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          '결제 방법을 선택해 주세요',
+        Text(
+          tr('결제 방법을 선택해 주세요'),
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
@@ -831,8 +904,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               18 * MediaQuery.textScalerOf(context).scale(1),
                           child: Center(
                             child: value == PaymentMethod.cash
-                                ? const Text(
-                                    '카운터 결제',
+                                ? Text(
+                                    tr('카운터 결제'),
                                     style: TextStyle(fontSize: 15, height: 1.2),
                                   )
                                 : null,

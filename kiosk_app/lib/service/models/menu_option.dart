@@ -9,6 +9,24 @@ class MenuOption {
   final String name;
   final int price;
   final bool isSoldOut;
+
+  factory MenuOption.fromJson(Map<String, dynamic> row) {
+    final price = row['price'] as int;
+    if (price < 0) throw const FormatException('잘못된 옵션 가격입니다.');
+    return MenuOption(
+      id: row['id'] as String,
+      name: row['name'] as String,
+      price: price,
+      isSoldOut: row['isSoldOut'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'price': price,
+    'isSoldOut': isSoldOut,
+  };
 }
 
 /// 메뉴 한 개당 적용되는 임시 추가 옵션입니다.
