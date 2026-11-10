@@ -381,15 +381,26 @@ class ConversationController extends ChangeNotifier {
     '아니요괜찮아요',
   };
 
+  static const _yesStarts = ['네', '예', '응', '좋아', '그래', '맞아', '오케이'];
+  static const _noStarts = ['아니', '아뇨', '됐', '괜찮', '싫', '안할', '필요없'];
+
+  /// "네 그걸로 주세요"처럼 긍정·부정으로 시작하는 짧은 대답(8자 이하).
+  /// 더 길면 "네, 그리고 콜라도"처럼 새 주문이 섞였을 수 있어 서버 해석에 맡깁니다.
+  bool _shortReply(String normalized, List<String> starts) =>
+      normalized.length <= 8 &&
+      !RegExp(r'\d').hasMatch(normalized) &&
+      starts.any(normalized.startsWith) &&
+      !(starts == _yesStarts && _noStarts.any(normalized.contains));
+
   /// 확인·추가 제안 단계의 짧은 예/아니요는 서버 없이 바로 처리합니다(응답 지연 단축).
   InterpretResult? _localIntent(String text) {
     final normalized = text.replaceAll(RegExp(r'[\s.,!?~]'), '');
     if (state == ConversationState.confirming ||
         state == ConversationState.upsell) {
-      if (_yes.contains(normalized)) {
+      if (_yes.contains(normalized) || _shortReply(normalized, _yesStarts)) {
         return const InterpretResult(intent: 'confirm');
       }
-      if (_no.contains(normalized)) {
+      if (_no.contains(normalized) || _shortReply(normalized, _noStarts)) {
         return const InterpretResult(intent: 'deny');
       }
     }

@@ -192,13 +192,20 @@ void main() {
     await tester.tap(find.text('결제'));
     await tester.runAsync(() => settle());
     await tester.pumpAndSettle();
-    final request = requests.singleWhere((r) => r.url.path == '/kiosk/payments/demo/card');
+    final request = requests.singleWhere(
+      (r) => r.url.path == '/kiosk/payments/demo/card',
+    );
     final body = jsonDecode(request.body) as Map<String, dynamic>;
     expect(body['expected_amount'], 8500);
     expect(body['order']['order_channel'], 'voice');
     expect(body['order']['device_id'], 70);
     expect(body['order']['items'], [
-      {'menu_id': 3, 'quantity': 1, 'option_ids': <int>[], 'is_recommended': true},
+      {
+        'menu_id': 3,
+        'quantity': 1,
+        'option_ids': <int>[],
+        'is_recommended': true,
+      },
     ]);
     expect(find.text('결제가 완료되었습니다'), findsOneWidget);
     expect(find.text('주문번호 101'), findsOneWidget);

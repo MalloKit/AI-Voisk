@@ -150,7 +150,8 @@ class VoiceEnginePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCall
         tts?.stop()
         releaseRecognizer()
         val locale = call.argument<String>("locale") ?: "ko-KR"
-        val silenceMs = (call.argument<Int>("completeSilenceMs") ?: 1500).toLong()
+        // 인식 서비스는 이 값을 Int로 읽습니다(Long이면 무시하고 기본값을 씀, 에뮬레이터 로그로 확인).
+        val silenceMs = call.argument<Int>("completeSilenceMs") ?: 1500
         val preferOffline = call.argument<Boolean>("preferOffline") ?: false
         val created = SpeechRecognizer.createSpeechRecognizer(context)
         recognizer = created

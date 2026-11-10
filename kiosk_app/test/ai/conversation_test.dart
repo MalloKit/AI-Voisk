@@ -307,4 +307,35 @@ void main() {
     expect(cart.entries, isEmpty);
     expect(voice.spoken, contains(startsWith('말씀하신 메뉴를 찾지 못했어요.')));
   });
+
+  test('확인 단계의 짧은 긍정·부정 문장은 서버 없이 처리하고, 긴 문장은 서버에 맡깁니다', () async {
+    final c = build();
+    voice
+      ..say('제육 하나')
+      ..say('네 그걸로 주세요')
+      ..say('콜라 하나')
+      ..say('네 그리고 사이다도 하나 주세요');
+    interpreter
+      ..reply(
+        const InterpretResult(
+          intent: 'order',
+          items: [InterpretedItem(menuId: '1', quantity: 1)],
+        ),
+      )
+      ..reply(
+        const InterpretResult(
+          intent: 'order',
+          items: [InterpretedItem(menuId: '6', quantity: 1)],
+        ),
+      );
+    await c.start();
+    await settle();
+    expect(cart.entries.map((e) => e.menu.id), contains('1'));
+    // "네 그걸로 주세요"는 로컬, "네 그리고 …"는 서버로 갑니다.
+    expect(interpreter.payloads.map((p) => p['text']), [
+      '제육 하나',
+      '콜라 하나',
+      '네 그리고 사이다도 하나 주세요',
+    ]);
+  });
 }

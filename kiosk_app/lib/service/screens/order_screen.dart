@@ -753,7 +753,13 @@ class _OrderScreenState extends State<OrderScreen> {
                     builder: (context, _) => _conversation!.active
                         ? Positioned(
                             left: 24,
-                            right: 24,
+                            // 오른쪽 장바구니(합계·결제하기)는 가리지 않습니다.
+                            right:
+                                (MediaQuery.sizeOf(context).width < 850
+                                        ? 230.0
+                                        : 320.0) *
+                                    _textScale.clamp(1.0, 1.2) +
+                                16,
                             bottom: 16,
                             child: Center(
                               child: ConstrainedBox(

@@ -99,7 +99,10 @@ intent 정의:
 - remove: 장바구니 항목 빼기. items에 entry_id(수량을 일부만 빼면 modify)
 - clear: 장바구니 전부 비우기
 - confirm: 긍정 응답(네, 응, 맞아요, 그걸로 줘). deny: 부정 응답(아니요, 됐어요)
-- checkout: 결제·주문 완료 요청. cancel: 음성 주문 그만두기
+  state가 confirming·upsell일 때 "네 그걸로 주세요", "좋아요 담아 주세요"처럼 긍정하는 말은 confirm, 거절은 deny입니다.
+  다른 메뉴나 수량을 새로 말하면 order·modify입니다.
+- checkout: 결제·주문 완료 요청("계산해 주세요", "다 골랐어요"). 장바구니가 비어 있어도 checkout입니다(키오스크가 안내).
+- cancel: 음성 주문 그만두기
 - help: 사용법 질문. clarify: 메뉴가 둘 이상으로 모호하거나 꼭 필요한 정보가 빠짐. question에 짧은 되묻기 문장
 - unknown: 주문과 무관하거나 해석 불가
 
