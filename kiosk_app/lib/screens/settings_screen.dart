@@ -4,12 +4,23 @@ import 'package:flutter/services.dart';
 import '../core/kiosk_services.dart';
 import '../core/kiosk_settings.dart';
 import '../data/kiosk_api.dart';
+import '../data/usability_log.dart';
+import 'order_history_dialog.dart';
 
 /// 관리자 PIN 확인. 처음 실행이면 새 PIN을 정하게 합니다. 성공하면 true.
-Future<bool> askAdminPin(BuildContext context, KioskSettings settings) async {
+///
+/// 이미 서버에 연결된 키오스크(기기 토큰 있음)인데 PIN이 없으면, 고객이 PIN을 만들어
+/// 설정에 들어가지 못하도록 저장된 기기 토큰을 입력해야 PIN을 만들 수 있습니다.
+Future<bool> askAdminPin(
+  BuildContext context,
+  KioskSettings settings, {
+  String deviceToken = '',
+}) async {
   final creating = !settings.hasPin;
+  final needToken = creating && deviceToken.isNotEmpty;
   final controller = TextEditingController();
   final confirm = TextEditingController();
+  final tokenField = TextEditingController();
   String? error;
   final ok = await showDialog<bool>(
     context: context,
@@ -23,10 +34,20 @@ Future<bool> askAdminPin(BuildContext context, KioskSettings settings) async {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (creating) const Text('키오스크 설정을 보호할 숫자 4~8자리 PIN을 정해 주세요.'),
+              if (needToken)
+                TextField(
+                  key: const Key('pin-token-field'),
+                  controller: tokenField,
+                  autofocus: true,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: '기기 토큰 (회사 관리자 웹에서 발급한 값)',
+                  ),
+                ),
               TextField(
                 key: const Key('pin-field'),
                 controller: controller,
-                autofocus: true,
+                autofocus: !needToken,
                 obscureText: true,
                 keyboardType: TextInputType.number,
                 inputFormatters: [
@@ -67,6 +88,10 @@ Future<bool> askAdminPin(BuildContext context, KioskSettings settings) async {
             onPressed: () async {
               final pin = controller.text;
               if (creating) {
+                if (needToken && !_sameSecret(tokenField.text.trim(), deviceToken)) {
+                  update(() => error = '기기 토큰이 맞지 않습니다.');
+                  return;
+                }
                 if (!KioskSettings.validPin(pin)) {
                   update(() => error = '숫자 4~8자리로 정해 주세요.');
                   return;
@@ -101,7 +126,18 @@ Future<bool> askAdminPin(BuildContext context, KioskSettings settings) async {
   );
   controller.dispose();
   confirm.dispose();
+  tokenField.dispose();
   return ok ?? false;
+}
+
+/// 길이와 관계없이 끝까지 비교합니다(입력 시간으로 토큰을 추측하지 못하게).
+bool _sameSecret(String a, String b) {
+  if (a.isEmpty || b.isEmpty) return false;
+  var diff = a.length ^ b.length;
+  for (var i = 0; i < b.length; i++) {
+    diff |= (i < a.length ? a.codeUnitAt(i) : 0) ^ b.codeUnitAt(i);
+  }
+  return diff == 0;
 }
 
 /// 매장 직원용 키오스크 설정. 서버 주소·매장·기기 번호·기기 토큰, 화면 고정, 연결 확인.
@@ -162,8 +198,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return null;
     }
     final newToken = token.text.trim();
+    final serverUrl = server.text.trim().replaceFirst(RegExp(r'/$'), '');
+    final previous = Uri.tryParse(widget.services.config.serverUrl);
+    // 서버 주소(호스트·포트)를 바꾸면 저장된 토큰을 새 주소로 보내지 않도록 다시 입력받습니다.
+    final sameServer =
+        previous != null &&
+        previous.scheme == url.scheme &&
+        previous.host == url.host &&
+        previous.port == url.port;
+    if (newToken.isEmpty && !sameServer) {
+      setState(() => status = '서버 주소를 바꾸면 기기 토큰도 다시 입력해 주세요.');
+      return null;
+    }
     return KioskConfig(
-      serverUrl: server.text.trim().replaceFirst(RegExp(r'/$'), ''),
+      serverUrl: serverUrl,
       storeId: storeId,
       deviceId: deviceId,
       token: newToken.isEmpty ? widget.services.config.token : newToken,
@@ -185,18 +233,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       final data = await api.bootstrap();
       final menus = (data['menus'] as List).length;
+      if (!mounted) return;
       setState(
         () => status =
             '연결 성공: 메뉴 $menus개, 메뉴 버전 ${data['menu_version']}, '
             'AI 설정 ${data['ai_ready'] == true ? '적용됨' : '미적용'}',
       );
     } on KioskApiException catch (error) {
+      if (!mounted) return;
       setState(
         () => status = error.status == 401
             ? '기기 토큰이 맞지 않습니다. 회사 관리자 웹에서 다시 발급해 주세요.'
             : error.message,
       );
     } on KioskUnavailable {
+      if (!mounted) return;
       setState(
         () =>
             status = '서버에 연결하지 못했습니다. 같은 와이파이인지, 서버가 0.0.0.0으로 실행 중인지 확인해 주세요.',
@@ -262,7 +313,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
     await settings.setPin(pin);
-    setState(() => status = '관리자 PIN을 바꿨습니다.');
+    if (mounted) setState(() => status = '관리자 PIN을 바꿨습니다.');
   }
 
   @override
@@ -362,6 +413,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: _changePin,
           ),
+          ListTile(
+            title: const Text('배터리 최적화 제외'),
+            subtitle: const Text(
+              '절전 때문에 앱이 꺼지지 않도록 예외로 등록합니다. 빅스비 음성 호출은 기기 설정에서 꺼 주세요.',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              final ok = await services.system.requestIgnoreBatteryOptimizations();
+              if (!mounted) return;
+              setState(
+                () => status = ok
+                    ? '배터리 최적화 예외 요청 화면을 열었습니다.'
+                    : '이 기기에서는 요청 화면을 열지 못했습니다. 설정 > 앱 > AI 보이스크 > 배터리에서 바꿔 주세요.',
+              );
+            },
+          ),
           const Divider(height: 40),
           const Text(
             '상태',
@@ -400,9 +467,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
+          // 최근 주문 기록(주문번호·금액)은 이전 고객 정보라 고객 화면이 아닌 관리자 설정에서만 봅니다.
+          ListTile(
+            key: const Key('settings-order-history'),
+            title: const Text('최근 주문 내역'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (_) => OrderHistoryDialog(outbox: outbox),
+            ),
+          ),
+          if (services.usability != null) _UsabilityTile(log: services.usability!),
           const ListTile(title: Text('앱 버전'), subtitle: Text(appVersion)),
         ],
       ),
     );
   }
+}
+
+/// 사용성 측정 결과(구상안 15장). 같은 주문 과제를 터치·음성으로 해 본 뒤 평균 탭 수와 시간을 비교합니다.
+class _UsabilityTile extends StatefulWidget {
+  const _UsabilityTile({required this.log});
+  final UsabilityLog log;
+
+  @override
+  State<_UsabilityTile> createState() => _UsabilityTileState();
+}
+
+class _UsabilityTileState extends State<_UsabilityTile> {
+  late Future<Map<String, UsabilitySummary>> _summary = widget.log.summary();
+
+  static const _labels = {
+    'touch': '터치 주문',
+    'voice': '음성 주문',
+    'touch/senior': '터치 주문 · 천천히 모드',
+    'voice/senior': '음성 주문 · 천천히 모드',
+  };
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder(
+    future: _summary,
+    builder: (context, snapshot) {
+      final data = snapshot.data ?? const <String, UsabilitySummary>{};
+      return ListTile(
+        key: const Key('settings-usability'),
+        title: const Text('사용성 측정 (주문 완료까지 평균)'),
+        subtitle: Text(
+          data.isEmpty
+              ? '아직 기록이 없습니다. 주문을 끝까지 하면 탭 수와 시간이 쌓입니다.'
+              : [
+                  for (final key in _labels.keys)
+                    if (data[key] case final s?)
+                      '${_labels[key]}: ${s.count}건 · 탭 ${s.averageTaps.toStringAsFixed(1)}회 · '
+                          '${s.averageSeconds.toStringAsFixed(0)}초',
+                ].join('\n'),
+        ),
+        trailing: TextButton(
+          onPressed: () async {
+            await widget.log.clear();
+            if (mounted) setState(() => _summary = widget.log.summary());
+          },
+          child: const Text('기록 지우기'),
+        ),
+      );
+    },
+  );
 }

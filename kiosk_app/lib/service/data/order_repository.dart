@@ -110,7 +110,9 @@ class ApiOrderRepository implements OrderRepository {
           )
           .timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) {
-        final detail = jsonDecode(utf8.decode(response.bodyBytes))['detail'];
+        final raw = jsonDecode(utf8.decode(response.bodyBytes))['detail'];
+        // 서버가 {code, message}로 보내는 거절도 문구를 그대로 보여 줍니다.
+        final detail = raw is Map ? raw['message'] : raw;
         if ([403, 422].contains(response.statusCode) ||
             (response.statusCode == 503 &&
                 detail == '주문 유형 DB 변경이 적용되지 않았습니다. 저장하지 않았습니다.')) {

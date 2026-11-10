@@ -19,6 +19,7 @@ enum ConversationState {
   thinking, // 이해(서버 해석 중)
   recommending, // 추천 카드 표시, 선택 대기
   confirming, // 담기 전 확인
+  choosingOption, // 재질문: 필수 옵션(맵기·사이즈) 묻기
   upsell, // 추가 제안(주문당 1회)
   checkout, // 결제 안내
   error, // 반복 실패: 터치 주문·직원 호출 안내
@@ -114,6 +115,7 @@ class ConversationController extends ChangeNotifier {
     this.onCheckout,
     this.silenceLimit = const Duration(seconds: 8),
     this.maxFailures = 3,
+    this.errorTimeout = const Duration(seconds: 20),
     DateTime Function()? clock,
     String Function()? newId,
   }) : _clock = clock ?? DateTime.now,
@@ -124,10 +126,14 @@ class ConversationController extends ChangeNotifier {
   final OrderCommandBus bus;
   final KioskCatalog Function() catalog;
   final MenuItem? Function()? viewingMenu;
-  final void Function(Set<String> menuIds)? onHighlight;
+  /// 메뉴 강조. focus가 true면 고객이 고른 메뉴라 "이거"가 가리키는 메뉴로도 씁니다.
+  final void Function(Set<String> menuIds, {bool focus})? onHighlight;
   final Future<void> Function()? onCheckout;
   final Duration silenceLimit;
   final int maxFailures;
+
+  /// 반복 실패 안내 뒤 아무 입력이 없으면 음성 주문을 닫는 시간(다음 고객에게 남지 않게).
+  final Duration errorTimeout;
   final DateTime Function() _clock;
   final String Function() _newId;
   final _engine = const RecommendationEngine();
@@ -144,6 +150,16 @@ class ConversationController extends ChangeNotifier {
   List<AddItemCommand> pendingItems = const [];
   MenuItem? upsellMenu;
   bool offerStaffCall = false;
+
+  /// 필수 옵션을 묻는 중이면 그 메뉴와 그룹. 화면에 선택 버튼으로도 보여 줍니다.
+  MenuItem? askingMenu;
+  String? askingGroup;
+  List<MenuOption> get optionChoices => [
+    for (final option in askingMenu?.optionGroups[askingGroup] ?? const <MenuOption>[])
+      if (!option.isSoldOut) option,
+  ];
+  int _askIndex = 0;
+  Timer? _errorTimer;
 
   int _session = 0;
   int _failures = 0;
@@ -213,12 +229,19 @@ class ConversationController extends ChangeNotifier {
     _waiting = null;
     await voice.cancelListening();
     await voice.stopSpeaking();
+    _errorTimer?.cancel();
     recommendations = const [];
     pendingItems = const [];
     upsellMenu = null;
+    _clearAsk();
     partial = '';
     level = 0;
     _set(ConversationState.idle, say: say ?? '');
+  }
+
+  void _clearAsk() {
+    askingMenu = null;
+    askingGroup = null;
   }
 
   /// 결제가 끝나 새 고객이 시작할 때 부릅니다.
@@ -229,8 +252,25 @@ class ConversationController extends ChangeNotifier {
   @override
   void dispose() {
     _session++;
+    _errorTimer?.cancel();
     _events?.cancel();
+    // 화면을 떠나면 듣기·안내 음성도 멈춥니다.
+    _waiting = null;
+    unawaited(voice.cancelListening());
+    unawaited(voice.stopSpeaking());
     super.dispose();
+  }
+
+  /// 화면 버튼(네·아니요·추천 카드·옵션)으로 답하면 듣고 있던 인식을 끊습니다.
+  /// 그대로 두면 안내 음성을 고객 발화로 인식하거나 무음 시간 초과로 대화가 끝납니다.
+  Future<void> _interrupt() async {
+    _lastActivity = _clock();
+    final waiting = _waiting;
+    _waiting = null;
+    waiting?.complete(
+      const VoiceEvent(VoiceEventType.error, code: 'superseded'),
+    );
+    await voice.cancelListening();
   }
 
   // ---------- 음성 입출력 ----------
@@ -269,6 +309,7 @@ class ConversationController extends ChangeNotifier {
   bool _isWaitingState(ConversationState s) =>
       s == ConversationState.recommending ||
       s == ConversationState.confirming ||
+      s == ConversationState.choosingOption ||
       s == ConversationState.upsell;
 
   Future<void> _listen(int session, ConversationState listeningState) async {
@@ -287,6 +328,8 @@ class ConversationController extends ChangeNotifier {
       }
       final event = await waiting.future;
       if (session != _session) return;
+      // 화면 버튼으로 이미 답했으면 이 듣기는 끝입니다.
+      if (event.code == 'superseded') return;
       if (event.type == VoiceEventType.finalResult &&
           (event.text ?? '').trim().isNotEmpty) {
         _lastActivity = _clock();
@@ -316,9 +359,17 @@ class ConversationController extends ChangeNotifier {
 
   /// 인식된 문장을 처리합니다. 화면 버튼(네/아니요/추천 카드)도 이 흐름을 씁니다.
   Future<void> handleText(String text, {int? session}) async {
+    if (session == null) await _interrupt();
     final current = session ?? _session;
     heard = text;
     partial = '';
+    if (state == ConversationState.choosingOption) {
+      final option = _matchOption(text);
+      if (option != null) {
+        await _applyOption(current, option);
+        return;
+      }
+    }
     final local = _localIntent(text);
     if (local != null) {
       await _handle(current, local);
@@ -432,6 +483,7 @@ class ConversationController extends ChangeNotifier {
       ConversationState.recommending => 'recommending',
       ConversationState.confirming => 'confirming',
       ConversationState.upsell => 'upsell',
+      // 옵션 질문에 선택지 이름이 아닌 말을 하면 새 발화로 해석합니다.
       _ => 'listening',
     },
     'viewing_menu_id': int.tryParse(viewingMenu?.call()?.id ?? ''),
@@ -456,6 +508,28 @@ class ConversationController extends ChangeNotifier {
   };
 
   Future<void> _handle(int session, InterpretResult result) async {
+    if (state == ConversationState.choosingOption) {
+      // 옵션을 묻는 중인데 알아듣지 못하면 같은 질문을 다시 합니다. 다른 주문을 말하면 그 주문으로 넘어갑니다.
+      if (const {'unknown', 'clarify', 'help'}.contains(result.intent)) {
+        _failures++;
+        if (_failures >= maxFailures) {
+          await _fail(session, '');
+        } else {
+          await _askAgain(session);
+        }
+        return;
+      }
+      if (result.intent == 'deny') {
+        _clearAsk();
+        pendingItems = const [];
+        state = ConversationState.listening;
+        await _prompt(session, '알겠어요. 원하시는 메뉴를 다시 말씀해 주세요.');
+        return;
+      }
+      _clearAsk();
+      pendingItems = const [];
+      state = ConversationState.listening;
+    }
     switch (result.intent) {
       case 'order':
         await _confirmItems(session, _toCommands(result.items));
@@ -510,11 +584,18 @@ class ConversationController extends ChangeNotifier {
     _failures++;
     if (_failures >= maxFailures) {
       offerStaffCall = true;
+      _clearAsk();
       _set(
         ConversationState.error,
         say: '음성으로 주문하기 어려우시면 화면을 눌러 주문하시거나 직원을 불러 드릴게요.',
       );
       await voice.speak(message, rate: _rate);
+      _errorTimer?.cancel();
+      _errorTimer = Timer(errorTimeout, () {
+        if (session == _session && state == ConversationState.error) {
+          unawaited(stop());
+        }
+      });
       return;
     }
     await _prompt(
@@ -561,17 +642,109 @@ class ConversationController extends ChangeNotifier {
       return;
     }
     _failures = 0;
+    for (final (index, command) in commands.indexed) {
+      final missing = command.menu.missingGroups(command.options);
+      if (missing.isNotEmpty) {
+        pendingItems = commands;
+        _askIndex = index;
+        askingMenu = command.menu;
+        askingGroup = missing.first;
+        onHighlight?.call({command.menu.id}, focus: true);
+        state = ConversationState.choosingOption;
+        await _askAgain(session);
+        return;
+      }
+    }
+    _clearAsk();
     pendingItems = commands;
-    onHighlight?.call(commands.map((c) => c.menu.id).toSet());
+    onHighlight?.call(commands.map((c) => c.menu.id).toSet(), focus: true);
     state = ConversationState.confirming;
     await _prompt(session, '${_describe(commands)} 담을까요?');
+  }
+
+  /// 필수 옵션 질문(구상안 13장 재질문: 필요한 항목만 묻기).
+  Future<void> _askAgain(int session) async {
+    final menu = askingMenu;
+    final group = askingGroup;
+    if (menu == null || group == null) return;
+    final names = optionChoices.map((o) => o.name).toList();
+    await _prompt(
+      session,
+      '${eulReul('${menu.name} $group')} 골라 주세요. ${joinNames(names)} 중에 말씀하시거나 화면에서 눌러 주세요.',
+    );
+  }
+
+  static const _ordinals = {
+    '첫번째': 0, '첫째': 0, '1번': 0, '일번': 0,
+    '두번째': 1, '둘째': 1, '2번': 1, '이번': 1,
+    '세번째': 2, '셋째': 2, '3번': 2, '삼번': 2,
+    '네번째': 3, '넷째': 3, '4번': 3,
+  };
+
+  /// "매운맛", "보통으로", "두 번째 거"처럼 묻는 그룹의 선택지 하나를 가리키면 그 옵션.
+  /// 둘 이상에 걸리거나 아무것도 아니면 null(서버 해석으로 넘어감).
+  MenuOption? _matchOption(String text) {
+    final choices = optionChoices;
+    final normalized = text.replaceAll(RegExp(r'[\s.,!?~]'), '');
+    for (final entry in _ordinals.entries) {
+      if (normalized.contains(entry.key) && entry.value < choices.length) {
+        return choices[entry.value];
+      }
+    }
+    MenuOption? best;
+    var bestLength = 0;
+    var tie = false;
+    for (final option in choices) {
+      final name = option.name.replaceAll(RegExp(r'\s'), '');
+      final stems = {
+        name,
+        if (name.endsWith('맛') && name.length > 2)
+          name.substring(0, name.length - 1),
+      };
+      for (final stem in stems) {
+        if (stem.length < 2 || !normalized.contains(stem)) continue;
+        if (stem.length > bestLength) {
+          best = option;
+          bestLength = stem.length;
+          tie = false;
+        } else if (stem.length == bestLength && best != option) {
+          tie = true;
+        }
+      }
+    }
+    return tie ? null : best;
+  }
+
+  Future<void> _applyOption(int session, MenuOption option) async {
+    final commands = List.of(pendingItems);
+    if (_askIndex >= commands.length) return;
+    final command = commands[_askIndex];
+    commands[_askIndex] = AddItemCommand(
+      command.menu,
+      command.quantity,
+      options: [...command.options.where((o) => o.group != option.group), option],
+      recommended: command.recommended,
+    );
+    _clearAsk();
+    await _confirmItems(session, commands);
+  }
+
+  /// 화면의 옵션 버튼을 눌렀을 때.
+  Future<void> chooseOption(MenuOption option) async {
+    if (state != ConversationState.choosingOption) return;
+    await _interrupt();
+    await _applyOption(_session, option);
   }
 
   Future<void> _onConfirm(int session, bool yes) async {
     if (state == ConversationState.upsell) {
       final menu = upsellMenu;
       upsellMenu = null;
-      if (yes && menu != null) {
+      if (yes && menu != null && menu.optionGroups.isNotEmpty) {
+        // 맵기·사이즈처럼 골라야 할 옵션이 있으면 먼저 묻습니다.
+        state = ConversationState.listening;
+        await _confirmItems(session, [AddItemCommand(menu, 1, recommended: true)]);
+      } else if (yes && menu != null) {
         _execute([AddItemCommand(menu, 1, recommended: true)]);
         state = ConversationState.listening;
         await _afterAdd(session, '${eulReul(menu.name)} 담았어요. ');
@@ -610,7 +783,7 @@ class ConversationController extends ChangeNotifier {
 
   void _execute(List<AddItemCommand> commands) {
     bus.runAll(commands, source: CommandSource.voice);
-    onHighlight?.call(commands.map((c) => c.menu.id).toSet());
+    onHighlight?.call(commands.map((c) => c.menu.id).toSet(), focus: true);
     for (final command in commands.where((c) => c.recommended)) {
       _logSelection(command.menu.id);
     }
@@ -652,7 +825,10 @@ class ConversationController extends ChangeNotifier {
       current.settings,
     );
     if (ranked.isEmpty) {
-      final fallback = _engine.fallback(current.menus);
+      final fallback = _engine.fallback(
+        current.menus,
+        popular: current.popularMenuIds,
+      );
       recommendations = [
         for (final menu in fallback)
           RankedRecommendation(
@@ -704,10 +880,11 @@ class ConversationController extends ChangeNotifier {
   /// 추천 카드를 누르거나 "두 번째 거"처럼 말했을 때.
   Future<void> selectRecommendation(int index, {bool viaVoice = false}) async {
     if (index < 0 || index >= recommendations.length) return;
+    if (!viaVoice) await _interrupt();
     final session = _session;
     final menu = recommendations[index].menu;
     final command = AddItemCommand(menu, 1, recommended: _recLogId != null);
-    if (viaVoice) {
+    if (viaVoice || menu.optionGroups.isNotEmpty) {
       unawaited(_confirmItems(session, [command]));
       return;
     }

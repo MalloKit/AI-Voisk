@@ -4,11 +4,15 @@ class MenuOption {
     required this.name,
     required this.price,
     this.isSoldOut = false,
+    this.group,
   });
   final String id;
   final String name;
   final int price;
   final bool isSoldOut;
+
+  /// 같은 그룹(맵기·사이즈 등)에서는 하나를 꼭 골라야 합니다. null이면 자유롭게 더하는 옵션입니다.
+  final String? group;
 
   factory MenuOption.fromJson(Map<String, dynamic> row) {
     final price = row['price'] as int;
@@ -18,6 +22,9 @@ class MenuOption {
       name: row['name'] as String,
       price: price,
       isSoldOut: row['isSoldOut'] as bool? ?? false,
+      group: (row['group'] as String?)?.trim().isEmpty ?? true
+          ? null
+          : (row['group'] as String).trim(),
     );
   }
 
@@ -26,6 +33,7 @@ class MenuOption {
     'name': name,
     'price': price,
     'isSoldOut': isSoldOut,
+    'group': group,
   };
 }
 

@@ -15,6 +15,7 @@ import 'package:kiosk_app/domain/catalog.dart';
 import 'package:kiosk_app/domain/conversation_controller.dart';
 import 'package:kiosk_app/domain/recommendation_engine.dart';
 import 'package:kiosk_app/service/models/menu_item.dart';
+import 'package:kiosk_app/service/models/menu_option.dart';
 import 'package:kiosk_app/service/screens/order_screen.dart';
 
 import 'fakes.dart';
@@ -248,5 +249,99 @@ void main() {
       const StoreAiSettings(),
     );
     expect(ranked.single.menu.name, '순두부찌개');
+  });
+
+  testWidgets('필수 옵션 그룹을 고르기 전에는 담기 버튼이 꺼져 있고, 같은 그룹은 하나만 고릅니다', (tester) async {
+    services = KioskServices(
+      config: services.config,
+      settings: null,
+      catalog: FixedCatalog(
+        KioskCatalog(
+          menus: [
+            ...demoCatalog.menus,
+            const MenuItem(
+              id: '40',
+              name: '떡볶이',
+              category: '분식',
+              price: 5000,
+              description: '',
+              options: [
+                MenuOption(id: '41', name: '순한맛', price: 0, group: '맵기'),
+                MenuOption(id: '42', name: '매운맛', price: 0, group: '맵기'),
+                MenuOption(id: '43', name: '치즈 추가', price: 1000),
+              ],
+            ),
+          ],
+          aiReady: true,
+        ),
+      ),
+      api: services.api,
+      outbox: services.outbox,
+      voice: voice,
+      interpreter: interpreter,
+    );
+    await open(tester);
+    await tester.tap(find.text('분식').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('떡볶이').first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('option-group-맵기')), findsOneWidget);
+    FilledButton addButton() => tester.widget<FilledButton>(
+      find.ancestor(of: find.text('장바구니 담기'), matching: find.byType(FilledButton)),
+    );
+    expect(addButton().onPressed, isNull);
+    await tester.tap(find.byKey(const Key('option-41')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('option-42')));
+    await tester.pump();
+    expect(addButton().onPressed, isNotNull);
+    await tester.tap(find.text('장바구니 담기'));
+    await tester.pumpAndSettle();
+    // 같은 그룹에서 마지막에 고른 매운맛 하나만 담깁니다.
+    expect(find.textContaining('매운맛'), findsWidgets);
+    expect(find.textContaining('순한맛'), findsNothing);
+  });
+
+  testWidgets('조작이 없으면 장바구니를 묻고, 답이 없으면 처음 화면으로 돌아갑니다', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(L10n.instance.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => OrderScreen(
+                    orderMode: '포장',
+                    services: services,
+                    idleLimit: const Duration(seconds: 30),
+                    idleConfirm: const Duration(seconds: 3),
+                  ),
+                ),
+              ),
+              child: const Text('시작 화면'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('시작 화면'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('콜라').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('장바구니 담기'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 31));
+    await tester.pump();
+    expect(find.byKey(const Key('idle-dialog')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('idle-dialog')), findsNothing);
+    expect(find.text('시작 화면'), findsOneWidget);
+    expect(find.text('장바구니 담기'), findsNothing);
   });
 }

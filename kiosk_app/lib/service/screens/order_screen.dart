@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 import '../../core/kiosk_services.dart';
 import '../../core/l10n.dart';
 import '../../data/catalog_repository.dart';
+import '../../data/usability_log.dart';
 import '../../domain/catalog.dart';
 import '../../domain/conversation_controller.dart';
 import '../../domain/order_commands.dart';
-import '../../screens/order_history_dialog.dart';
 import '../../screens/settings_screen.dart';
 import '../../voice/voice_panel.dart';
 import '../../widgets/menu_image.dart';
@@ -30,6 +30,8 @@ class OrderScreen extends StatefulWidget {
     this.services,
     this.storeId = const int.fromEnvironment('STORE_ID'),
     this.deviceId = const int.fromEnvironment('DEVICE_ID'),
+    this.idleLimit = const Duration(seconds: 90),
+    this.idleConfirm = const Duration(seconds: 20),
   });
   final OrderRepository? orderRepository;
   final int storeId;
@@ -39,6 +41,10 @@ class OrderScreen extends StatefulWidget {
 
   /// 생략하면 main에서 만든 [KioskServices.current]를 씁니다. 위젯 테스트는 보통 null입니다.
   final KioskServices? services;
+
+  /// 아무 조작이 없으면 다음 고객을 위해 처음 화면으로 돌아가는 시간과, 장바구니가 있을 때 묻는 시간.
+  final Duration idleLimit;
+  final Duration idleConfirm;
   @override
   State<OrderScreen> createState() => _OrderScreenState();
 }
@@ -62,6 +68,12 @@ class _OrderScreenState extends State<OrderScreen> {
   DateTime _viewingAt = DateTime.fromMillisecondsSinceEpoch(0);
   bool _updatePending = false;
   final _noVoice = ValueNotifier(0);
+  Timer? _idleTimer;
+  bool _idleAsking = false;
+
+  // 사용성 측정: 이번 고객이 처음 화면을 만진 시각과 탭 수(구상안 15장).
+  DateTime? _orderStartedAt;
+  int _orderTaps = 0;
 
   double get _textScale => 1 + _textSizeStep * 0.1;
   int get _storeId => _services?.config.isKioskMode == true
@@ -109,6 +121,55 @@ class _OrderScreenState extends State<OrderScreen> {
     services?.sync?.addListener(_onSync);
     _cart.addListener(_onCartChanged);
     L10n.instance.addListener(_onLanguage);
+    _resetIdle();
+  }
+
+  // ---------- 무조작 초기화 ----------
+
+  /// 화면을 만질 때마다 다시 잽니다. 고객이 떠나면 장바구니·음성 대화가 다음 고객에게 남지 않게 합니다.
+  void _resetIdle() {
+    _idleTimer?.cancel();
+    _idleTimer = Timer(widget.idleLimit, _onIdle);
+  }
+
+  Future<void> _onIdle() async {
+    if (!mounted || _idleAsking) return;
+    // 결제 화면·설정처럼 위에 다른 화면이 떠 있거나 음성 대화 중이면 기다립니다.
+    if (!(ModalRoute.of(context)?.isCurrent ?? true) ||
+        (_conversation?.active ?? false)) {
+      _resetIdle();
+      return;
+    }
+    if (_cart.entries.isEmpty) {
+      _goHome();
+      return;
+    }
+    _idleAsking = true;
+    final keep = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _scaled(_IdleDialog(timeout: widget.idleConfirm)),
+    );
+    _idleAsking = false;
+    if (!mounted) return;
+    if (keep == true) {
+      _resetIdle();
+    } else {
+      _goHome();
+    }
+  }
+
+  /// 장바구니·대화를 비우고 처음(포장/매장 식사 선택) 화면으로 돌아갑니다.
+  void _goHome() {
+    _idleTimer?.cancel();
+    unawaited(_conversation?.stop());
+    _finishOrder(clearOnly: true);
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.popUntil((route) => route.isFirst);
+    } else {
+      _resetIdle();
+    }
   }
 
   Future<KioskCatalog> _load() async {
@@ -148,7 +209,15 @@ class _OrderScreenState extends State<OrderScreen> {
       return;
     }
     _updatePending = false;
-    if (await sync.applyUpdate() && mounted) {
+    final applied = await sync.applyUpdate();
+    if (!mounted) return;
+    // 받는 동안 고객이 담기 시작했으면 지금 바꾸지 않고 주문이 끝난 뒤 적용합니다.
+    if (_cart.entries.isNotEmpty || (_conversation?.active ?? false)) {
+      if (applied) _updatePending = true;
+      setState(() {});
+      return;
+    }
+    if (applied) {
       setState(
         () => _future = Future.value(_catalog = _source.current ?? _catalog),
       );
@@ -159,6 +228,7 @@ class _OrderScreenState extends State<OrderScreen> {
   @override
   void dispose() {
     _clearNotice();
+    _idleTimer?.cancel();
     _highlightTimer?.cancel();
     _services?.sync?.removeListener(_onSync);
     L10n.instance.removeListener(_onLanguage);
@@ -239,7 +309,9 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   /// 음성으로 처리한 메뉴를 강조합니다. 보이도록 해당 분류로 이동합니다.
-  void _highlight(Set<String> ids) {
+  /// focus는 고객이 고른 메뉴일 때만 true이고, 그때만 "이거"가 가리키는 메뉴로 기억합니다
+  /// (추천·추가 제안 강조가 "이거"를 바꾸지 않게).
+  void _highlight(Set<String> ids, {bool focus = false}) {
     if (!mounted || ids.isEmpty) return;
     final menus = _catalog?.menus ?? const <MenuItem>[];
     final categories = menus
@@ -253,7 +325,7 @@ class _OrderScreenState extends State<OrderScreen> {
       } else if (categories.length > 1) {
         _category = '전체';
       }
-      if (ids.length == 1) {
+      if (focus && ids.length == 1) {
         _viewing =
             menus.where((m) => m.id == ids.first).firstOrNull ?? _viewing;
         _viewingAt = DateTime.now();
@@ -329,7 +401,14 @@ class _OrderScreenState extends State<OrderScreen> {
       );
       return;
     }
-    if (!await askAdminPin(context, services!.settings!) || !mounted) return;
+    if (!await askAdminPin(
+          context,
+          services!.settings!,
+          deviceToken: services.config.token,
+        ) ||
+        !mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => SettingsScreen(services: services),
@@ -343,6 +422,7 @@ class _OrderScreenState extends State<OrderScreen> {
     if (!mounted || _cart.entries.isEmpty) return;
     final channel = _bus.usedVoice ? 'voice' : 'touch';
     if (const bool.fromEnvironment('PAYMENT_DEMO', defaultValue: true)) {
+      var reprice = false;
       final completed = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => PaymentScreen(
@@ -352,10 +432,12 @@ class _OrderScreenState extends State<OrderScreen> {
             deviceId: _deviceId,
             orderChannel: channel,
             gateway: _services?.orders,
+            onRepriceRequested: () => reprice = true,
           ),
         ),
       );
       if (completed == true && mounted) _finishOrder();
+      if (reprice && mounted) await _reprice();
       return;
     }
     const address = String.fromEnvironment(
@@ -379,13 +461,77 @@ class _OrderScreenState extends State<OrderScreen> {
     if (id != null && mounted) _finishOrder();
   }
 
+  /// 결제 중 메뉴가 바뀌어 서버가 거절했을 때: 최신 메뉴를 받아 장바구니를 새 가격으로 다시 담습니다.
+  /// 판매 중지·품절이거나 필수 옵션을 더 고를 수 없게 된 항목은 빼고 알려 줍니다.
+  Future<void> _reprice() async {
+    final before = _cart.total;
+    KioskCatalog fresh;
+    try {
+      fresh = await _source.loadCatalog();
+    } catch (_) {
+      _showNotice(tr('새 메뉴를 받지 못했습니다. 잠시 후 다시 결제해 주세요.'));
+      return;
+    }
+    if (!mounted) return;
+    final removed = <String>[];
+    final entries = List.of(_cart.entries);
+    _cart.clear();
+    for (final entry in entries) {
+      final menu = fresh.menuById(entry.menu.id);
+      final options = [
+        for (final option in entry.options)
+          ?menu?.options.where((o) => o.id == option.id && !o.isSoldOut).firstOrNull,
+      ];
+      if (menu == null ||
+          menu.isSoldOut ||
+          options.length != entry.options.length ||
+          menu.missingGroups(options).isNotEmpty) {
+        removed.add(entry.menu.name);
+        continue;
+      }
+      _cart.add(menu, entry.quantity, options: options, recommended: entry.recommended);
+    }
+    setState(() => _future = Future.value(_catalog = fresh));
+    _updatePending = false;
+    _showNotice(
+      removed.isEmpty
+          ? tr('새 가격으로 바꿨습니다. {before} → {after}', {
+              'before': formatWon(before),
+              'after': formatWon(_cart.total),
+            })
+          : tr('판매가 끝난 {names}을(를) 빼고 새 가격으로 바꿨습니다.', {
+              'names': removed.join(', '),
+            }),
+    );
+  }
+
   /// 주문 완료: 장바구니·명령 기록·추가 제안 여부를 비우고 다음 고객을 위해 한국어로 돌립니다.
-  void _finishOrder() {
+  /// 다음 고객이 포장/매장 식사를 다시 고르도록 처음 화면으로 돌아갑니다.
+  void _finishOrder({bool clearOnly = false}) {
+    final started = _orderStartedAt;
+    if (!clearOnly && started != null) {
+      unawaited(
+        _services?.usability?.add(
+          UsabilityRecord(
+            channel: _bus.usedVoice ? 'voice' : 'touch',
+            taps: _orderTaps,
+            seconds: DateTime.now().difference(started).inSeconds,
+            items: _cart.itemCount,
+            senior: _senior,
+          ),
+        ),
+      );
+    }
+    _orderStartedAt = null;
+    _orderTaps = 0;
     _bus.run(const ClearCartCommand());
     _bus.reset();
     _conversation?.resetOrder();
     L10n.instance.reset();
     if (_senior) _setSenior(_catalog?.settings.defaultMode == 'senior');
+    if (clearOnly || !mounted) return;
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) navigator.popUntil((route) => route.isFirst);
   }
 
   Future<void> _selectMenu(MenuItem menu, {CartEntry? editing}) async {
@@ -397,11 +543,16 @@ class _OrderScreenState extends State<OrderScreen> {
         editing?.options.map((option) => option.id).toSet() ?? <String>{};
     // 서버 메뉴는 DB 옵션을, 서버 없는 시연 메뉴는 분류별 임시 옵션을 씁니다(기존 동작 유지).
     final source = _source;
+    // 서버(또는 서버와 같은 형식) 메뉴는 받은 옵션을, 서버 없는 임시 메뉴만 분류별 예시 옵션을 씁니다.
     final serverMenu =
-        source is CatalogRepository ||
-        (source is PlainCatalogSource &&
-            source.repository is ApiMenuRepository);
+        source is! PlainCatalogSource ||
+        source.repository is ApiMenuRepository;
     final options = serverMenu ? menu.options : sampleOptions(menu.category);
+    final groups = <String, List<MenuOption>>{};
+    for (final option in options) {
+      if (option.group != null) groups.putIfAbsent(option.group!, () => []).add(option);
+    }
+    final extras = options.where((option) => option.group == null).toList();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -449,7 +600,50 @@ class _OrderScreenState extends State<OrderScreen> {
                         tr('기본 가격 {price}', {'price': formatWon(menu.price)}),
                         style: const TextStyle(fontSize: 20),
                       ),
-                      if (options.isNotEmpty) ...[
+                      for (final group in groups.entries) ...[
+                        const SizedBox(height: 24),
+                        Text(
+                          tr('{group} 선택 (필수)', {'group': group.key}),
+                          key: Key('option-group-${group.key}'),
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final option in group.value)
+                              ChoiceChip(
+                                key: Key('option-${option.id}'),
+                                selected: selectedOptions.contains(option.id),
+                                labelPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                label: Text(
+                                  option.isSoldOut
+                                      ? '${option.name} (${tr('품절')})'
+                                      : option.price > 0
+                                      ? '${option.name} +${formatWon(option.price)}'
+                                      : option.name,
+                                  style: const TextStyle(fontSize: 20),
+                                ),
+                                // 같은 그룹은 하나만 고릅니다.
+                                onSelected: option.isSoldOut
+                                    ? null
+                                    : (_) => updateDialog(() {
+                                        selectedOptions
+                                          ..removeAll(group.value.map((o) => o.id))
+                                          ..add(option.id);
+                                      }),
+                              ),
+                          ],
+                        ),
+                      ],
+                      if (extras.isNotEmpty) ...[
                         const SizedBox(height: 24),
                         Text(
                           tr('추가 선택'),
@@ -459,7 +653,7 @@ class _OrderScreenState extends State<OrderScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        for (final option in options)
+                        for (final option in extras)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: OutlinedButton(
@@ -517,7 +711,9 @@ class _OrderScreenState extends State<OrderScreen> {
                             onMinus: quantity > 1
                                 ? () => updateDialog(() => quantity--)
                                 : null,
-                            onPlus: () => updateDialog(() => quantity++),
+                            onPlus: quantity < CartController.maxQuantity
+                                ? () => updateDialog(() => quantity++)
+                                : null,
                           ),
                         ],
                       ),
@@ -545,7 +741,15 @@ class _OrderScreenState extends State<OrderScreen> {
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(180, 56),
                   ),
-                  onPressed: () => Navigator.pop(context, true),
+                  // 필수 그룹을 모두 골라야 담을 수 있습니다.
+                  onPressed:
+                      groups.keys.every(
+                        (group) => groups[group]!.any(
+                          (o) => selectedOptions.contains(o.id),
+                        ),
+                      )
+                      ? () => Navigator.pop(context, true)
+                      : null,
                   child: Text(
                     editing == null ? tr('장바구니 담기') : tr('변경 저장'),
                     style: const TextStyle(fontSize: 20),
@@ -579,7 +783,16 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => _scaled(_buildScreen());
+  Widget build(BuildContext context) => Listener(
+    // 화면 어디를 만져도 무조작 시간을 다시 잽니다.
+    behavior: HitTestBehavior.translucent,
+    onPointerDown: (_) {
+      _resetIdle();
+      _orderStartedAt ??= DateTime.now();
+      _orderTaps++;
+    },
+    child: _scaled(_buildScreen()),
+  );
 
   Widget _buildScreen() => Scaffold(
     bottomNavigationBar: SafeArea(
@@ -1051,20 +1264,6 @@ class _OrderScreenState extends State<OrderScreen> {
                   ),
                 ),
               ),
-              TextButton(
-                onPressed: () => showDialog<void>(
-                  context: context,
-                  builder: (_) =>
-                      _scaled(OrderHistoryDialog(outbox: _services?.outbox)),
-                ),
-                style: _feedbackStyle().copyWith(
-                  padding: const WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(horizontal: 6),
-                  ),
-                  minimumSize: const WidgetStatePropertyAll(Size(0, 40)),
-                ),
-                child: Text(tr('주문내역'), style: const TextStyle(fontSize: 13)),
-              ),
             ],
           ),
         ),
@@ -1200,9 +1399,15 @@ class _OrderScreenState extends State<OrderScreen> {
                     ),
                   )
                 : null,
-            onPlus: () => _bus.run(
-              SetQuantityCommand(entry.id, entry.quantity + 1, entry.menu.name),
-            ),
+            onPlus: entry.quantity < CartController.maxQuantity
+                ? () => _bus.run(
+                    SetQuantityCommand(
+                      entry.id,
+                      entry.quantity + 1,
+                      entry.menu.name,
+                    ),
+                  )
+                : null,
           ),
           Text(
             tr('눌러서 옵션 수정'),
@@ -1279,7 +1484,7 @@ class _QuantitySelector extends StatelessWidget {
   });
   final int quantity;
   final VoidCallback? onMinus;
-  final VoidCallback onPlus;
+  final VoidCallback? onPlus;
   @override
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
@@ -1297,6 +1502,61 @@ class _QuantitySelector extends StatelessWidget {
         tooltip: tr('수량 늘리기'),
         onPressed: onPlus,
         icon: const Icon(Icons.add_circle_outline),
+      ),
+    ],
+  );
+}
+
+/// 아무 조작이 없을 때 "계속 주문하시겠어요?"를 묻습니다. 시간이 지나면 처음 화면으로 돌아갑니다.
+class _IdleDialog extends StatefulWidget {
+  const _IdleDialog({required this.timeout});
+  final Duration timeout;
+
+  @override
+  State<_IdleDialog> createState() => _IdleDialogState();
+}
+
+class _IdleDialogState extends State<_IdleDialog> {
+  late int _left = widget.timeout.inSeconds;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (_left <= 1) {
+        _timer?.cancel();
+        Navigator.of(context).pop(false);
+        return;
+      }
+      setState(() => _left--);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    key: const Key('idle-dialog'),
+    title: Text(tr('계속 주문하시겠어요?'), style: const TextStyle(fontSize: 26)),
+    content: Text(
+      tr('{seconds}초 뒤 처음 화면으로 돌아가고 장바구니가 비워집니다.', {'seconds': _left}),
+      style: const TextStyle(fontSize: 20),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(false),
+        child: Text(tr('처음으로'), style: const TextStyle(fontSize: 20)),
+      ),
+      FilledButton(
+        style: FilledButton.styleFrom(minimumSize: const Size(200, 60)),
+        onPressed: () => Navigator.of(context).pop(true),
+        child: Text(tr('계속 주문하기'), style: const TextStyle(fontSize: 22)),
       ),
     ],
   );

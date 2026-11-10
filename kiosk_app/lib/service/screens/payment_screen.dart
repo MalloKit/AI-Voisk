@@ -34,6 +34,7 @@ class PaymentScreen extends StatefulWidget {
     this.kakaoRepository,
     this.orderChannel,
     this.gateway,
+    this.onRepriceRequested,
   });
   final List<CartEntry> entries;
   final String? orderMode;
@@ -47,6 +48,9 @@ class PaymentScreen extends StatefulWidget {
   /// 기기 토큰 모드의 주문 전송(Outbox). 없으면 기존 로컬 시연 방식입니다.
   final OrderGateway? gateway;
 
+  /// 결제 중 메뉴 가격·품절·옵션이 바뀌어 서버가 거절했을 때, 장바구니를 새 메뉴로 다시 계산하도록 알립니다.
+  final VoidCallback? onRepriceRequested;
+
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
 }
@@ -55,6 +59,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   PaymentMethod? method;
   int step = 0;
   String? error;
+  bool needsReprice = false;
   bool busy = false;
   Map<String, dynamic>? kakaoSession;
   PendingOrder? kakaoOrder;
@@ -160,9 +165,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
             queuedOrder = true;
             pendingCounterOrder = null;
             step = 2;
-          case OrderRejected(:final message):
+          case OrderRejected(:final message, :final needsReprice):
             pendingCounterOrder = null;
-            error = message;
+            error = needsReprice
+                ? tr('메뉴 가격이나 판매 상태가 바뀌었습니다. 장바구니를 새 메뉴로 다시 확인해 주세요.')
+                : message;
+            this.needsReprice = needsReprice;
         }
       });
     } catch (_) {
@@ -328,7 +336,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         ? () => Navigator.pop(context, false)
                         : changeMethod,
                   ),
-            title: Text(step == 2 ? (cash ? tr('현금 결제 안내') : '결제 완료') : '결제하기'),
+            title: Text(
+              step == 2
+                  ? (cash ? tr('현금 결제 안내') : tr('결제 완료'))
+                  : tr('결제하기'),
+            ),
           ),
           body: SafeArea(
             child: Padding(
@@ -788,6 +800,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 color: Theme.of(context).colorScheme.error,
               ),
             ),
+            if (needsReprice && widget.onRepriceRequested != null) ...[
+              const SizedBox(height: 12),
+              FilledButton.tonal(
+                key: const Key('payment-reprice'),
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 60)),
+                onPressed: () {
+                  widget.onRepriceRequested!();
+                  Navigator.pop(context, false);
+                },
+                child: Text(
+                  tr('새 메뉴로 장바구니 다시 확인'),
+                  style: const TextStyle(fontSize: 20),
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 28),
           FilledButton(

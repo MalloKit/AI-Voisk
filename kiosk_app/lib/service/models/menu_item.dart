@@ -39,19 +39,49 @@ class MenuItem {
   /// 서버 기준 상대 경로(/media/menu/…). 없으면 아이콘을 보여 줍니다.
   final String? imageUrl;
 
+  /// 필수 옵션 그룹(그룹 이름 → 선택지). 메뉴판 순서를 지킵니다.
+  Map<String, List<MenuOption>> get optionGroups {
+    final groups = <String, List<MenuOption>>{};
+    for (final option in options) {
+      final group = option.group;
+      if (group != null) groups.putIfAbsent(group, () => []).add(option);
+    }
+    return groups;
+  }
+
+  /// 그룹 없이 자유롭게 더하는 옵션(곱빼기·치즈 추가 등).
+  List<MenuOption> get extraOptions =>
+      options.where((option) => option.group == null).toList();
+
+  /// 골라야 하는데 아직 고르지 않은 그룹 이름(메뉴판 순서).
+  List<String> missingGroups(Iterable<MenuOption> chosen) {
+    final picked = chosen.map((option) => option.group).toSet();
+    return [
+      for (final group in optionGroups.keys)
+        if (!picked.contains(group)) group,
+    ];
+  }
+
   factory MenuItem.fromJson(Map<String, dynamic> row) {
     final price = row['price'] as int;
     if (price < 0) throw const FormatException('잘못된 메뉴 가격입니다.');
+    final options = ((row['options'] ?? const []) as List)
+        .map((value) => MenuOption.fromJson(value as Map<String, dynamic>))
+        .toList();
+    // 필수 그룹의 선택지가 모두 품절이면 메뉴도 주문할 수 없으므로 품절로 봅니다.
+    final groups = <String, bool>{};
+    for (final option in options.where((o) => o.group != null)) {
+      groups[option.group!] = (groups[option.group!] ?? false) || !option.isSoldOut;
+    }
     return MenuItem(
       id: row['id'] as String,
       name: row['name'] as String,
       category: row['category'] as String,
       price: price,
       description: row['description'] as String? ?? '',
-      isSoldOut: row['isSoldOut'] as bool? ?? false,
-      options: ((row['options'] ?? const []) as List)
-          .map((value) => MenuOption.fromJson(value as Map<String, dynamic>))
-          .toList(),
+      isSoldOut:
+          (row['isSoldOut'] as bool? ?? false) || groups.values.contains(false),
+      options: options,
       tags: _strings(row['tags']),
       synonyms: _strings(row['synonyms']),
       costRate: row['costRate'] as int?,

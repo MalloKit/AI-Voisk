@@ -23,14 +23,26 @@ class CatalogRepository implements CatalogSource {
   Future<KioskCatalog> loadCatalog() async {
     try {
       final json = await api.bootstrap();
+      // 먼저 읽어 보고 성공한 응답만 저장합니다. 깨진 응답이 마지막 정상 메뉴를 덮지 않게 합니다.
+      final catalog = KioskCatalog.fromJson(json);
       await cache.write(json);
-      return current = KioskCatalog.fromJson(json);
+      return current = catalog;
     } on KioskUnavailable {
-      final saved = await cache.read();
-      if (saved is Map<String, dynamic>) {
-        return current = KioskCatalog.fromJson(saved, fromCache: true);
-      }
-      rethrow;
+      return current = await _cached() ?? (throw KioskUnavailable('offline'));
+    } on KioskApiException catch (error) {
+      // 토큰 재발급·기기 비활성 등 인증 문제면 마지막 메뉴로 계속 받고, 주문은 대기열에 둡니다.
+      if (error.status != 401 && error.status != 403) rethrow;
+      return current = await _cached() ?? (throw error);
+    }
+  }
+
+  Future<KioskCatalog?> _cached() async {
+    final saved = await cache.read();
+    if (saved is! Map<String, dynamic>) return null;
+    try {
+      return KioskCatalog.fromJson(saved, fromCache: true);
+    } on Object {
+      return null;
     }
   }
 

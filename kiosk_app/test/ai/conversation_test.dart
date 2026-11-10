@@ -23,7 +23,7 @@ void main() {
     interpreter: interpreter,
     bus: bus,
     catalog: () => catalog,
-    onHighlight: highlights.add,
+    onHighlight: (ids, {focus = false}) => highlights.add(ids),
     onCheckout: () async => checkouts++,
     maxFailures: maxFailures,
     clock: () => now,

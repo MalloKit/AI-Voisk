@@ -1,6 +1,54 @@
 /// 화면 번역표. 키는 한국어 원문이며 ja·en·zh를 모두 채웁니다(test/l10n_test.dart가 확인).
 /// {이름} 자리표시자는 모든 언어에서 같아야 합니다.
 const Map<String, Map<String, String>> translations = {
+  '결제 완료': {'ja': 'お支払い完了', 'en': 'Payment complete', 'zh': '支付完成'},
+  '메뉴 가격이나 판매 상태가 바뀌었습니다. 장바구니를 새 메뉴로 다시 확인해 주세요.': {
+    'ja': 'メニューの価格や販売状況が変わりました。新しいメニューでカートを確認してください。',
+    'en': 'Prices or availability changed. Please review your cart with the updated menu.',
+    'zh': '菜单价格或销售状态已变更，请按新菜单重新确认购物车。',
+  },
+  '새 메뉴로 장바구니 다시 확인': {
+    'ja': '新しいメニューでカートを確認',
+    'en': 'Review cart with updated menu',
+    'zh': '按新菜单确认购物车',
+  },
+  '새 메뉴를 받지 못했습니다. 잠시 후 다시 결제해 주세요.': {
+    'ja': '新しいメニューを取得できませんでした。しばらくしてからもう一度お支払いください。',
+    'en': 'Could not load the updated menu. Please try paying again shortly.',
+    'zh': '未能获取新菜单，请稍后重新支付。',
+  },
+  '새 가격으로 바꿨습니다. {before} → {after}': {
+    'ja': '新しい価格に変更しました。{before} → {after}',
+    'en': 'Updated to new prices. {before} → {after}',
+    'zh': '已更新为新价格。{before} → {after}',
+  },
+  '판매가 끝난 {names}을(를) 빼고 새 가격으로 바꿨습니다.': {
+    'ja': '販売終了の{names}を除き、新しい価格に変更しました。',
+    'en': 'Removed {names} (no longer available) and updated prices.',
+    'zh': '已移除停售的{names}并更新为新价格。',
+  },
+  '{group} 선택 (필수)': {
+    'ja': '{group}を選択（必須）',
+    'en': 'Choose {group} (required)',
+    'zh': '请选择{group}（必选）',
+  },
+  '계속 주문하시겠어요?': {
+    'ja': 'ご注文を続けますか？',
+    'en': 'Still ordering?',
+    'zh': '要继续点餐吗？',
+  },
+  '{seconds}초 뒤 처음 화면으로 돌아가고 장바구니가 비워집니다.': {
+    'ja': '{seconds}秒後に最初の画面に戻り、カートが空になります。',
+    'en': 'In {seconds} seconds the cart will be cleared and the start screen will return.',
+    'zh': '{seconds}秒后将返回首页并清空购物车。',
+  },
+  '처음으로': {'ja': '最初に戻る', 'en': 'Start over', 'zh': '返回首页'},
+  '계속 주문하기': {'ja': '注文を続ける', 'en': 'Keep ordering', 'zh': '继续点餐'},
+  '옵션을 골라 주세요': {
+    'ja': 'オプションを選んでください',
+    'en': 'Choose an option',
+    'zh': '请选择选项',
+  },
   'AI 보이스크 · 메뉴 주문': {
     'ja': 'AIボイスク · メニュー注文',
     'en': 'AI Voisk · Order',

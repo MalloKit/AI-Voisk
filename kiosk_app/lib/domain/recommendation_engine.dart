@@ -114,11 +114,21 @@ class RecommendationEngine {
   }
 
   /// 추천 결과가 없을 때 보여 줄 메뉴: 매장 우선 → 이익 점수 순.
-  List<MenuItem> fallback(List<MenuItem> menus, {int limit = 3}) {
+  /// 맞는 메뉴가 없을 때(구상안 18장: 인기 메뉴 + 되묻기). 최근 많이 팔린 메뉴를 먼저,
+  /// 그다음 매장 우선·이익 순으로 채웁니다.
+  List<MenuItem> fallback(
+    List<MenuItem> menus, {
+    int limit = 3,
+    List<String> popular = const [],
+  }) {
     final profits = profitScores(menus);
+    final rank = {for (final (i, id) in popular.indexed) id: i};
     final available =
         menus.where((m) => !m.isSoldOut && !m.recExcluded).toList()
           ..sort((a, b) {
+            final ra = rank[a.id] ?? popular.length;
+            final rb = rank[b.id] ?? popular.length;
+            if (ra != rb) return ra.compareTo(rb);
             if (a.storePick != b.storePick) return a.storePick ? -1 : 1;
             return (profits[b.id] ?? 50).compareTo(profits[a.id] ?? 50);
           });

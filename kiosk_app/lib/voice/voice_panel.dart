@@ -25,6 +25,7 @@ class VoicePanel extends StatelessWidget {
     ConversationState.thinking => tr('알아보는 중'),
     ConversationState.recommending => tr('추천 메뉴'),
     ConversationState.confirming => tr('확인해 주세요'),
+    ConversationState.choosingOption => tr('옵션을 골라 주세요'),
     ConversationState.upsell => tr('함께 드시겠어요?'),
     ConversationState.checkout => tr('결제 안내'),
     ConversationState.error => tr('도움이 필요하신가요?'),
@@ -39,6 +40,7 @@ class VoicePanel extends StatelessWidget {
           c.state == ConversationState.listening ||
           (c.state == ConversationState.recommending ||
                   c.state == ConversationState.confirming ||
+                  c.state == ConversationState.choosingOption ||
                   c.state == ConversationState.upsell) &&
               c.partial.isNotEmpty;
       final quote = c.partial.isNotEmpty ? c.partial : c.heard;
@@ -109,8 +111,33 @@ class VoicePanel extends StatelessWidget {
                   ),
                 ),
               ],
+              if (c.state == ConversationState.choosingOption &&
+                  c.optionChoices.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final option in c.optionChoices)
+                      FilledButton.tonal(
+                        key: Key('voice-option-${option.id}'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(140, 60),
+                        ),
+                        onPressed: () => c.chooseOption(option),
+                        child: Text(
+                          option.price > 0
+                              ? '${option.name} +${formatWon(option.price)}'
+                              : option.name,
+                          style: const TextStyle(fontSize: 22),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
               if (c.recommendations.isNotEmpty &&
-                  c.state != ConversationState.confirming) ...[
+                  c.state != ConversationState.confirming &&
+                  c.state != ConversationState.choosingOption) ...[
                 const SizedBox(height: 14),
                 SizedBox(
                   height: c.senior ? 250 : 220,

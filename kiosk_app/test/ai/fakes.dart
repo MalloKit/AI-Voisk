@@ -14,6 +14,8 @@ class FakeVoicePort implements VoicePort {
   final List<Object> script = [];
   String? prepareProblem;
   int listens = 0;
+  int cancels = 0;
+  int stops = 0;
 
   @override
   Stream<VoiceEvent> get events => _events.stream;
@@ -44,7 +46,7 @@ class FakeVoicePort implements VoicePort {
   }
 
   @override
-  Future<void> cancelListening() async {}
+  Future<void> cancelListening() async => cancels++;
 
   @override
   Future<void> speak(String text, {required double rate}) async {
@@ -53,7 +55,7 @@ class FakeVoicePort implements VoicePort {
   }
 
   @override
-  Future<void> stopSpeaking() async {}
+  Future<void> stopSpeaking() async => stops++;
 }
 
 class FakeInterpreter implements VoiceInterpreter {

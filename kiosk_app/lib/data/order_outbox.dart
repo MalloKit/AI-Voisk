@@ -19,6 +19,7 @@ class OutboxEntry {
     this.status = OutboxStatus.pending,
     this.orderId,
     this.error,
+    this.errorCode,
     this.attempts = 0,
   });
 
@@ -33,6 +34,9 @@ class OutboxEntry {
   OutboxStatus status;
   int? orderId;
   String? error;
+
+  /// 서버가 거절한 이유의 기계용 코드(amount_mismatch 등). 화면이 다음 행동을 고를 때 씁니다.
+  String? errorCode;
   int attempts;
 
   factory OutboxEntry.fromJson(Map<String, dynamic> json) => OutboxEntry(
@@ -45,6 +49,7 @@ class OutboxEntry {
     status: OutboxStatus.values.byName(json['status'] as String? ?? 'pending'),
     orderId: json['order_id'] as int?,
     error: json['error'] as String?,
+    errorCode: json['error_code'] as String?,
     attempts: json['attempts'] as int? ?? 0,
   );
 
@@ -58,6 +63,7 @@ class OutboxEntry {
     'status': status.name,
     'order_id': orderId,
     'error': error,
+    'error_code': errorCode,
     'attempts': attempts,
   };
 }
@@ -77,6 +83,9 @@ class OrderOutbox extends ChangeNotifier {
   final int keepHistory;
   final List<OutboxEntry> _entries = [];
   Future<void>? _flushing;
+
+  /// 주문 내용이 아니라 기기 인증·서버 설정·요청 제한 때문에 받지 못한 응답. 거절하지 않고 보류합니다.
+  static const holdStatuses = {401, 403, 429};
   bool _loaded = false;
 
   List<OutboxEntry> get entries => List.unmodifiable(_entries.reversed);
@@ -120,7 +129,10 @@ class OrderOutbox extends ChangeNotifier {
       await _save();
       notifyListeners();
     }
+    // 이미 돌던 전송은 이 주문을 넣기 전 목록으로 돌았으므로 끝나면 한 번 더 보냅니다.
+    final wasRunning = _flushing != null;
     await flush();
+    if (wasRunning) await flush();
     return _entries.firstWhere((e) => e.clientOrderId == entry.clientOrderId);
   }
 
@@ -145,9 +157,18 @@ class OrderOutbox extends ChangeNotifier {
           ..orderId = result['order_id'] as int?
           ..error = null;
       } on KioskApiException catch (error) {
+        if (holdStatuses.contains(error.status)) {
+          // 인증(토큰 재발급·기기 비활성)·서버 설정·요청 제한 문제는 주문 내용 탓이 아니므로
+          // 거절로 확정하지 않고 보류합니다. 새 토큰을 넣거나 설정을 고치면 같은 UUID로 다시 보냅니다.
+          entry.error = error.message;
+          await _save();
+          notifyListeners();
+          return;
+        }
         entry
           ..status = OutboxStatus.rejected
-          ..error = error.message;
+          ..error = error.message
+          ..errorCode = error.code;
       } on KioskUnavailable catch (error) {
         entry.error = error.reason;
         await _save();

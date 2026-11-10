@@ -8,6 +8,7 @@ import '../data/image_store.dart';
 import '../data/kiosk_api.dart';
 import '../data/order_outbox.dart';
 import '../data/sync_service.dart';
+import '../data/usability_log.dart';
 import '../domain/conversation_controller.dart';
 import '../service/data/api_menu_repository.dart';
 import '../service/data/order_repository.dart';
@@ -32,8 +33,18 @@ class OrderQueued extends OrderSubmitResult {
 }
 
 class OrderRejected extends OrderSubmitResult {
-  const OrderRejected(this.message);
+  const OrderRejected(this.message, {this.code});
   final String message;
+
+  /// 서버 거절 코드. 가격·품절·옵션이 바뀐 경우면 [needsReprice]가 true입니다.
+  final String? code;
+
+  bool get needsReprice => const {
+    'amount_mismatch',
+    'menu_unavailable',
+    'option_unavailable',
+    'option_required',
+  }.contains(code);
 }
 
 /// 주문·시연 결제를 Outbox로 보냅니다(기기 토큰 모드).
@@ -59,7 +70,10 @@ class OrderGateway {
     return switch (entry.status) {
       OutboxStatus.sent => OrderSent(entry.orderId),
       OutboxStatus.pending => const OrderQueued(),
-      OutboxStatus.rejected => OrderRejected(entry.error ?? '주문 정보를 확인해 주세요.'),
+      OutboxStatus.rejected => OrderRejected(
+        entry.error ?? '주문 정보를 확인해 주세요.',
+        code: entry.errorCode,
+      ),
     };
   }
 }
@@ -111,6 +125,20 @@ class KioskSystem {
       return;
     }
   }
+
+  /// 배터리 최적화 예외 요청 화면을 엽니다(구상안 7장 기기 설정). 열지 못하면 false.
+  Future<bool> requestIgnoreBatteryOptimizations() async {
+    try {
+      return await _channel.invokeMethod<bool>(
+            'requestIgnoreBatteryOptimizations',
+          ) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
 }
 
 /// 앱 전체에서 공유하는 서비스 묶음. main에서 한 번 만들고 화면은 [KioskServices.current]를 읽습니다.
@@ -127,6 +155,7 @@ class KioskServices {
     this.voice,
     this.interpreter,
     this.system = const KioskSystem(),
+    this.usability,
   });
 
   static KioskServices? current;
@@ -142,18 +171,25 @@ class KioskServices {
   final VoiceInterpreter? interpreter;
   final KioskSystem system;
 
+  /// 사용성 측정 기록(주문별 탭 수·소요 시간). 서버 연결 여부와 관계없이 기기에만 남깁니다.
+  final UsabilityLog? usability;
+
   OrderGateway? get orders => outbox == null ? null : OrderGateway(outbox!);
 
   static Future<KioskServices> boot(KioskSettings settings) async {
     final config = await settings.loadConfig();
+    final folder = await getApplicationSupportDirectory();
+    final usability = UsabilityLog(
+      JsonFileStore(File('${folder.path}/usability.json')),
+    );
     if (!config.isKioskMode) {
       return KioskServices(
         config: config,
         settings: settings,
         catalog: PlainCatalogSource(configuredMenuRepository()),
+        usability: usability,
       );
     }
-    final folder = await getApplicationSupportDirectory();
     final api = KioskApi(
       baseUrl: config.serverUrl,
       deviceId: config.deviceId,
@@ -186,6 +222,7 @@ class KioskServices {
         directory: Directory('${folder.path}/menu_images'),
       ),
       voice: PluginVoicePort(),
+      usability: usability,
       interpreter: ApiVoiceInterpreter(api),
     );
   }

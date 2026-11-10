@@ -53,6 +53,7 @@ class KioskCatalog {
     this.aiReady = false,
     this.settings = const StoreAiSettings(),
     this.fromCache = false,
+    this.popularMenuIds = const [],
   });
 
   final List<MenuItem> menus;
@@ -62,6 +63,9 @@ class KioskCatalog {
 
   /// 서버에 닿지 못해 마지막으로 저장한 메뉴를 쓰는 중이면 true.
   final bool fromCache;
+
+  /// 최근 30일 많이 팔린 메뉴 id(서버 계산). 추천 후보가 없을 때 먼저 보여 줍니다.
+  final List<String> popularMenuIds;
 
   factory KioskCatalog.fromJson(
     Map<String, dynamic> json, {
@@ -73,9 +77,12 @@ class KioskCatalog {
     menuVersion: json['menu_version'] as int? ?? 0,
     aiReady: json['ai_ready'] as bool? ?? false,
     settings: StoreAiSettings.fromJson(
-      (json['settings'] ?? const {}) as Map<String, dynamic>,
+      (json['settings'] ?? const <String, dynamic>{}) as Map<String, dynamic>,
     ),
     fromCache: fromCache,
+    popularMenuIds: ((json['popular_menu_ids'] ?? const []) as List)
+        .map((id) => '$id')
+        .toList(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -83,6 +90,7 @@ class KioskCatalog {
     'menu_version': menuVersion,
     'ai_ready': aiReady,
     'settings': settings.toJson(),
+    'popular_menu_ids': popularMenuIds,
   };
 
   MenuItem? menuById(String id) {
