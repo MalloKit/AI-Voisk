@@ -17,7 +17,7 @@ import {
 import { DeviceCreateForm } from "./DeviceCreateForm";
 import { DeviceStatusForm } from "./DeviceStatusForm";
 import { ApiDeviceDetails, DeviceDetails } from "./details";
-import type { DeviceRepository } from "../data/deviceRepository";
+import { liveConnection, type DeviceRepository, type DeviceToken } from "../data/deviceRepository";
 import { useAsync, type AsyncResult } from "../hooks/useAsync";
 
 export function FutureNotice({ data }: { data: AdminSnapshot }) {
@@ -136,7 +136,67 @@ function LiveDeviceDetail({ id, repository, onStatus, focusStatus }: { id: numbe
   if (result.error || !result.data) return (
     <ErrorState message="실제 기기 상세 조회 실패. Mock 데이터로 대체하지 않습니다." onRetry={result.reload} />
   );
-  return <><ApiDeviceDetails device={result.data} />{onStatus && <button autoFocus={focusStatus} onClick={() => onStatus(result.data!)}>{result.data.is_active ? "비활성화" : "활성화"}</button>}</>;
+  return <>
+    <ApiDeviceDetails device={result.data} />
+    {onStatus && <button autoFocus={focusStatus} onClick={() => onStatus(result.data!)}>{result.data.is_active ? "비활성화" : "활성화"}</button>}
+    {repository.issueToken && <DeviceTokenPanel device={result.data} repository={repository} />}
+  </>;
+}
+
+// 키오스크 기기 토큰. 키오스크 앱의 관리자 설정 화면에 입력하면 그 기기로 서버(LAN)에 접속한다.
+// 원문은 발급 직후 이 화면에서 한 번만 보이고, 서버에는 해시만 남는다.
+function DeviceTokenPanel({ device, repository }: { device: ApiDevice; repository: DeviceRepository }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [issued, setIssued] = useState<DeviceToken>();
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+  async function issue() {
+    setBusy(true); setError("");
+    try {
+      setIssued(await repository.issueToken!(device.device_id));
+      setConfirming(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "토큰을 발급하지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="device-token" aria-label="키오스크 기기 토큰">
+      <hr />
+      <Section title="키오스크 기기 토큰" />
+      {issued ? (
+        <>
+          <p role="status" className="form-feedback">토큰을 발급했습니다. 이 화면을 닫으면 다시 볼 수 없습니다.</p>
+          <label className="device-token-field">
+            <span>기기 토큰</span>
+            <input readOnly value={issued.token} aria-label="발급된 기기 토큰" onFocus={(e) => e.currentTarget.select()} />
+          </label>
+          <button onClick={() => void navigator.clipboard?.writeText(issued.token).then(() => setCopied(true), () => setCopied(false))}>
+            {copied ? "복사했습니다" : "토큰 복사"}
+          </button>
+          <p className="muted">
+            키오스크 앱 → 설정 → 키오스크 설정(관리자 PIN)에서 서버 주소, 매장 번호 {issued.store_id}, 기기 번호 {issued.device_id}와 함께 입력합니다.
+          </p>
+        </>
+      ) : confirming ? (
+        <>
+          <p className="error-text">새로 발급하면 이 기기의 이전 토큰은 바로 쓸 수 없게 됩니다. 계속할까요?</p>
+          <div className="store-form-actions">
+            <button disabled={busy} onClick={() => setConfirming(false)}>취소</button>
+            <button className="button-primary" disabled={busy} onClick={() => void issue()}>{busy ? "발급 중…" : "새 토큰 발급"}</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="muted">키오스크가 서버에 연결하려면 기기 토큰이 필요합니다. 토큰 원문은 발급할 때 한 번만 보여 줍니다.</p>
+          <button onClick={() => setConfirming(true)}>기기 토큰 발급</button>
+        </>
+      )}
+      {error && <p role="alert" className="error-text">{error}</p>}
+    </section>
+  );
 }
 
 function LiveDevicesPage({
@@ -172,7 +232,7 @@ function LiveDevicesPage({
       <Heading title="기기 관리" actions={repository.create && liveStores && storesResult && <button className="button-primary" onClick={() => { setNotice(""); setCreating(true); }}>기기 등록</button>}>등록된 기기와 설치 매장 정보를 확인합니다.</Heading>
       {notice && <p role="status" className="form-feedback">{notice}</p>}
       <Card className="notice">
-        활성화는 주문 허용 상태이며 온라인 상태가 아닙니다. 연결 상태는 미확인입니다.
+        활성화는 주문 허용 상태이며 온라인 상태가 아닙니다. 연결 상태는 키오스크가 60초마다 보내는 상태 보고로 판정합니다(3분 안에 보고가 있으면 연결).
         시각은 브라우저 현지 시간이며 마지막 확인·동기화 시각은 DB 기록입니다.
         알림 조회 미연동.
       </Card>
@@ -198,7 +258,7 @@ function LiveDevicesPage({
               { label: "기기 코드", render: (d) => <span className="device-cell-text" title={d.device_code}>{d.device_code}</span> },
               { label: "설치 매장", render: (d) => <span className="device-cell-text" title={d.store_name}>{d.store_name}</span> },
               { label: "활성 상태", render: (d) => <Badge>{d.is_active ? "활성" : "비활성"}</Badge> },
-              { label: "연결 상태", render: () => "미확인" },
+              { label: "연결 상태", render: (d) => liveConnection(d.last_seen_at) },
               { label: "등록일", render: (d) => dateLabel(d.registered_at) },
               { label: "", render: (d) => (
                 <button aria-label={`기기 상세: ${d.device_code}`} onClick={() => { setFocusStatus(false); setDetail(d); }}>상세</button>

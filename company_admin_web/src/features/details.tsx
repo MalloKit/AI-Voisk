@@ -16,6 +16,7 @@ import {
   diningLabel,
 } from "../data/selectors";
 import { Field, Section } from "../components/ui";
+import { liveConnection } from "../data/deviceRepository";
 
 export function StoreDetails({
   data,
@@ -183,15 +184,15 @@ export function ApiDeviceDetails({ device: d }: { device: ApiDevice }) {
         <Field label="설치 매장">{d.store_name} (ID: {d.store_id})</Field>
         <Field label="매장 등록 주소">{`${d.store_address} ${d.store_address_detail ?? ""}`.trim()}</Field>
         <Field label="활성화 상태">{d.is_active ? "활성" : "비활성"}</Field>
-        <Field label="연결 상태">미확인</Field>
+        <Field label="연결 상태">{liveConnection(d.last_seen_at)}</Field>
         <Field label="등록 시각">{dateLabel(d.registered_at, true)}</Field>
         <Field label="앱 버전">{d.app_version ?? "미수집"}</Field>
         <Field label="마지막 확인 시각 (DB 기록)">{moment(d.last_seen_at)}</Field>
         <Field label="마지막 동기화 시각 (DB 기록)">{moment(d.last_synced_at)}</Field>
       </dl>
       <p className="muted">
-        시각은 브라우저 현지 시간입니다. 활성화 상태는 온라인 상태가 아닙니다.
-        마지막 확인 시각의 수집 주체는 미확인으로, 현재 접속 상태를 판정하지 않습니다.
+        시각은 브라우저 현지 시간입니다. 활성화 상태는 주문 허용 여부이며 온라인 상태가 아닙니다.
+        키오스크가 60초마다 상태를 보고하며, 3분 안에 보고가 있으면 연결로 표시합니다.
       </p>
       <hr />
       <Section title="관련 알림" />
