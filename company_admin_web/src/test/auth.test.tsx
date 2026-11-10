@@ -249,6 +249,31 @@ describe("server validated admin entry and lifecycle", () => {
     expect(window.location.pathname).toBe("/login");
   });
 
+  it("keeps the App and its screen on periodic or focus verification network errors and 5xx, expiring only on 401", async () => {
+    vi.useFakeTimers();
+    const a = auth();
+    await act(async () => { render(<AppEntry authRepository={a} {...mockSources} />); });
+    await act(async () => {
+      within(screen.getByRole("navigation")).getByRole("button", { name: "주문 조회" }).click();
+    });
+    const ordersHeading = screen.getByRole("heading", { name: "주문 조회", level: 1 });
+    a.me.mockRejectedValueOnce(new Error("timeout"))
+      .mockRejectedValueOnce(new AdminApiError(503, "DB 연결 실패"))
+      .mockRejectedValueOnce(new AdminApiError(500, "서버 오류"));
+    await act(async () => { vi.advanceTimersByTime(60_000); });
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    await act(async () => { vi.advanceTimersByTime(60_000); });
+    expect(a.me).toHaveBeenCalledTimes(4);
+    expect(ordersHeading).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "관리자 로그인" })).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe("/");
+
+    a.me.mockRejectedValueOnce(unauthorized());
+    await act(async () => { vi.advanceTimersByTime(60_000); });
+    expect(screen.getByRole("heading", { name: "관리자 로그인" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/login");
+  });
+
   it("revalidates on focus without refetching shared lists when the session is still valid", async () => {
     const a = auth();
     const orders = { load: vi.fn().mockResolvedValue([]), detail: vi.fn() };

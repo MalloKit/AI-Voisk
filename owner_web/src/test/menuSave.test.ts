@@ -6,6 +6,7 @@ import {
   menusInCategory,
   renameCategory,
   updateMenu,
+  updateOption,
 } from "../data/menuDraft";
 import {
   buildChanges,
@@ -270,6 +271,7 @@ describe("저장 묶음", () => {
           isActive: true,
           isSoldOut: false,
           extraPrice: 3000,
+          optionGroup: " 크기 ",
         },
       ],
     };
@@ -286,6 +288,7 @@ describe("저장 묶음", () => {
     expect(saved.options.find((o) => o.id === ids[-99])).toMatchObject({
       menuId: makgeolli.id,
       name: "큰 병",
+      optionGroup: "크기",
     });
   });
 
@@ -301,6 +304,32 @@ describe("저장 묶음", () => {
     const after = await repository.getMenuBoard();
     expect(after.menus.find((m) => m.id === id(b, "콜라"))?.name).toBe("콜라");
     expect(after.categories).toHaveLength(11);
+  });
+
+  it("옵션 그룹만 바뀌어도 수정 묶음과 변경 표시에 넣는다", async () => {
+    const repository = new MockOwnerRepository();
+    const b = await repository.getMenuBoard();
+    const option = b.options.find((o) => o.name === "계란 추가")!;
+    const draft = updateOption(b, option.id, { optionGroup: "토핑" });
+    const changes = buildChanges(b, draft);
+    expect(changes.options.update).toEqual([
+      expect.objectContaining({ id: option.id, optionGroup: "토핑" }),
+    ]);
+    expect(changedMenuIds(b, draft)).toEqual(new Set([option.menuId]));
+    const { board: saved } = await repository.saveMenuBoard(changes);
+    expect(saved.options.find((o) => o.id === option.id)?.optionGroup).toBe(
+      "토핑",
+    );
+  });
+
+  it("Mock도 서버처럼 20자를 넘는 그룹 이름을 거부한다", async () => {
+    const repository = new MockOwnerRepository();
+    const b = await repository.getMenuBoard();
+    const option = b.options[0];
+    const draft = updateOption(b, option.id, { optionGroup: "가".repeat(21) });
+    await expect(
+      repository.saveMenuBoard(buildChanges(b, draft)),
+    ).rejects.toThrow("20자 이하");
   });
 });
 

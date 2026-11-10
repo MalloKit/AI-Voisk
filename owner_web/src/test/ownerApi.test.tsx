@@ -14,6 +14,12 @@ import { MockOwnerRepository } from "../data/ownerRepository";
 import { DEMO_NOW } from "../data/demoClock";
 
 const BASE = "http://127.0.0.1:8001";
+const noVersion = {
+  appVersion: null,
+  lastSyncedAt: null,
+  currentMenuVersion: null,
+  appliedMenuVersion: null,
+};
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status });
 
@@ -42,6 +48,7 @@ const boardBody = {
       is_active: false,
       is_sold_out: false,
       menu_option_sort: 3,
+      option_group: "양",
     },
   ],
 };
@@ -124,9 +131,23 @@ describe("ApiOwnerRepository 조회", () => {
           isActive: false,
           isSoldOut: false,
           extraPrice: 1000,
+          optionGroup: "양",
         },
       ],
     });
+  });
+
+  it("option_group이 없거나 null이면 그룹 없는 선택 추가 옵션으로 읽는다", async () => {
+    const { option_group: _, ...noGroup } = boardBody.options[0];
+    const { repository } = repositoryWith(() =>
+      json({
+        ...boardBody,
+        options: [noGroup, { ...noGroup, option_id: 101, option_group: null }],
+      }),
+    );
+    expect(
+      (await repository.getMenuBoard()).options.map((o) => o.optionGroup),
+    ).toEqual([null, null]);
   });
 
   it("주문을 페이지로 끝까지 받아 품목과 옵션으로 나눈다", async () => {
@@ -199,6 +220,10 @@ describe("ApiOwnerRepository 조회", () => {
             device_code: "K-70",
             is_active: true,
             last_seen_at: "2026-10-29T01:00:00+00:00",
+            app_version: "1.2.0+5",
+            last_synced_at: "2026-10-29T00:50:00+00:00",
+            current_menu_version: 12,
+            applied_menu_version: 11,
           },
         ],
       }),
@@ -210,8 +235,34 @@ describe("ApiOwnerRepository 조회", () => {
         isActive: true,
         connection: "offline",
         lastSeenAt: "2026-10-29T01:00:00+00:00",
+        appVersion: "1.2.0+5",
+        lastSyncedAt: "2026-10-29T00:50:00+00:00",
+        currentMenuVersion: 12,
+        appliedMenuVersion: 11,
       },
     ]);
+  });
+
+  it("버전·동기화 필드가 없는 응답은 미확인(null)으로 읽고 잘못된 형식은 거부한다", async () => {
+    const device = {
+      device_id: 70,
+      device_code: "K-70",
+      is_active: true,
+      last_seen_at: null,
+    };
+    const { repository } = repositoryWith(
+      () => json({ devices: [device] }),
+      () => json({ devices: [{ ...device, applied_menu_version: "11" }] }),
+    );
+    expect(await repository.getDevices()).toEqual([
+      expect.objectContaining({
+        appVersion: null,
+        lastSyncedAt: null,
+        currentMenuVersion: null,
+        appliedMenuVersion: null,
+      }),
+    ]);
+    await expect(repository.getDevices()).rejects.toThrow(OwnerApiError);
   });
 });
 
@@ -256,6 +307,7 @@ describe("ApiOwnerRepository 쓰기", () => {
           sort: 1,
           isSoldOut: false,
           extraPrice: 0,
+          optionGroup: " 맵기 ",
         },
       ],
       update: [
@@ -266,6 +318,7 @@ describe("ApiOwnerRepository 쓰기", () => {
           sort: 1,
           isActive: false,
           extraPrice: 500,
+          optionGroup: "",
         },
       ],
     },
@@ -312,6 +365,8 @@ describe("ApiOwnerRepository 쓰기", () => {
             extra_price: 0,
             is_sold_out: false,
             sort: 1,
+            // 앞뒤 공백을 빼고, 빈 그룹은 null(그룹 없음)로 보낸다.
+            group: "맵기",
           },
         ],
         update: [
@@ -321,6 +376,7 @@ describe("ApiOwnerRepository 쓰기", () => {
             extra_price: 500,
             is_active: false,
             sort: 1,
+            group: null,
           },
         ],
       },
@@ -480,6 +536,7 @@ describe("실제 API 데이터의 화면 표시", () => {
         isActive: true,
         connection: "unknown",
         lastSeenAt: "2026-10-29T01:00:00+00:00",
+        ...noVersion,
       },
       {
         id: 71,
@@ -487,6 +544,7 @@ describe("실제 API 데이터의 화면 표시", () => {
         isActive: true,
         connection: "unknown",
         lastSeenAt: null,
+        ...noVersion,
       },
     ]);
     render(<App repository={repository} now={DEMO_NOW} />);

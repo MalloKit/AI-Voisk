@@ -359,6 +359,129 @@ describe("옵션 편집", () => {
   });
 });
 
+describe("옵션 그룹", () => {
+  const optionsRegion = () => screen.getByRole("region", { name: "옵션" });
+  const saveBar = () => screen.getByRole("region", { name: "저장 바" });
+  const listNames = (name: string) =>
+    within(within(optionsRegion()).getByRole("list", { name }))
+      .getAllByRole("listitem")
+      .map((li) => li.getAttribute("aria-label"));
+  async function addOption(
+    user: ReturnType<typeof userEvent.setup>,
+    name: string,
+    group: string,
+  ) {
+    const region = within(optionsRegion());
+    await user.type(region.getAllByLabelText("옵션 이름").at(-1)!, name);
+    if (group)
+      await user.type(region.getAllByLabelText("옵션 그룹").at(-1)!, group);
+    await user.click(region.getByRole("button", { name: "추가" }));
+  }
+  async function saveLines(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(within(saveBar()).getByRole("button", { name: /^저장/ }));
+    const dialog = screen.getByRole("dialog", { name: "변경 내용 저장" });
+    const lines = within(dialog)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+    await within(saveBar()).findByText("모든 변경이 저장됨");
+    return lines;
+  }
+
+  it("같은 그룹 옵션을 묶어 보여 주고, 하나뿐인 그룹은 안내하며 그룹과 함께 저장한다", async () => {
+    const { user, repository } = await openMenus();
+    const spy = vi.spyOn(repository, "saveMenuBoard");
+    await user.click(card("만두"));
+    expect(
+      within(optionsRegion()).getByLabelText("옵션 그룹"),
+    ).toHaveAttribute("placeholder", "예: 맵기, 사이즈 (비우면 선택 추가 옵션)");
+
+    await addOption(user, "순한맛", " 맵기 ");
+    expect(listNames("맵기 그룹 옵션")).toEqual(["순한맛"]);
+    expect(listNames("선택 추가 옵션")).toEqual(["소스 추가"]);
+    // 필수 그룹이 선택 추가 옵션보다 앞에 온다.
+    expect(
+      within(optionsRegion())
+        .getAllByRole("heading", { level: 4 })
+        .map((h) => h.textContent),
+    ).toEqual([
+      "맵기필수, 1개 선택",
+      "선택 추가 옵션고르지 않거나 여러 개 선택",
+      "옵션 추가",
+    ]);
+    expect(optionsRegion()).toHaveTextContent(
+      "'맵기' 그룹에 판매 중인 옵션이 1개뿐입니다.",
+    );
+
+    // 입력 제안에 이 메뉴의 그룹 이름이 나온다.
+    const groupInput = within(optionsRegion()).getByLabelText("옵션 그룹");
+    const datalist = document.getElementById(
+      groupInput.getAttribute("list")!,
+    )!;
+    expect(
+      [...datalist.querySelectorAll("option")].map((o) => o.value),
+    ).toEqual(["맵기"]);
+
+    await addOption(user, "매운맛", "맵기");
+    expect(listNames("맵기 그룹 옵션")).toEqual(["순한맛", "매운맛"]);
+    expect(optionsRegion()).not.toHaveTextContent("1개뿐입니다");
+
+    expect(await saveLines(user)).toEqual([
+      "만두: 옵션 추가 (맵기 · 순한맛)",
+      "만두: 옵션 추가 (맵기 · 매운맛)",
+    ]);
+    expect(
+      spy.mock.calls[0][0].options.create.map((o) => [o.name, o.optionGroup]),
+    ).toEqual([
+      ["순한맛", "맵기"],
+      ["매운맛", "맵기"],
+    ]);
+    expect(
+      (await repository.getMenuBoard()).options
+        .filter((o) => o.optionGroup === "맵기")
+        .map((o) => o.name),
+    ).toEqual(["순한맛", "매운맛"]);
+  });
+
+  it("그룹만 바꿔도 저장할 변경으로 세고, 비우면 선택 추가 옵션으로 돌아간다", async () => {
+    const { user, repository } = await openMenus();
+    const spy = vi.spyOn(repository, "saveMenuBoard");
+    await user.click(card("만두"));
+    const region = within(optionsRegion());
+    await user.click(region.getByRole("button", { name: "소스 추가 수정" }));
+    const editing = within(
+      region.getByRole("listitem", { name: "소스 추가 수정" }),
+    );
+    await user.type(editing.getByLabelText("옵션 그룹"), "소스");
+    await user.click(editing.getByRole("button", { name: "수정 완료" }));
+    expect(saveBar()).toHaveTextContent("저장 안 된 변경 1건");
+    expect(listNames("소스 그룹 옵션")).toEqual(["소스 추가"]);
+
+    expect(await saveLines(user)).toEqual([
+      "만두: 옵션 그룹 변경 (소스 추가: 선택 추가 → 소스)",
+    ]);
+    expect(spy.mock.calls[0][0].options.update).toEqual([
+      expect.objectContaining({ name: "소스 추가", optionGroup: "소스" }),
+    ]);
+
+    await user.click(region.getByRole("button", { name: "소스 추가 수정" }));
+    const again = within(
+      region.getByRole("listitem", { name: "소스 추가 수정" }),
+    );
+    expect(again.getByLabelText("옵션 그룹")).toHaveValue("소스");
+    await user.clear(again.getByLabelText("옵션 그룹"));
+    await user.type(again.getByLabelText("옵션 그룹"), "   ");
+    await user.click(again.getByRole("button", { name: "수정 완료" }));
+    expect(listNames("선택 추가 옵션")).toEqual(["소스 추가"]);
+    expect(await saveLines(user)).toEqual([
+      "만두: 옵션 그룹 변경 (소스 추가: 소스 → 선택 추가)",
+    ]);
+    expect(spy.mock.calls[1][0].options.update).toEqual([
+      expect.objectContaining({ name: "소스 추가", optionGroup: null }),
+    ]);
+  });
+});
+
 describe("카테고리 추가와 삭제", () => {
   it("＋를 누르면 레일에서 바로 이름을 입력해 새 카테고리를 만든다", async () => {
     const { user } = await openMenus();

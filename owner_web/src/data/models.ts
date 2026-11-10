@@ -42,6 +42,9 @@ export interface MenuOption {
   isActive: boolean;
   isSoldOut: boolean;
   extraPrice: number; // extra_price, 0 이상
+  // option_group. 같은 메뉴에서 그룹 이름이 같은 옵션은 하나를 꼭 고르는 필수 선택(예: 맵기, 사이즈)이고,
+  // null이면 여러 개 고를 수 있는 선택 추가 옵션이다.
+  optionGroup: string | null;
 }
 export type OrderType = "takeaway" | "dine_in";
 export interface Order {
@@ -74,6 +77,10 @@ export interface KioskDevice {
   isActive: boolean;
   connection: "online" | "offline" | "unknown";
   lastSeenAt: string | null; // last_seen_at
+  appVersion: string | null; // app_version, 키오스크가 보고한 앱 버전
+  lastSyncedAt: string | null; // last_synced_at(UTC), 키오스크가 메뉴를 마지막으로 받아 간 시각
+  currentMenuVersion: number | null; // 매장의 최신 메뉴 버전
+  appliedMenuVersion: number | null; // 키오스크가 마지막으로 반영한 메뉴 버전
 }
 
 export interface StoreProfile {

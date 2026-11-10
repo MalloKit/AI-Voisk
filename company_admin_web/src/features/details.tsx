@@ -16,7 +16,7 @@ import {
   diningLabel,
 } from "../data/selectors";
 import { Field, Section } from "../components/ui";
-import { liveConnection } from "../data/deviceRepository";
+import { liveConnection, menuVersionStatus } from "../data/deviceRepository";
 
 export function StoreDetails({
   data,
@@ -187,6 +187,7 @@ export function ApiDeviceDetails({ device: d }: { device: ApiDevice }) {
         <Field label="연결 상태">{liveConnection(d.last_seen_at)}</Field>
         <Field label="등록 시각">{dateLabel(d.registered_at, true)}</Field>
         <Field label="앱 버전">{d.app_version ?? "미수집"}</Field>
+        <Field label="메뉴 버전 상태">{menuVersionStatus(d)}</Field>
         <Field label="마지막 확인 시각 (DB 기록)">{moment(d.last_seen_at)}</Field>
         <Field label="마지막 동기화 시각 (DB 기록)">{moment(d.last_synced_at)}</Field>
       </dl>

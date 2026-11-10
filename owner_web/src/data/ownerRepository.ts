@@ -12,6 +12,14 @@ import type {
   OrderHistory,
   StoreProfile,
 } from "./models";
+import { groupError, normalizeGroup } from "./validation";
+
+// 서버처럼 그룹 이름을 정리하고 20자를 넘으면 거부한다(서버는 422).
+function groupName(value: string | null) {
+  const error = groupError(value ?? "");
+  if (error) throw new Error(error);
+  return normalizeGroup(value);
+}
 
 // 화면은 이 인터페이스만 쓴다. 한 인스턴스는 매장 하나(store_id)만 다룬다.
 // 구현체는 AppEntry에서 주입한다. 이 파일의 Mock과 ownerApiRepository.ts의 API 구현이 있다.
@@ -43,6 +51,14 @@ export class MockOwnerRepository implements OwnerRepository {
   constructor(readonly storeId = 1) {
     if (!FIXTURES[storeId]) throw new Error(`Mock 매장이 없습니다: ${storeId}`);
     this.data = structuredClone(FIXTURES[storeId]) as Fixture;
+    // 고정 데이터에 없는 필드는 서버와 같은 기본값(null)으로 채운다.
+    for (const o of this.data.options) o.optionGroup ??= null;
+    for (const d of this.data.devices) {
+      d.appVersion ??= null;
+      d.lastSyncedAt ??= null;
+      d.currentMenuVersion ??= null;
+      d.appliedMenuVersion ??= null;
+    }
   }
   async getStoreProfile() {
     return structuredClone({ store: this.data.store, owner: this.data.owner });
@@ -116,13 +132,17 @@ export class MockOwnerRepository implements OwnerRepository {
         ...o,
         id: nextId(next.options),
         menuId: real(o.menuId),
+        optionGroup: groupName(o.optionGroup),
         isActive: true,
       };
       ids[tempId] = row.id;
       next.options.push(row);
     }
     for (const o of changes.options.update)
-      Object.assign(find(next.options, o.id), o);
+      Object.assign(find(next.options, o.id), {
+        ...o,
+        optionGroup: groupName(o.optionGroup),
+      });
     // FK에 ON DELETE 규칙이 없으므로 메뉴가 남은 카테고리는 지울 수 없다.
     for (const id of changes.categories.remove) {
       find(next.categories, id);

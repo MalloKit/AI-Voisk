@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { MockAdminRepository } from "../data/adminRepository";
 import type { ApiDevice } from "../data/models";
-import { ApiDeviceRepository, parseDevice, type DeviceRepository } from "../data/deviceRepository";
+import { ApiDeviceRepository, menuVersionStatus, parseDevice, type DeviceRepository } from "../data/deviceRepository";
 
 const raw = (id = 101, storeId = 1, active = true) => ({
   device_id: id, device_code: "DB-" + id, store_id: storeId,
@@ -54,6 +54,28 @@ describe("실제 기기 Repository 계약", () => {
     ]);
     for (const [, init] of transport.mock.calls) expect(init?.method).toBe("GET");
   });
+  it("메뉴 버전은 정수로 읽고, 없는 필드는 미확인(null)으로 두며 잘못된 값은 거부한다", () => {
+    expect(parseDevice({ ...raw(), current_menu_version: 12, applied_menu_version: 11 })).toMatchObject({
+      current_menu_version: 12, applied_menu_version: 11,
+    });
+    expect(parseDevice(raw())).toMatchObject({ current_menu_version: null, applied_menu_version: null });
+    expect(parseDevice({ ...raw(), current_menu_version: null, applied_menu_version: 0 })).toMatchObject({
+      current_menu_version: null, applied_menu_version: 0,
+    });
+    for (const patch of [
+      { current_menu_version: "12" }, { applied_menu_version: 1.5 }, { applied_menu_version: -1 },
+    ]) expect(() => parseDevice({ ...raw(), ...patch })).toThrow();
+  });
+  it("메뉴 버전 상태는 둘 다 알 때만 최신·반영 대기로 판정한다(점주 웹과 같은 규칙)", () => {
+    const status = (applied: number | null, current: number | null) =>
+      menuVersionStatus({ applied_menu_version: applied, current_menu_version: current });
+    expect(status(12, 12)).toBe("최신");
+    expect(status(13, 12)).toBe("최신");
+    expect(status(11, 12)).toBe("반영 대기 (적용 11 / 최신 12)");
+    expect(status(0, 1)).toBe("반영 대기 (적용 0 / 최신 1)");
+    expect(status(null, 12)).toBe("미확인");
+    expect(status(12, null)).toBe("미확인");
+  });
 });
 
 describe("실제 기기 관리", () => {
@@ -83,6 +105,27 @@ describe("실제 기기 관리", () => {
     expect(screen.getByRole("table")).toHaveTextContent("DB-101");
     await user.click(screen.getByRole("button", { name: "초기화" }));
     expect(screen.getByText("기기 목록 · 3대")).toBeInTheDocument();
+  });
+  it("목록과 상세에 메뉴 버전 상태를 보여 준다", async () => {
+    const pending = parseDevice({ ...raw(), current_menu_version: 12, applied_menu_version: 11,
+      app_version: "1.2.0+5", last_synced_at: "2026-10-29T01:20:00+00:00" });
+    const latest = parseDevice({ ...raw(102), current_menu_version: 12, applied_menu_version: 12 });
+    const repository: DeviceRepository = {
+      load: vi.fn().mockResolvedValue([pending, latest, device(103)]),
+      detail: vi.fn().mockResolvedValue(pending),
+    };
+    const user = await open(repository);
+    await screen.findByText("기기 목록 · 3대");
+    const cells = (code: string) => within(screen.getByRole("cell", { name: code }).closest("tr")!)
+      .getAllByRole("cell").map((c) => c.textContent);
+    expect(cells("DB-101")).toContain("반영 대기 (적용 11 / 최신 12)");
+    expect(cells("DB-102")).toContain("최신");
+    expect(cells("DB-103")).toContain("미확인");
+    await user.click(screen.getByRole("button", { name: "기기 상세: DB-101" }));
+    const dialog = screen.getByRole("dialog");
+    await within(dialog).findByText("DB 매장 1 (ID: 1)");
+    expect(within(dialog).getByText("메뉴 버전 상태").closest("div")).toHaveTextContent("반영 대기 (적용 11 / 최신 12)");
+    expect(dialog).toHaveTextContent("1.2.0+5");
   });
   it("정상적인 기기 0개와 조회 실패를 구분한다", async () => {
     await open({ load: async () => [], detail: vi.fn() });
@@ -167,8 +210,9 @@ it("scopes the pinned action layout to the live device table after pagination an
   const user = await open(repository);
   const table = screen.getByRole("table", { name: "기기 목록" });
   expect(table.closest(".table-card")).toHaveClass("devices-table");
-  expect(within(table).getAllByRole("columnheader")).toHaveLength(7);
+  expect(within(table).getAllByRole("columnheader")).toHaveLength(8);
   expect(within(table).getByRole("columnheader", { name: "등록일" })).toBeInTheDocument();
+  expect(within(table).getByRole("columnheader", { name: "메뉴 버전" })).toBeInTheDocument();
   for (const name of ["앱 버전", "마지막 확인", "마지막 동기화"]) expect(within(table).queryByRole("columnheader", { name })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "다음 페이지" }));
   await user.click(screen.getByRole("button", { name: "기기 상세: DB-106" }));

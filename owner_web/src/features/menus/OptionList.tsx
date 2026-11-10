@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   Ban,
   ChevronDown,
@@ -11,13 +11,16 @@ import type { MenuOption } from "../../data/models";
 import {
   LIMITS,
   formatWon,
+  groupError,
   nameError,
+  normalizeGroup,
   parseExtraPrice,
 } from "../../data/validation";
 import {
-  activeOptions,
   addOption,
   findStoppedOption,
+  groupNames,
+  optionGroups,
   removeOption,
   stoppedOptions,
   updateOption,
@@ -25,32 +28,41 @@ import {
 import type { MenuDraft } from "./useMenuDraft";
 import { Switch, TextField } from "./fields";
 
+type OptionFields = Pick<MenuOption, "name" | "extraPrice" | "optionGroup">;
+
 function OptionForm({
   initial,
+  groups,
   submitLabel,
   onSubmit,
   onCancel,
   findStopped,
   onResell,
 }: {
-  initial: { name: string; price: string };
+  initial: { name: string; price: string; group: string };
+  // 이 메뉴에서 이미 쓰는 그룹 이름(입력 제안)
+  groups: string[];
   submitLabel: string;
-  onSubmit(fields: { name: string; extraPrice: number }): void;
+  onSubmit(fields: OptionFields): void;
   onCancel?(): void;
   findStopped?(name: string): MenuOption | undefined;
   onResell?(option: MenuOption): void;
 }) {
   const [name, setName] = useState(initial.name);
   const [price, setPrice] = useState(initial.price);
+  const [group, setGroup] = useState(initial.group);
   const [touched, setTouched] = useState(false);
   const [askResell, setAskResell] = useState(false);
+  const groupListId = useId();
   const nameProblem = nameError(name, LIMITS.optionName, "옵션 이름");
   const priceResult = parseExtraPrice(price);
+  const groupProblem = groupError(group);
   // 되돌리기로 초안이 바뀌어도 맞도록 지금 초안에서 다시 찾는다.
   const stopped = askResell ? findStopped?.(name) : undefined;
   const clear = () => {
     setName(initial.name);
     setPrice(initial.price);
+    setGroup(initial.group);
     setTouched(false);
     setAskResell(false);
   };
@@ -65,8 +77,12 @@ function OptionForm({
           setAskResell(true);
           return;
         }
-        if (priceResult.value === null) return;
-        onSubmit({ name: name.trim(), extraPrice: priceResult.value });
+        if (priceResult.value === null || groupProblem) return;
+        onSubmit({
+          name: name.trim(),
+          extraPrice: priceResult.value,
+          optionGroup: normalizeGroup(group),
+        });
         clear();
       }}
     >
@@ -87,6 +103,23 @@ function OptionForm({
         inputMode="numeric"
         error={touched ? priceResult.error : null}
       />
+      <div className="option-form-wide">
+        <TextField
+          label="옵션 그룹"
+          value={group}
+          onChange={setGroup}
+          maxLength={LIMITS.optionGroup}
+          placeholder="예: 맵기, 사이즈 (비우면 선택 추가 옵션)"
+          list={groupListId}
+          error={touched ? groupProblem : null}
+          hint="같은 그룹의 옵션 중 하나를 꼭 고릅니다."
+        />
+        <datalist id={groupListId}>
+          {groups.map((g) => (
+            <option key={g} value={g} />
+          ))}
+        </datalist>
+      </div>
       {stopped ? (
         <div className="notice-box option-resell" role="alert">
           <p>같은 이름의 판매 중지된 옵션이 있습니다. 다시 판매할까요?</p>
@@ -132,9 +165,11 @@ function OptionForm({
 
 function OptionRow({
   option,
+  groups,
   draft,
 }: {
   option: MenuOption;
+  groups: string[];
   draft: MenuDraft;
 }) {
   const [editing, setEditing] = useState(false);
@@ -142,7 +177,12 @@ function OptionRow({
     return (
       <li className="option-row editing" aria-label={`${option.name} 수정`}>
         <OptionForm
-          initial={{ name: option.name, price: String(option.extraPrice) }}
+          initial={{
+            name: option.name,
+            price: String(option.extraPrice),
+            group: option.optionGroup ?? "",
+          }}
+          groups={groups}
           submitLabel="수정 완료"
           onCancel={() => setEditing(false)}
           onSubmit={(fields) => {
@@ -256,16 +296,45 @@ export function OptionList({
   menuId: number;
   draft: MenuDraft;
 }) {
-  const options = activeOptions(draft.draft, menuId);
+  const groups = optionGroups(draft.draft, menuId);
+  const names = groupNames(draft.draft, menuId);
   return (
     <section className="editor-section" aria-label="옵션">
       <h3>옵션</h3>
-      {options.length ? (
-        <ul className="option-list">
-          {options.map((o) => (
-            <OptionRow key={o.id} option={o} draft={draft} />
-          ))}
-        </ul>
+      {groups.length ? (
+        groups.map((g) => {
+          const title = g.name ?? "선택 추가 옵션";
+          return (
+            <div className="option-group" key={g.name ?? ""}>
+              <h4 className="option-group-title">
+                {title}
+                <span className="muted">
+                  {g.name ? "필수, 1개 선택" : "고르지 않거나 여러 개 선택"}
+                </span>
+              </h4>
+              <ul
+                className="option-list"
+                aria-label={g.name ? `${g.name} 그룹 옵션` : title}
+              >
+                {g.options.map((o) => (
+                  <OptionRow
+                    key={o.id}
+                    option={o}
+                    groups={names}
+                    draft={draft}
+                  />
+                ))}
+              </ul>
+              {/* 서버는 저장을 받으므로 막지 않고 안내만 한다. */}
+              {g.name && g.options.length === 1 && (
+                <p className="notice-box option-group-hint">
+                  '{g.name}' 그룹에 판매 중인 옵션이 1개뿐입니다. 필수 선택
+                  그룹은 고객이 고를 수 있게 옵션을 2개 이상 두는 것이 좋습니다.
+                </p>
+              )}
+            </div>
+          );
+        })
       ) : (
         <p className="muted">등록된 옵션이 없습니다.</p>
       )}
@@ -279,7 +348,8 @@ export function OptionList({
       </p>
       <h4>옵션 추가</h4>
       <OptionForm
-        initial={{ name: "", price: "0" }}
+        initial={{ name: "", price: "0", group: "" }}
+        groups={names}
         submitLabel="추가"
         onSubmit={(fields) => draft.edit((b) => addOption(b, menuId, fields))}
         findStopped={(name) => findStoppedOption(draft.draft, menuId, name)}

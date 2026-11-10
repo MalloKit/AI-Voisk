@@ -45,6 +45,18 @@ function timestamp(value: unknown): string {
 function nullableTimestamp(value: unknown): string | null {
   return value === null ? null : timestamp(value);
 }
+// 메뉴 버전은 나중에 추가된 필드라 이전 서버 응답에는 없을 수 있습니다. 없으면 미확인(null)으로 읽습니다.
+function menuVersion(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw invalid();
+  return value;
+}
+// 키오스크 메뉴 버전 상태. 점주 웹 menuVersionStatus와 같은 규칙이며, 둘 중 하나라도 모르면 최신이라고 하지 않습니다.
+export function menuVersionStatus(device: Pick<ApiDevice, "current_menu_version" | "applied_menu_version">): string {
+  const { current_menu_version: current, applied_menu_version: applied } = device;
+  if (current === null || applied === null) return "미확인";
+  return applied >= current ? "최신" : `반영 대기 (적용 ${applied} / 최신 ${current})`;
+}
 export function parseDevice(value: unknown): ApiDevice {
   const row = record(value);
   if (typeof row.is_active !== "boolean") throw invalid();
@@ -60,6 +72,8 @@ export function parseDevice(value: unknown): ApiDevice {
     app_version: nullableText(row.app_version),
     last_seen_at: nullableTimestamp(row.last_seen_at),
     last_synced_at: nullableTimestamp(row.last_synced_at),
+    current_menu_version: menuVersion(row.current_menu_version),
+    applied_menu_version: menuVersion(row.applied_menu_version),
   };
 }
 export class ApiDeviceRepository implements DeviceRepository {

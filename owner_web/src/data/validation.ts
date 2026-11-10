@@ -4,9 +4,18 @@ export const LIMITS = {
   optionName: 50, // option_nm VARCHAR(50)
   categoryName: 100, // category_nm VARCHAR(100)
   description: 500, // menu_des VARCHAR(500)
+  optionGroup: 20, // option_group, 서버가 앞뒤 공백을 뺀 1~20자만 받는다
   minPrice: 1,
   maxPrice: 1_000_000,
 } as const;
+
+// 옵션 그룹 이름. 앞뒤 공백을 빼고, 비어 있으면 그룹 없음(선택 추가 옵션)이다.
+export const normalizeGroup = (value: string | null | undefined) =>
+  value?.trim() || null;
+export const groupError = (value: string) =>
+  (normalizeGroup(value)?.length ?? 0) > LIMITS.optionGroup
+    ? `그룹 이름은 ${LIMITS.optionGroup}자 이하로 입력해 주세요.`
+    : null;
 
 export function nameError(value: string, max: number, label: string) {
   if (!value.trim()) return `${label}을 입력해 주세요.`;

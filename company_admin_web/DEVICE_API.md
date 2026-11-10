@@ -2,7 +2,7 @@
 
 기준 커밋: 04e1e02. 실제 스키마는 사용자가 MySQL Workbench에서 확인해 제공한 컬럼을 근거로 합니다.
 기존 kiosk_device·store만 조회하며 신규 테이블·마이그레이션·운영 데이터 변경은 없습니다.
-정확한 이름과 기능이 미확인인 메뉴 버전 컬럼은 사용하지 않습니다.
+메뉴 버전은 서버가 계산해 주는 current_menu_version·applied_menu_version만 표시합니다(2026-11-11 추가).
 
 ## API
 - GET /admin/devices → {devices: AdminDeviceView[], total: number}. 전체 목록을 device_id 순으로 반환합니다.
@@ -15,7 +15,11 @@
 응답 필드:
 device_id(정수), device_code, store_id(정수), store_name,
 store_address, store_address_detail(nullable), is_active(boolean),
-registered_at, app_version(nullable), last_seen_at(nullable), last_synced_at(nullable).
+registered_at, app_version(nullable), last_seen_at(nullable), last_synced_at(nullable),
+current_menu_version(정수, nullable), applied_menu_version(정수, nullable).
+
+메뉴 버전 상태는 applied ≥ current면 "최신", 작으면 "반영 대기 (적용 n / 최신 m)", 둘 중 하나라도 null이면 "미확인"입니다.
+점주 웹 오늘 현황과 같은 규칙이며, 두 필드가 없는 이전 서버 응답은 null(미확인)로 읽습니다.
 
 기기와 실제 매장을 JOIN합니다. 매장 주소는 store_add1/store_add2이며 실제 기기 설치 위치를 새로 가정하지 않습니다.
 기기 0건은 정상적인 devices=[], total=0입니다. 한 매장의 여러 기기도 별개 ID로 유지합니다.

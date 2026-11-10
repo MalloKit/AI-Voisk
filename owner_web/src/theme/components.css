@@ -737,6 +737,28 @@ dd {
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   column-gap: var(--md);
 }
+.option-form-wide {
+  grid-column: 1 / -1;
+}
+/* 옵션 그룹: 필수 선택 그룹마다 제목과 목록을 묶는다 */
+.option-group + .option-group {
+  margin-top: var(--lg);
+}
+.option-group-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sm);
+  margin: 0 0 var(--xs);
+}
+.option-group-title .muted {
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+.option-group-hint {
+  margin: var(--sm) 0 0;
+  color: var(--ink);
+}
 .option-form-actions {
   grid-column: 1 / -1;
   display: flex;
@@ -1058,6 +1080,18 @@ dd {
 }
 .today-list button {
   padding: var(--sm) var(--md);
+}
+/* 키오스크 행의 둘째 줄: 메뉴 버전·동기화·앱 버전 */
+.today-list-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--xs) var(--md);
+  flex-basis: 100%;
+  font-size: var(--text-xs);
+}
+.today-list-meta .badge {
+  padding: var(--xs) var(--sm);
 }
 .top-menus li {
   display: grid;
@@ -1394,6 +1428,26 @@ label.form-field > span:first-child {
   flex-direction: column;
   gap: var(--xs);
 }
+/* 추천 순서 기준 빠른 선택. 슬라이더 값과 같은 버튼만 선택 색을 쓴다. */
+.ai-policy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sm);
+}
+.ai-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sm);
+}
+.ai-presets button {
+  padding: var(--sm) var(--md);
+  font-size: var(--text-sm);
+}
+.ai-presets button[aria-pressed="true"] {
+  background: var(--selected);
+  border-color: var(--brand);
+  color: var(--selected-ink);
+}
 .ai-slider-head {
   display: flex;
   justify-content: space-between;
@@ -1606,6 +1660,14 @@ label.form-field > span:first-child {
 }
 .staff-call-alert li button {
   margin-left: auto;
+}
+/* 처리 완료 실패 문구는 목록 아래 한 줄을 다 쓴다 */
+.staff-call-alert {
+  flex-wrap: wrap;
+}
+.staff-call-error {
+  flex-basis: 100%;
+  margin: 0;
 }
 @media (max-width: 1149px) {
   .ai-menu-row {

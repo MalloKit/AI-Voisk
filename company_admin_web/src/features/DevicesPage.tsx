@@ -17,7 +17,7 @@ import {
 import { DeviceCreateForm } from "./DeviceCreateForm";
 import { DeviceStatusForm } from "./DeviceStatusForm";
 import { ApiDeviceDetails, DeviceDetails } from "./details";
-import { liveConnection, type DeviceRepository, type DeviceToken } from "../data/deviceRepository";
+import { liveConnection, menuVersionStatus, type DeviceRepository, type DeviceToken } from "../data/deviceRepository";
 import { useAsync, type AsyncResult } from "../hooks/useAsync";
 
 export function FutureNotice({ data }: { data: AdminSnapshot }) {
@@ -259,6 +259,7 @@ function LiveDevicesPage({
               { label: "설치 매장", render: (d) => <span className="device-cell-text" title={d.store_name}>{d.store_name}</span> },
               { label: "활성 상태", render: (d) => <Badge>{d.is_active ? "활성" : "비활성"}</Badge> },
               { label: "연결 상태", render: (d) => liveConnection(d.last_seen_at) },
+              { label: "메뉴 버전", render: (d) => <span className="device-cell-wrap">{menuVersionStatus(d)}</span> },
               { label: "등록일", render: (d) => dateLabel(d.registered_at) },
               { label: "", render: (d) => (
                 <button aria-label={`기기 상세: ${d.device_code}`} onClick={() => { setFocusStatus(false); setDetail(d); }}>상세</button>

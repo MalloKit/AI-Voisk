@@ -7,6 +7,12 @@ import { useAsync } from "../hooks/useAsync";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 const TAG_MAX = 10;
+// 추천 순서 기준(policy_profit) 빠른 선택
+const POLICY_PRESETS = [
+  { label: "고객 적합 우선", value: 0 },
+  { label: "균형", value: 50 },
+  { label: "매장 이익 우선", value: 100 },
+] as const;
 
 // 쉼표로 구분한 입력을 태그 목록으로 바꾼다. 서버와 같은 규칙(공백 정리, 중복 제거, 길이 제한)을 쓴다.
 export function parseLabels(value: string, limit: number) {
@@ -154,9 +160,20 @@ function SettingsCard({ repository }: { repository: OwnerAiRepository }) {
         <p className="error-text">서버 DB에 AI 기능 변경이 적용되지 않아 저장할 수 없습니다. 관리자에게 문의해 주세요.</p>
       )}
       <div className="ai-settings-grid">
-        <Slider label="추천 순서 기준" value={draft.policyProfit} onChange={(v) => set({ policyProfit: v })}
-          left="고객에게 맞는 메뉴 우선" right="매장 이익 우선"
-          help="고객 상황에 맞는 메뉴들 사이의 순서만 바꿉니다. 맞지 않는 메뉴를 이익 때문에 추천하지는 않습니다." />
+        <div className="ai-policy">
+          {/* 자주 쓰는 세 값으로 슬라이더를 옮긴다. 슬라이더 값이 같으면 그 버튼을 선택 상태로 보인다. */}
+          <div className="ai-presets" role="group" aria-label="추천 순서 기준 빠른 선택">
+            {POLICY_PRESETS.map((p) => (
+              <button key={p.value} type="button" aria-pressed={draft.policyProfit === p.value}
+                onClick={() => set({ policyProfit: p.value })}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <Slider label="추천 순서 기준" value={draft.policyProfit} onChange={(v) => set({ policyProfit: v })}
+            left="고객에게 맞는 메뉴 우선" right="매장 이익 우선"
+            help="고객 상황에 맞는 메뉴들 사이의 순서만 바꿉니다. 맞지 않는 메뉴를 이익 때문에 추천하지는 않습니다." />
+        </div>
         <Slider label="적합도 기준선" value={draft.fitThreshold} onChange={(v) => set({ fitThreshold: v })} unit="점"
           help="AI가 매긴 상황 적합도가 이 점수보다 낮은 메뉴는 추천하지 않습니다." />
         <Slider label="매장 우선 메뉴 가산" value={draft.pickWeight} onChange={(v) => set({ pickWeight: v })}
@@ -223,9 +240,21 @@ function MenuAiCard({ repository }: { repository: OwnerAiRepository }) {
   const [busy, setBusy] = useState<number | "save" | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadFor = useRef<number | null>(null);
+  // 입력칸을 서버 값으로 다시 채우는 때는 처음 불러올 때와 저장 직후뿐이다.
+  // 사진을 바꿀 때 result.data를 고쳐도 다른 메뉴의 저장 안 된 입력은 지우지 않는다.
+  const resetRows = useRef(true);
   useEffect(() => {
-    if (result.data) setRows(result.data.map(toRow));
+    if (result.data && resetRows.current) {
+      resetRows.current = false;
+      setRows(result.data.map(toRow));
+    }
   }, [result.data]);
+  // 사진 주소는 즉시 저장되므로 저장본과 그 행의 입력만 함께 바꾼다.
+  const setImage = (menuId: number, imageUrl: string | null) => {
+    const patch = (m: MenuAi) => (m.menuId === menuId ? { ...m, imageUrl } : m);
+    result.setData((data) => data?.map(patch));
+    setRows((list) => list.map((r) => ({ ...r, menu: patch(r.menu) })));
+  };
   const saved = useMemo(() => new Map((result.data ?? []).map((m) => [m.menuId, JSON.stringify(m)])), [result.data]);
   const changed = rows.filter((r) => saved.get(r.menu.menuId) !== JSON.stringify(fromRow(r)));
   const errors = rows.map(rowError);
@@ -233,7 +262,8 @@ function MenuAiCard({ repository }: { repository: OwnerAiRepository }) {
   if (result.error || !result.data)
     return (
       <Card>
-        <ErrorState message={apiErrorMessage(result.failure, "메뉴 추천 정보를 불러오지 못했습니다.")} onRetry={result.reload} />
+        <ErrorState message={apiErrorMessage(result.failure, "메뉴 추천 정보를 불러오지 못했습니다.")}
+          onRetry={() => { resetRows.current = true; result.reload(); }} />
       </Card>
     );
   const update = (menuId: number, patch: Partial<RowDraft> | ((r: RowDraft) => Partial<RowDraft>)) => {
@@ -244,6 +274,7 @@ function MenuAiCard({ repository }: { repository: OwnerAiRepository }) {
     setBusy("save");
     try {
       const next = await repository.saveMenuAi(changed.map(fromRow));
+      resetRows.current = true;
       result.setData(() => next);
       setStatus({ kind: "ok", text: `메뉴 ${changed.length}개를 저장했습니다. 키오스크 추천에 바로 반영됩니다.` });
     } catch (error) {
@@ -259,7 +290,7 @@ function MenuAiCard({ repository }: { repository: OwnerAiRepository }) {
     setStatus(null);
     try {
       const imageUrl = await repository.uploadMenuImage(menuId, await shrinkImage(file));
-      result.setData((data) => data?.map((m) => (m.menuId === menuId ? { ...m, imageUrl } : m)) ?? data);
+      setImage(menuId, imageUrl);
       setStatus({ kind: "ok", text: "사진을 바꿨습니다." });
     } catch (error) {
       setStatus({ kind: "error", text: error instanceof Error && !("status" in error) ? error.message : apiErrorMessage(error, "사진을 올리지 못했습니다.") });
@@ -272,7 +303,7 @@ function MenuAiCard({ repository }: { repository: OwnerAiRepository }) {
     setBusy(menuId);
     try {
       await repository.deleteMenuImage(menuId);
-      result.setData((data) => data?.map((m) => (m.menuId === menuId ? { ...m, imageUrl: null } : m)) ?? data);
+      setImage(menuId, null);
     } catch (error) {
       setStatus({ kind: "error", text: apiErrorMessage(error, "사진을 지우지 못했습니다.") });
     } finally {

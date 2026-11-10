@@ -15,6 +15,7 @@ import type {
   StoreProfile,
 } from "./models";
 import type { OwnerRepository } from "./ownerRepository";
+import { normalizeGroup } from "./validation";
 
 // 서버 점주 API(server/OWNER_API.md) 구현. 컬럼 이름 변환은 여기서만 한다.
 // 세션은 HttpOnly 쿠키에 있고, CSRF 토큰은 쓰기 직전에 받아 저장하지 않는다.
@@ -103,6 +104,7 @@ function parseBoard(value: unknown): MenuBoard {
         isActive: bool(o.is_active),
         isSoldOut: bool(o.is_sold_out),
         extraPrice: int(o.extra_price),
+        optionGroup: nullable(o.option_group, text),
       }),
     ),
   };
@@ -149,6 +151,7 @@ export function toServerChanges(changes: MenuBoardChanges) {
         extra_price: o.extraPrice,
         is_sold_out: o.isSoldOut,
         sort: o.sort,
+        group: normalizeGroup(o.optionGroup),
       })),
       update: changes.options.update.map((o) => ({
         id: o.id,
@@ -156,6 +159,7 @@ export function toServerChanges(changes: MenuBoardChanges) {
         extra_price: o.extraPrice,
         is_active: o.isActive,
         sort: o.sort,
+        group: normalizeGroup(o.optionGroup),
       })),
     },
   };
@@ -351,6 +355,10 @@ export class ApiOwnerRepository implements OwnerRepository {
         isActive: bool(d.is_active),
         connection: deviceConnection(lastSeenAt, this.clock()),
         lastSeenAt,
+        appVersion: nullable(d.app_version, text),
+        lastSyncedAt: nullable(d.last_synced_at, text),
+        currentMenuVersion: nullable(d.current_menu_version, int),
+        appliedMenuVersion: nullable(d.applied_menu_version, int),
       };
     });
   }

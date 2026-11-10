@@ -77,7 +77,7 @@ describe("device registration and activation writes",()=>{
     const f=fixture(),user=await open(f);const storeGets=f.requests.filter(r=>r.path==="/admin/stores").length;
     await createForm(user);await user.click(modal().getByRole("button",{name:"등록"}));
     await modal().findByRole("button",{name:"활성화"});expect(modal().getByText("New-002")).toBeInTheDocument();
-    expect(modal().getByText("미확인")).toBeInTheDocument();
+    expect(modal().getAllByText("미확인")).toHaveLength(2); // 연결 상태와 메뉴 버전 상태
     expect(writeCalls(f)[0].body).toEqual({device_code:"New-002",store_id:2});
     await user.click(modal().getByRole("button",{name:"닫기"}));expect(screen.getByRole("table")).toHaveTextContent("New-002");
     await user.click(nav("운영 요약"));
