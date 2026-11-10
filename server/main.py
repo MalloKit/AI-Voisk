@@ -13,6 +13,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 import admin_auth
 import kakaopay_test
+import owner_auth
+import owner_router
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from order_service import OrderPayment, OrderInput, save_order, list_orders, order_detail, confirm_cash
@@ -44,6 +46,8 @@ class Menu(BaseModel):
 
 
 app = FastAPI(title="AI 보이스크 · 연습용 메뉴 API", version="0.1.0")
+# 메뉴판 저장 한 번의 본문 상한입니다. 인증 POST는 8KB로 더 작게 제한합니다.
+OWNER_BODY_LIMIT = 1024 * 1024
 
 
 @app.middleware('http')
@@ -60,10 +64,31 @@ async def local_demo_only(request: Request, call_next):
     admin_path = path == '/admin' or path.startswith('/admin/')
     auth_path = path == '/auth/admin' or path.startswith('/auth/admin/')
     owner_password_path = path.startswith('/admin/owners/') and path.rstrip('/').endswith('/password')
-    if (admin_path or auth_path or path == '/orders') and (
+    owner_path = path == '/owner' or path.startswith('/owner/')
+    owner_auth_path = path == '/auth/owner' or path.startswith('/auth/owner/')
+    if (admin_path or auth_path or owner_path or owner_auth_path or path == '/orders') and (
         request.client is None or request.client.host not in {'127.0.0.1', '::1', 'testclient'}
     ):
         return JSONResponse(status_code=403, content={'detail': '인증 전에는 로컬 시연만 허용합니다.'})
+    if owner_path or owner_auth_path:
+        try:
+            admin_auth.check_transport(request)
+            if owner_path:
+                session = owner_auth.require_owner(request)
+                if request.method not in ('GET', 'HEAD', 'OPTIONS'):
+                    admin_auth.check_csrf(request, session)
+        except HTTPException as error:
+            response = JSONResponse(status_code=error.status_code, content={'detail': error.detail},
+                                    headers=error.headers)
+            if error.status_code == 401:
+                owner_auth.clear_cookie(response)
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        if request.method in ('POST', 'PATCH'):
+            limit = 8192 if owner_auth_path else OWNER_BODY_LIMIT
+            if len(await request.body()) > limit:
+                return JSONResponse(status_code=413, content={'detail': '요청 크기를 확인해 주세요.'},
+                                    headers={'Cache-Control': 'no-store'})
     if admin_path or auth_path:
         try:
             admin_auth.check_transport(request)
@@ -87,7 +112,7 @@ async def local_demo_only(request: Request, call_next):
     if path.startswith('/payments/kakaopay/'):
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Referrer-Policy'] = 'no-referrer'
-    if admin_path or auth_path:
+    if admin_path or auth_path or owner_path or owner_auth_path:
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Pragma'] = 'no-cache'
     return response
@@ -101,10 +126,19 @@ app.add_middleware(CORSMiddleware,
     allow_headers=['Content-Type', 'X-CSRF-Token'])
 app.include_router(admin_auth.router)
 app.include_router(kakaopay_test.router)
+app.include_router(owner_auth.router)
+app.include_router(owner_router.router)
 
 
 @app.exception_handler(RequestValidationError)
 async def safe_validation_error(request: Request, error: RequestValidationError):
+    # 기본 422 응답은 입력값을 그대로 돌려주므로 비밀번호·본문이 반사되지 않게 바꿉니다.
+    if request.url.path.startswith('/auth/owner/'):
+        return JSONResponse(status_code=422, content={'detail': '로그인 입력 형식을 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
+    if request.url.path.startswith('/owner/'):
+        return JSONResponse(status_code=422, content={'detail': '입력 형식과 허용 범위를 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
     if request.url.path.startswith('/auth/admin/'):
         return JSONResponse(status_code=422, content={'detail': '로그인 입력 형식을 확인해 주세요.'},
                             headers={'Cache-Control': 'no-store'})
