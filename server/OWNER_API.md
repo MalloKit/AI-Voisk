@@ -1,6 +1,6 @@
 # 점주 API 계약
 
-점주 웹(`owner_web`)이 쓰는 인증과 업무 API입니다. 구현은 `owner_auth.py`, `owner_router.py`, `owner_portal_service.py`, `owner_menu_write_service.py`입니다. 회사 관리자 API(`/admin/*`, `/auth/admin/*`)와 키오스크 API(`/stores/*`, `/orders`)의 동작은 바꾸지 않았고, `admin_auth.py`는 수정 없이 import해서 씁니다. 스키마 변경은 없습니다.
+점주 웹(`owner_web`)이 쓰는 인증과 업무 API입니다. 구현은 `owner_auth.py`, `owner_router.py`, `owner_portal_service.py`, `owner_menu_write_service.py`입니다. 회사 관리자 API(`/admin/*`, `/auth/admin/*`)와 키오스크 API(`/stores/*`, `/orders`)의 동작은 바꾸지 않았고, `admin_auth.py`는 수정 없이 import해서 씁니다. AI 기능(추천 설정, 메뉴 태그·동의어, 통계, 직원 호출, 메뉴 사진)은 `owner_ai_service.py`, `menu_image_service.py`에 있고, 필요한 테이블·열은 `AI_MIGRATION.md`로 추가합니다.
 
 ## 공통 규칙
 
@@ -124,7 +124,47 @@
 
 `PATCH /owner/menus/{id}/sold-out`, `PATCH /owner/options/{id}/sold-out`
 
-요청 `{ "is_sold_out": true }`, 응답 `{ "menu_id": 10, "is_sold_out": true }`(옵션은 `option_id`). 같은 값을 다시 보내도 200입니다. 품절은 키오스크가 메뉴를 다시 읽을 때 바로 보이는 값이므로 `current_menu_version`을 올리지 않습니다.
+요청 `{ "is_sold_out": true }`, 응답 `{ "menu_id": 10, "is_sold_out": true }`(옵션은 `option_id`). 같은 값을 다시 보내도 200입니다.
+
+값이 바뀌면 그 매장 키오스크의 `current_menu_version`을 올리고 WebSocket(`/kiosk/ws`)으로 알립니다. 키오스크는 메뉴를 캐시해 오프라인에서도 쓰므로, 버전을 올려야 품절이 바로 반영됩니다. 잠금 순서는 주문 저장과 같은 기기 → 메뉴입니다(MySQL 교착 방지).
+
+## AI 설정 `/owner/stores/{id}/ai-settings`
+
+`GET`은 `{ "ai_ready": true, "settings": {...} }`, `PATCH`는 아래 7개 필드를 모두 보내야 합니다(그 밖의 필드는 422).
+
+| 필드 | 범위 | 뜻 |
+| --- | --- | --- |
+| `policy_profit` | 0~100 | 추천 정책. 0은 고객 만족(상황 적합도), 100은 매장 수익(원가율 기준 이익) |
+| `pick_weight` | 0~100 | 점주 추천 메뉴(`is_store_pick`) 가산점 |
+| `fit_threshold` | 0~100 | 이 적합도 미만인 메뉴는 추천하지 않음 |
+| `upsell_enabled` | bool | 장바구니에 담은 뒤 함께 먹기 좋은 메뉴 제안 |
+| `default_mode` | `normal`·`senior` | 키오스크 첫 화면 모드 |
+| `speech_rate` | 50~150 | 음성 안내 속도(%) |
+| `voice_enabled` | bool | 음성 주문 버튼 표시 |
+
+`ai_ready=false`(DB 변경 미적용)면 GET은 기본값을, PATCH는 503 `{ code: "ai_schema_missing" }`를 돌려줍니다. 저장하면 메뉴 버전을 올립니다.
+
+## 메뉴 AI 정보 `/owner/stores/{id}/menu-ai`
+
+`GET`은 메뉴마다 `menu_id, menu_name, menu_price, is_active, is_sold_out, cost_rate, is_rec_excluded, is_store_pick, tags, synonyms`를 줍니다. `PATCH` 본문은 `{ "menus": [{ menu_id, cost_rate(0~100 또는 null), is_rec_excluded, is_store_pick, tags(최대 10개, 20자), synonyms(최대 10개, 30자) }] }`이고 보낸 메뉴의 태그·동의어를 통째로 바꿉니다. 대소문자만 다른 태그는 하나로 저장합니다(MySQL 비교 규칙이 같은 값으로 봄). 다른 매장 메뉴가 섞이면 전체 404입니다.
+
+## 통계 `GET /owner/stores/{id}/stats?days=7`
+
+`days`는 1~90, 날짜 구분은 한국 시간입니다. 응답은 `orders, voice_orders, voice_ratio, revenue_estimate, rec_revenue_estimate, rec_impressions, rec_selections, rec_selection_rate, top_menus(5개), daily[]`입니다. 주문 당시 가격을 저장하지 않으므로 매출은 현재 메뉴·옵션 가격으로 계산한 추정치입니다.
+
+## 직원 호출
+
+- `GET /owner/stores/{id}/staff-calls`: `{ open: [...], recent: [...] }`. `open`은 처리하지 않은 호출(최대 50건), `recent`는 최근 처리한 10건이고 항목은 `alert_id, device_id, device_code, message, status, occurred_at, resolved_at`입니다. 점주 웹이 5초마다 읽어 알림을 띄웁니다.
+- `PATCH /owner/stores/{id}/staff-calls/{alert_id}/resolve`: `{ alert_id, status: "RESOLVED" }`. 이미 처리된 호출도 200입니다.
+
+키오스크는 `POST /kiosk/staff-call`로 호출합니다. 처리되지 않은 호출이 있으면 새로 만들지 않습니다.
+
+## 메뉴 사진
+
+- `PUT /owner/menus/{id}/image`: 본문은 이미지 바이트 그대로, `Content-Type: image/jpeg|png|webp`, 900KB 이하. 형식은 파일 시그니처로 다시 확인합니다(다르면 415). 응답 `{ menu_id, image_url }`.
+- `DELETE /owner/menus/{id}/image`: 대표 사진을 지웁니다.
+- 파일은 `server/media/menu/<menu_id>_<해시>.<확장자>`에 저장하고 `/media/menu/...`로 공개합니다(`VOISK_MEDIA_ROOT`로 위치 변경). 이름에 내용 해시가 있어 키오스크는 바뀐 사진만 다시 받습니다.
+- 소유 확인을 파일 쓰기보다 먼저 합니다. DB 저장이 실패하면 새로 만든 파일만 지우고, 이미 쓰이던 파일은 남깁니다.
 
 ## 허용 출처
 
@@ -134,9 +174,10 @@
 ADMIN_AUTH_ALLOWED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080,http://localhost:8081,http://127.0.0.1:8081
 ```
 
-CORS `allow_methods`는 바꾸지 않았습니다. 저장 API가 PATCH이고 이미 허용되어 있습니다. 쿠키가 SameSite=Strict이므로 웹과 API의 호스트를 맞춥니다. 웹을 `http://127.0.0.1:8081`로 열면 API 주소도 `http://127.0.0.1:8001`입니다.
+CORS `allow_methods`에 메뉴 사진용 `PUT`, `DELETE`를 추가했습니다. 쿠키가 SameSite=Strict이므로 웹과 API의 호스트를 맞춥니다. 웹을 `http://127.0.0.1:8081`로 열면 API 주소도 `http://127.0.0.1:8001`입니다.
 
 ## 검증 범위
 
 - `test_owner_auth.py`, `test_owner_portal.py`: 메모리 SQLite에서 실제 SQL과 Argon2id로 권한, 입력 검증, 롤백을 검증합니다. 테스트 커서는 MySQL처럼 UPDATE 영향 행을 0으로 돌려줍니다.
-- SQLite 테스트는 MySQL의 행 잠금, 콜레이션, CHECK 동작을 대신하지 않습니다.
+- `test_ai_features.py`: AI 설정·메뉴 AI·통계·직원 호출·사진 업로드와 리뷰 회귀(잠금 순서, 사진 보존, 태그 중복)를 검증합니다.
+- SQLite 테스트는 MySQL의 행 잠금, 콜레이션, CHECK 동작을 대신하지 않습니다. 잠금 순서는 실행된 SQL 순서로만 확인합니다.
