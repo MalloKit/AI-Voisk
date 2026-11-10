@@ -18,6 +18,7 @@ export interface OrderView {
   id: number;
   orderedAt: string;
   orderType: OrderType | null;
+  channel: "voice" | "touch" | null;
   deviceId: number | null;
   lines: OrderLine[];
   quantity: number;
@@ -34,6 +35,8 @@ export function resolveOrderType(
   if (tableNo !== null && tableNo > 0) return "dine_in";
   return null;
 }
+export const channelLabel = (channel: "voice" | "touch" | null) =>
+  channel === "voice" ? "음성 주문" : channel === "touch" ? "터치 주문" : "기록 없음";
 export const orderTypeLabel = (type: OrderType | null) =>
   type === "takeaway" ? "포장" : type === "dine_in" ? "매장 식사" : "미확인";
 
@@ -81,6 +84,7 @@ export function orderViews(history: OrderHistory, board: MenuBoard) {
         id: o.id,
         orderedAt: o.orderedAt,
         orderType: resolveOrderType(o.orderType, o.tableNo),
+        channel: o.channel ?? null,
         deviceId: o.deviceId,
         lines: list,
         quantity: list.reduce((n, l) => n + l.quantity, 0),

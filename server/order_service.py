@@ -212,6 +212,8 @@ def list_orders(limit=100, offset=0):
             cursor.execute("SET time_zone = '+00:00'")
             cursor.execute('START TRANSACTION READ ONLY')
             type_column = ',o.order_type' if 'order_type' in _order_schema(cursor) else ''
+            if _has_column(cursor, 'orders', 'order_channel'):
+                type_column += ',o.order_channel'
             cursor.execute('SELECT COUNT(*) AS total FROM orders')
             total = cursor.fetchone()['total']
             cursor.execute(f'''SELECT o.order_id,o.store_id,s.store_nm AS store_name,o.ordered_at,o.table_no{type_column},
@@ -231,6 +233,8 @@ def order_detail(order_id, *, include_cash=False):
             cursor.execute("SET time_zone = '+00:00'")
             cursor.execute('START TRANSACTION READ ONLY')
             type_column = ',o.order_type' if 'order_type' in _order_schema(cursor) else ''
+            if _has_column(cursor, 'orders', 'order_channel'):
+                type_column += ',o.order_channel'
             cursor.execute(f'''SELECT o.order_id,o.store_id,s.store_nm AS store_name,o.ordered_at,o.table_no,o.device_id{type_column}
                 FROM orders o JOIN store s ON s.store_id=o.store_id WHERE o.order_id=%s''', (order_id,))
             row = cursor.fetchone()

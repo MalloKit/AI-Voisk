@@ -313,6 +313,10 @@ export class ApiOwnerRepository implements OwnerRepository {
           orderType: nullable(o.order_type, text) as OrderType | null,
           tableNo: nullable(o.table_no, int),
           orderedAt: text(o.ordered_at),
+          channel:
+            o.order_channel === "voice" || o.order_channel === "touch"
+              ? o.order_channel
+              : null,
         });
         for (const i of rows(o.items)) {
           items.push({

@@ -8,6 +8,7 @@ import {
   formatDateTime,
   menuSummary,
   orderTypeLabel,
+  channelLabel,
   orderViews,
   totalAmount,
   type OrderView,
@@ -48,6 +49,7 @@ export function OrderDetail({
       <dl className="detail-grid">
         <Field label="주문 시각">{formatDateTime(order.orderedAt)}</Field>
         <Field label="구분">{orderTypeLabel(order.orderType)}</Field>
+        <Field label="주문 방식">{channelLabel(order.channel)}</Field>
         <Field label="키오스크">
           {order.deviceId === null ? "-" : `${order.deviceId}번`}
         </Field>
@@ -191,7 +193,13 @@ export function OrdersPage({
             ),
           },
           { label: "주문 시각", render: (o) => formatDateTime(o.orderedAt) },
-          { label: "구분", render: (o) => orderTypeLabel(o.orderType) },
+          {
+            label: "구분",
+            render: (o) =>
+              o.channel === "voice"
+                ? `${orderTypeLabel(o.orderType)} · 음성`
+                : orderTypeLabel(o.orderType),
+          },
           { label: "메뉴", render: menuSummary },
           { label: "수량", render: (o) => `${o.quantity}개` },
           { label: "금액", render: (o) => formatWon(o.amount) },

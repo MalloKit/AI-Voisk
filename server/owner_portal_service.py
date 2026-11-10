@@ -103,6 +103,14 @@ def menu_board(store_id, owner_id):
 _ORDER_COLUMNS = 'SELECT order_id, store_id, ordered_at, table_no, order_type, device_id, client_order_id FROM orders'
 
 
+def _order_columns(cursor):
+    # 주문 방식(음성/터치)은 AI 마이그레이션 뒤에만 있습니다. 없으면 기존 열만 읽습니다.
+    from ai_db import has_columns
+    if has_columns(cursor, 'orders', ('order_channel',)):
+        return _ORDER_COLUMNS.replace(', client_order_id FROM', ', client_order_id, order_channel FROM')
+    return _ORDER_COLUMNS
+
+
 def _with_items(cursor, rows):
     """옵션은 order_item_option에서 읽습니다. 이전 단일 옵션 열은 legacy_option_id로 따로 전달합니다."""
     orders = [_header(row) for row in rows]
@@ -144,7 +152,7 @@ def list_orders(store_id, owner_id, limit, offset):
         require_store(cursor, store_id, owner_id)
         cursor.execute('SELECT COUNT(*) AS total FROM orders WHERE store_id = %s', (store_id,))
         total = cursor.fetchone()['total']
-        cursor.execute(_ORDER_COLUMNS + ' WHERE store_id = %s ORDER BY ordered_at DESC, order_id DESC LIMIT %s OFFSET %s',
+        cursor.execute(_order_columns(cursor) + ' WHERE store_id = %s ORDER BY ordered_at DESC, order_id DESC LIMIT %s OFFSET %s',
                        (store_id, limit, offset))
         return {'orders': _with_items(cursor, cursor.fetchall()), 'total': total, 'limit': limit, 'offset': offset}
 
@@ -152,7 +160,7 @@ def list_orders(store_id, owner_id, limit, offset):
 def order_detail(store_id, owner_id, order_id):
     with read_cursor() as cursor:
         require_store(cursor, store_id, owner_id)
-        cursor.execute(_ORDER_COLUMNS + ' WHERE order_id = %s AND store_id = %s', (order_id, store_id))
+        cursor.execute(_order_columns(cursor) + ' WHERE order_id = %s AND store_id = %s', (order_id, store_id))
         row = cursor.fetchone()
         if row is None:
             raise OwnerResourceNotFound()

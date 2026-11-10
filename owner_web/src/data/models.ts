@@ -52,6 +52,8 @@ export interface Order {
   orderType: OrderType | null; // 이관 전 주문은 NULL이고 tableNo로 해석
   tableNo: number | null; // 신규 주문은 NULL
   orderedAt: string; // ISO 8601 UTC
+  // 주문 방식(orders.order_channel). AI 마이그레이션 전 주문·기록하지 않은 주문은 null
+  channel?: "voice" | "touch" | null;
 }
 export interface OrderItem {
   id: number; // item_id

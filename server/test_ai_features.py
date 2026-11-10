@@ -546,3 +546,12 @@ class MenuImageTests(unittest.TestCase):
         self.assertEqual(self.upload(self.JPEG, client=self.f.client()).status_code, 401)
         self.assertEqual((self.files() if (self.root / 'menu').exists() else []), [])
         self.assertEqual(self.f.value('SELECT COUNT(*) FROM menu_img'), 0)
+
+
+class OrderChannelTests(unittest.TestCase):
+    def test_owner_order_list_shows_voice_channel(self):
+        f = AiFixture(self)
+        f.db.execute("INSERT INTO orders (order_id, store_id, order_type, device_id, client_order_id, order_channel) "
+                     "VALUES (1, 1, 'takeaway', 70, 'a', 'voice'), (2, 1, 'dine_in', 70, 'b', NULL)")
+        orders = f.owner().get('/owner/stores/1/orders').json()['orders']
+        self.assertEqual({o['order_id']: o['order_channel'] for o in orders}, {1: 'voice', 2: None})
