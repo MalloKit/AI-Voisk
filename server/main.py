@@ -1,19 +1,23 @@
 """로컬 시연용 메뉴 및 주문 API. 주문 저장·회사 관리자 조회는 실제 DB를 사용합니다."""
 
 import json
+import os
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Path as ApiPath
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 from fastapi import Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 import admin_auth
 import owner_auth
 import owner_router
+import kakaopay_test
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from order_service import OrderInput, save_order, list_orders, order_detail
+from order_service import OrderPayment, OrderInput, save_order, list_orders, order_detail, confirm_cash
 from store_service import StoreNotFound, list_stores, store_detail
 from store_write_service import StoreCreate, StorePatch, create_store, update_store
 from owner_service import OwnerNotFound, list_owners, owner_detail
@@ -49,6 +53,14 @@ OWNER_BODY_LIMIT = 1024 * 1024
 @app.middleware('http')
 async def local_demo_only(request: Request, call_next):
     path = request.url.path
+    if path.startswith('/payments/kakaopay/'):
+        if '/approval/' in path:
+            request.state.payment_pg_token = request.query_params.get('pg_token')
+            request.scope['query_string'] = b''
+        try:
+            kakaopay_test.local_only(request)
+        except HTTPException as error:
+            return JSONResponse(status_code=error.status_code, content={'detail': error.detail})
     admin_path = path == '/admin' or path.startswith('/admin/')
     auth_path = path == '/auth/admin' or path.startswith('/auth/admin/')
     owner_password_path = path.startswith('/admin/owners/') and path.rstrip('/').endswith('/password')
@@ -97,6 +109,9 @@ async def local_demo_only(request: Request, call_next):
                 return JSONResponse(status_code=413, content={'detail': '인증 요청 크기를 확인해 주세요.'},
                                     headers={'Cache-Control': 'no-store'})
     response = await call_next(request)
+    if path.startswith('/payments/kakaopay/'):
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Referrer-Policy'] = 'no-referrer'
     if admin_path or auth_path or owner_path or owner_auth_path:
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Pragma'] = 'no-cache'
@@ -112,6 +127,7 @@ app.add_middleware(CORSMiddleware,
 app.include_router(admin_auth.router)
 app.include_router(owner_auth.router)
 app.include_router(owner_router.router)
+app.include_router(kakaopay_test.router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -144,9 +160,9 @@ async def safe_validation_error(request: Request, error: RequestValidationError)
     return await request_validation_exception_handler(request, error)
 
 
-def _order_call(function, *args):
+def _order_call(function, *args, **kwargs):
     try:
-        return function(*args)
+        return function(*args, **kwargs)
     except HTTPException:
         raise
     except Exception:
@@ -158,6 +174,37 @@ def create_order(order: OrderInput):
     return _order_call(save_order, order)
 
 
+class DemoPaymentInput(BaseModel):
+    order: OrderInput
+    expected_amount: StrictInt = Field(gt=0)
+
+
+@app.post('/payments/demo/{method}')
+def save_demo_payment(method: Literal['card', 'naverpay'], data: DemoPaymentInput, request: Request):
+    kakaopay_test.local_only(request)
+    if os.getenv('KIOSK_SAVE_DEMO_PAYMENTS') != '1':
+        raise HTTPException(403, '서버에서 시연 결제 저장을 활성화해 주세요.')
+    payment = OrderPayment(None, data.expected_amount,
+                                  datetime.now(timezone.utc).replace(tzinfo=None), method)
+    return _order_call(save_order, data.order, payment=payment)
+
+
+@app.post('/payments/cash/pending')
+def create_cash_order(data: DemoPaymentInput, request: Request):
+    kakaopay_test.local_only(request)
+    if os.getenv('KIOSK_SAVE_CASH_ORDERS') != '1':
+        raise HTTPException(403, '서버에서 현금 주문 저장을 활성화해 주세요.')
+    payment = OrderPayment(None, data.expected_amount, None, 'cash')
+    return _order_call(save_order, data.order, payment=payment)
+
+
+@app.post('/admin/orders/{order_id}/cash/confirm')
+def receive_cash(order_id: int = ApiPath(ge=1)):
+    if os.getenv('KIOSK_SAVE_CASH_ORDERS') != '1':
+        raise HTTPException(403, '서버에서 현금 주문 저장을 활성화해 주세요.')
+    return _order_call(confirm_cash, order_id)
+
+
 @app.get('/admin/orders')
 def admin_orders(limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
     return _order_call(list_orders, limit, offset)
@@ -165,7 +212,7 @@ def admin_orders(limit: int = Query(100, ge=1, le=200), offset: int = Query(0, g
 
 @app.get('/admin/orders/{order_id}')
 def admin_order_detail(order_id: int = ApiPath(ge=1)):
-    return _order_call(order_detail, order_id)
+    return _order_call(order_detail, order_id, include_cash=os.getenv('KIOSK_SAVE_CASH_ORDERS') == '1')
 _data_path = Path(__file__).with_name("sample_menus.json")
 _menus = [Menu.model_validate(item) for item in json.loads(_data_path.read_text(encoding="utf-8"))]
 

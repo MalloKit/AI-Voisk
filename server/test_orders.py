@@ -92,6 +92,68 @@ class OrderApiTests(unittest.TestCase):
     def post(self): return self.client.post('/orders', json=self.payload)
     def count(self, table): return self.db.execute('SELECT COUNT(*) FROM '+table).fetchone()[0]
 
+    def test_demo_payments_and_admin_cash_confirmation(self):
+        self.db.execute('''CREATE TABLE payments (payment_id INTEGER PRIMARY KEY, order_id INT UNIQUE REFERENCES orders,
+            payment_method TEXT, amount INT, provider_transaction_id TEXT, is_test INT, approved_at TEXT)''')
+        with (TestClient(app) as kiosk,
+              patch.dict('os.environ', {'KIOSK_SAVE_DEMO_PAYMENTS': '1', 'KIOSK_SAVE_CASH_ORDERS': '1'})):
+            for method in ('card', 'naverpay', 'cash'):
+                self.payload['client_order_id'] = str(uuid4())
+                path = '/payments/cash/pending' if method == 'cash' else f'/payments/demo/{method}'
+                body = {'order': self.payload, 'expected_amount': 24000}
+                rejected = kiosk.post(path, json=body | {'expected_amount': 1})
+                self.assertEqual(rejected.status_code, 422)
+                saved = kiosk.post(path, json=body)
+                self.assertEqual(saved.status_code, 200, saved.text)
+                order_id = saved.json()['order_id']
+                self.assertEqual(kiosk.post(path, json=body).json()['order_id'], order_id)
+                row = self.db.execute('SELECT * FROM payments WHERE order_id=?', (order_id,)).fetchone()
+                self.assertEqual((row['payment_method'], row['amount'], row['is_test']),
+                                 (method, 24000, int(method != 'cash')))
+                self.assertEqual(row['approved_at'] is None, method == 'cash')
+            detail = f'/admin/orders/{order_id}'
+            confirm = f'{detail}/cash/confirm'
+            self.assertEqual(self.client.get(detail).json()['cash_payment'], {'amount': 24000, 'received': False})
+            self.assertEqual(kiosk.post(confirm).status_code, 401)
+            self.assertEqual(self.client.post(confirm, headers={'X-CSRF-Token': 'invalid'}).status_code, 403)
+            self.assertTrue(self.client.post(confirm).json()['received'])
+            self.assertTrue(self.client.post(confirm).json()['received'])
+            self.assertTrue(self.client.get(detail).json()['cash_payment']['received'])
+            self.assertEqual(self.count('payments'), 3)
+
+    def test_kakao_approval_retries_only_storage_and_saves_once(self):
+        import kakaopay_test as pay
+
+        payment_url = '/payments/kakaopay'
+        ready = {'tid': 'test-tid', 'next_redirect_pc_url': 'https://online-payment.kakaopay.com/test'}
+        approved = {'tid': 'test-tid', 'cid': pay.CID,
+                    'partner_order_id': self.payload['client_order_id'],
+                    'partner_user_id': 'ai-voisk-test', 'amount': {'total': 24000}}
+        with (TestClient(app) as payment_client,
+              patch.dict(pay.sessions, clear=True),
+              patch.dict('os.environ', {'KAKAOPAY_SAVE_TEST_ORDERS': '1'}),
+              patch.object(pay, 'credentials'), patch.object(pay, 'quote', return_value=24000),
+              patch.object(pay, 'provider', side_effect=[ready, approved]) as provider):
+            response = payment_client.post(f'{payment_url}/ready', json=self.payload)
+            self.assertEqual(response.status_code, 200, response.text)
+            token = response.json()['payment_id']
+            payment_client.get(f'{payment_url}/approval/{token}?pg_token=test')
+            self.assertEqual(payment_client.get(f'{payment_url}/status/{token}').json()['status'], 'save_failed')
+            for table in ('orders', 'order_item', 'order_item_option'):
+                self.assertEqual(self.count(table), 0)
+            self.db.execute('''CREATE TABLE payments (payment_id INTEGER PRIMARY KEY, order_id INT UNIQUE REFERENCES orders,
+                payment_method TEXT, amount INT, provider_transaction_id TEXT UNIQUE, is_test INT, approved_at TEXT)''')
+            saved = payment_client.post(f'{payment_url}/save/{token}').json()
+            self.assertEqual(saved['status'], 'approved')
+            self.assertTrue(saved['order_saved'])
+            # 커밋 뒤 서버가 응답을 잃었을 때에도 기존 주문을 돌려줍니다.
+            pay.sessions[token].order_id = None
+            self.assertEqual(payment_client.post(f'{payment_url}/save/{token}').json()['order_id'], saved['order_id'])
+            self.assertEqual(provider.call_count, 2)
+            self.assertEqual(self.count('orders'), 1)
+            self.assertEqual(self.count('order_item_option'), 2)
+            self.assertEqual(tuple(self.db.execute('SELECT amount,is_test FROM payments').fetchone()), (24000, 1))
+
     def test_multiple_options_save_and_admin_read(self):
         response = self.post()
         self.assertEqual(response.status_code,200)

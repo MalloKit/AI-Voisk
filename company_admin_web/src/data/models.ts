@@ -78,6 +78,7 @@ export interface OrderItem {
   options: OrderOption[];
 }
 export interface Order {
+  cash_payment?: { amount: number; received: boolean };
   order_id: number;
   store_id: number;
   store_name: string;

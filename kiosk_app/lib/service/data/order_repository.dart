@@ -57,7 +57,27 @@ class ApiOrderRepository implements OrderRepository {
   final String baseUrl;
   final http.Client? client;
   @override
-  Future<int> submit(PendingOrder order) async {
+  Future<int> submit(PendingOrder order) => _submit('/orders', order.body);
+
+  Future<int> submitDemoPayment(
+    PendingOrder order,
+    String method,
+    int amount,
+  ) => _submitPayment('/payments/demo/$method', order, amount);
+
+  Future<int> submitCashOrder(PendingOrder order, int amount) =>
+      _submitPayment('/payments/cash/pending', order, amount);
+
+  Future<int> _submitPayment(String path, PendingOrder order, int amount) =>
+      _submit(
+        path,
+        jsonEncode({
+          'order': jsonDecode(order.body),
+          'expected_amount': amount,
+        }),
+      );
+
+  Future<int> _submit(String path, String body) async {
     final uri = Uri.parse(baseUrl);
     if (!['http', 'https'].contains(uri.scheme) || uri.host.isEmpty) {
       throw StateError('주문 API 주소가 설정되지 않았습니다.');
@@ -67,11 +87,11 @@ class ApiOrderRepository implements OrderRepository {
       final response = await transport
           .post(
             uri.replace(
-              path: '${uri.path.replaceFirst(RegExp(r'/$'), '')}/orders',
+              path: '${uri.path.replaceFirst(RegExp(r'/$'), '')}$path',
               query: null,
             ),
             headers: {'Content-Type': 'application/json'},
-            body: order.body,
+            body: body,
           )
           .timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) {

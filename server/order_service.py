@@ -1,5 +1,6 @@
 """주문 유형 이관 후 신규 저장. 기존 스키마의 주문 조회도 유지합니다."""
-from datetime import timezone
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
@@ -88,7 +89,15 @@ def _canonical(items):
     return result
 
 
-def save_order(request: OrderInput):
+@dataclass(frozen=True)
+class OrderPayment:
+    tid: str | None
+    amount: int
+    approved_at: datetime | None
+    method: Literal['kakaopay', 'card', 'naverpay', 'cash'] = 'kakaopay'
+
+
+def save_order(request: OrderInput, *, payment: OrderPayment | None = None):
     connection = connection_factory()
     try:
         connection.begin()
@@ -112,6 +121,14 @@ def save_order(request: OrderInput):
                 incoming = _canonical((i.menu_id, i.quantity, i.option_ids) for i in request.items)
                 if existing['store_id'] != request.store_id or _type(existing) != request.order_type or same_items != incoming:
                     raise HTTPException(409, '이미 사용된 주문 UUID의 내용이 다릅니다.')
+                if payment is not None:
+                    cursor.execute('''SELECT provider_transaction_id, amount FROM payments
+                        WHERE order_id=%s AND payment_method=%s AND is_test=%s''',
+                        (existing['order_id'], payment.method, payment.method != 'cash'))
+                    recorded = cursor.fetchone()
+                    if (not recorded or recorded['provider_transaction_id'] != payment.tid
+                        or recorded['amount'] != payment.amount):
+                        raise HTTPException(409, '기존 주문의 결제 기록이 일치하지 않습니다.')
                 connection.commit()
                 return {'order_id': existing['order_id'], 'replayed': True}
             if not device['is_active']:
@@ -134,6 +151,12 @@ def save_order(request: OrderInput):
                 if price < 0:
                     raise HTTPException(422, '메뉴 가격 정보를 확인해 주세요.')
                 total += price * item.quantity
+            if payment is not None:
+                if total <= 0:
+                    raise HTTPException(422, '결제 금액은 0원보다 커야 합니다.')
+                if total != payment.amount:
+                    raise HTTPException(409 if payment.method == 'kakaopay' else 422,
+                                        '결제 금액과 현재 주문 금액이 일치하지 않습니다.')
             cursor.execute('INSERT INTO orders (store_id,table_no,device_id,client_order_id,order_type) VALUES (%s,NULL,%s,%s,%s)',
                            (request.store_id,request.device_id,str(request.client_order_id),request.order_type))
             order_id = cursor.lastrowid
@@ -143,6 +166,11 @@ def save_order(request: OrderInput):
                 item_id = cursor.lastrowid
                 for option_id in sorted(item.option_ids):
                     cursor.execute('INSERT INTO order_item_option (item_id,option_id) VALUES (%s,%s)', (item_id,option_id))
+            if payment is not None:
+                cursor.execute('''INSERT INTO payments
+                    (order_id,payment_method,amount,provider_transaction_id,is_test,approved_at)
+                    VALUES (%s,%s,%s,%s,%s,%s)''',
+                    (order_id, payment.method, total, payment.tid, payment.method != 'cash', payment.approved_at))
             connection.commit()
             return {'order_id': order_id, 'replayed': False, 'total_at_submission': total}
     except Exception:
@@ -171,7 +199,7 @@ def list_orders(limit=100, offset=0):
         connection.close()
 
 
-def order_detail(order_id):
+def order_detail(order_id, *, include_cash=False):
     connection = connection_factory()
     try:
         with connection.cursor() as cursor:
@@ -185,7 +213,34 @@ def order_detail(order_id):
                 raise HTTPException(404, '주문이 없습니다.')
             result = _header(row)
             result['items'] = _items(cursor, order_id)
+            if include_cash:
+                cursor.execute('''SELECT amount, approved_at FROM payments
+                    WHERE order_id=%s AND payment_method='cash' AND is_test=FALSE''', (order_id,))
+                cash = cursor.fetchone()
+                if cash:
+                    result['cash_payment'] = {'amount': cash['amount'], 'received': cash['approved_at'] is not None}
             return result
     finally:
         connection.rollback()
+        connection.close()
+
+
+def confirm_cash(order_id):
+    connection = connection_factory()
+    try:
+        connection.begin()
+        with connection.cursor() as cursor:
+            cursor.execute('''SELECT payment_id FROM payments
+                WHERE order_id=%s AND payment_method='cash' AND is_test=FALSE FOR UPDATE''', (order_id,))
+            payment = cursor.fetchone()
+            if not payment:
+                raise HTTPException(404, '현금 결제 주문이 없습니다.')
+            cursor.execute('''UPDATE payments SET approved_at=CURRENT_TIMESTAMP
+                WHERE payment_id=%s AND approved_at IS NULL''', (payment['payment_id'],))
+        connection.commit()
+        return {'order_id': order_id, 'received': True}
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
         connection.close()
