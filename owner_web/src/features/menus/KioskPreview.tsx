@@ -39,9 +39,37 @@ export const menuLabel = (m: Pick<Menu, "name">) => m.name.trim() || "새 메뉴
 const markClass = (mark: DropMark | null, id: string) =>
   mark?.id === id ? `drop-${mark.mode}` : "";
 
+// 키오스크 MenuImage와 같은 모양: 사진이 있으면 둥근 모서리 사진, 없거나 열지 못하면 분류 아이콘.
+function CardPicture({
+  src,
+  categoryName,
+}: {
+  src: string | null;
+  categoryName: string;
+}) {
+  const [failed, setFailed] = useState<string | null>(null);
+  const Icon = categoryIcon(categoryName);
+  return (
+    <span className="kiosk-icon" aria-hidden="true">
+      {src && failed !== src ? (
+        <img
+          className="kiosk-photo"
+          src={src}
+          alt=""
+          draggable={false}
+          onError={() => setFailed(src)}
+        />
+      ) : (
+        <Icon size={52} />
+      )}
+    </span>
+  );
+}
+
 function MenuCard({
   menu,
   categoryName,
+  photo,
   selected,
   changed,
   mark,
@@ -49,6 +77,7 @@ function MenuCard({
 }: {
   menu: Menu;
   categoryName: string;
+  photo: string | null;
   selected: boolean;
   changed: boolean;
   mark: DropMark | null;
@@ -70,7 +99,6 @@ function MenuCard({
       label,
     } satisfies DropData,
   });
-  const Icon = categoryIcon(categoryName);
   return (
     <button
       ref={(el) => {
@@ -97,9 +125,7 @@ function MenuCard({
       onClick={onSelect}
     >
       {changed && <span className="unsaved-dot" aria-hidden="true" />}
-      <span className="kiosk-icon" aria-hidden="true">
-        <Icon size={52} />
-      </span>
+      <CardPicture src={photo} categoryName={categoryName} />
       {menu.isSoldOut && <span className="kiosk-sold-out">품절</span>}
       <span className={`kiosk-name ${menu.name.trim() ? "" : "placeholder"}`}>
         {menu.name.trim() || "이름 입력"}
@@ -182,6 +208,7 @@ export function KioskPreview({
   onAddCategory,
   onRenameCategory,
   onFinishCategory,
+  photoSrc,
 }: {
   board: MenuBoard;
   category: CategoryFilter;
@@ -194,6 +221,8 @@ export function KioskPreview({
   onAddCategory(): void;
   onRenameCategory(id: number, name: string): void;
   onFinishCategory(id: number): void;
+  // 메뉴 카드에 보일 사진 주소. 없으면 분류 아이콘을 그린다.
+  photoSrc?(menu: Menu): string | null;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.5);
@@ -305,6 +334,7 @@ export function KioskPreview({
                         key={m.id}
                         menu={m}
                         categoryName={categoryName(m.categoryId)}
+                        photo={photoSrc?.(m) ?? null}
                         selected={m.id === selectedMenuId}
                         changed={changedMenuIds.has(m.id)}
                         mark={mark}

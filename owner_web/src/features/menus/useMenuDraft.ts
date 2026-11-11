@@ -105,6 +105,12 @@ export function useMenuDraft({
     },
     soldOutError,
     isPending: (key: string) => pending.includes(key),
+    // 사진은 서버에 바로 올라가므로 저장본과 초안에 함께 반영한다(되돌리기 대상 아님).
+    setMenuImage: (id: number, imageUrl: string | null) => {
+      const update: BoardUpdate = (b) => updateMenu(b, id, { imageUrl });
+      if (id > 0) onSavedChange(update);
+      setDraft(update);
+    },
     setMenuSoldOut: (id: number, isSoldOut: boolean) =>
       id < 0
         ? setDraft((b) => updateMenu(b, id, { isSoldOut }))

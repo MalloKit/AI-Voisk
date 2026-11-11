@@ -33,6 +33,8 @@ export interface Menu {
   isActive: boolean; // false면 판매 중지, 키오스크에 보이지 않음
   isSoldOut: boolean; // true면 키오스크에 품절로 보임
   sort: number; // menu_sort
+  // 대표 사진(menu_img) 서버 기준 상대 경로. 품절처럼 저장 바를 거치지 않고 즉시 저장한다.
+  imageUrl?: string | null;
 }
 export interface MenuOption {
   id: number; // option_id

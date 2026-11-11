@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { ImagePlus, Trash2, X } from "lucide-react";
 import type { Menu } from "../../data/models";
+import { PHOTO_ACCEPT } from "../../data/menuImage";
 import { kioskView, moveMenu, updateMenu } from "../../data/menuDraft";
 import { LIMITS, nameError, parsePrice } from "../../data/validation";
 import type { MenuDraft } from "./useMenuDraft";
@@ -16,16 +17,102 @@ export interface FocusRequest {
 
 const priceToText = (price: number) => (price ? String(price) : "");
 
+// 메뉴 사진 칸. 저장된 메뉴는 고르면 바로 올라가고, 새 메뉴는 저장할 때 함께 올라간다.
+export interface PhotoField {
+  src: string | null;
+  busy: boolean;
+  error: string | null;
+  onPick(file: File): void;
+  onRemove(): void;
+}
+
+function MenuPhoto({
+  photo,
+  name,
+  isNew,
+}: {
+  photo: PhotoField;
+  name: string;
+  isNew: boolean;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="form-field menu-photo-field">
+      <span className="field-label">
+        사진{" "}
+        <span className="switch-note">
+          {isNew ? "(저장할 때 함께 올림)" : "(즉시 반영)"}
+        </span>
+      </span>
+      <div className="menu-photo">
+        {photo.src ? (
+          <img src={photo.src} alt={`${name} 사진`} />
+        ) : (
+          <span className="menu-photo-empty">사진 없음</span>
+        )}
+        <div className="menu-photo-actions">
+          <button
+            type="button"
+            disabled={photo.busy}
+            onClick={() => input.current?.click()}
+          >
+            <ImagePlus size={16} aria-hidden="true" />{" "}
+            {photo.busy
+              ? "올리는 중…"
+              : photo.src
+                ? "사진 바꾸기"
+                : "사진 올리기"}
+          </button>
+          {photo.src && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="사진 지우기"
+              disabled={photo.busy}
+              onClick={photo.onRemove}
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </div>
+        <input
+          ref={input}
+          type="file"
+          accept={PHOTO_ACCEPT}
+          hidden
+          aria-label="메뉴 사진 파일"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) photo.onPick(file);
+          }}
+        />
+      </div>
+      <div className="form-help">
+        {photo.error ? (
+          <span className="error-text" role="alert">
+            {photo.error}
+          </span>
+        ) : (
+          <span>JPG·PNG·WEBP. 올릴 때 긴 변 800px로 줄입니다.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function MenuEditor({
   menu,
   draft,
   focus,
+  photo,
   onClose,
   onCategoryChange,
 }: {
   menu: Menu;
   draft: MenuDraft;
   focus: FocusRequest | null;
+  photo?: PhotoField;
   onClose(): void;
   onCategoryChange(categoryId: number): void;
 }) {
@@ -110,6 +197,13 @@ export function MenuEditor({
         }
         maxLength={LIMITS.description}
       />
+      {photo && (
+        <MenuPhoto
+          photo={photo}
+          name={menu.name.trim() || "새 메뉴"}
+          isNew={isNew}
+        />
+      )}
       <div className="form-field">
         <label htmlFor="menu-category">카테고리</label>
         <select

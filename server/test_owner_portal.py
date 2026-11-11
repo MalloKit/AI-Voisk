@@ -105,6 +105,17 @@ class ReadTests(OwnerPortalTestCase):
         self.assertEqual([(o['option_id'], o['menu_option_sort'], o['is_active']) for o in board['options']],
                          [(100, 4, True), (101, 9, False), (102, 11, True)])
 
+    def test_menu_board_has_main_photo_url_per_menu(self):
+        self.f.db.executescript("""
+            INSERT INTO menu_img (menu_id, img_nm, is_main) VALUES (10, '10_aaaaaaaaaaaaaaaa.jpg', 1);
+            INSERT INTO menu_img (menu_id, img_nm, is_main) VALUES (11, '11_bbbbbbbbbbbbbbbb.jpg', 0);
+        """)
+        menus = {m['menu_id']: m for m in self.client.get(BOARD).json()['menus']}
+        self.assertEqual(menus[10]['image_url'], '/media/menu/10_aaaaaaaaaaaaaaaa.jpg')
+        # 대표 사진이 아닌 행과 사진이 없는 메뉴는 null
+        self.assertIsNone(menus[11]['image_url'])
+        self.assertIsNone(menus[12]['image_url'])
+
     def test_order_list_is_scoped_utc_and_paged(self):
         page = self.client.get(STORE + '/orders').json()
         self.assertEqual((page['total'], [o['order_id'] for o in page['orders']]), (2, [1001, 1000]))

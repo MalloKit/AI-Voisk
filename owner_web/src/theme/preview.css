@@ -193,6 +193,15 @@
   align-items: center;
   justify-content: center;
 }
+/* 키오스크 MenuImage: 아이콘 지름(92)의 1.3배 폭, 모서리 반경 0.18배 */
+.kiosk-photo {
+  display: block;
+  width: 120px;
+  height: 92px;
+  border-radius: 17px;
+  object-fit: cover;
+  pointer-events: none;
+}
 .kiosk-icon svg {
   box-sizing: content-box;
   padding: 20px;

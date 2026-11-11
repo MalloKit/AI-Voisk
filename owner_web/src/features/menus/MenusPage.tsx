@@ -10,9 +10,10 @@ import {
   type DragEndEvent,
   type DragMoveEvent,
 } from "@dnd-kit/core";
-import type { MenuBoard } from "../../data/models";
+import type { Menu, MenuBoard } from "../../data/models";
 import type { OwnerRepository } from "../../data/ownerRepository";
 import { apiErrorMessage } from "../../data/ownerApiRepository";
+import { shrinkImage, type MenuPhotos } from "../../data/menuImage";
 import {
   addCategory,
   addMenu,
@@ -53,6 +54,15 @@ export interface MenusGuard {
   discard(): void;
 }
 
+// 새 메뉴에 고른 사진. 저장해서 실제 메뉴 번호가 생기면 올린다.
+type PendingPhotos = Record<number, { blob: Blob; preview: string }>;
+
+// 사진 줄이기 실패는 그 메시지를, 서버 오류는 상태에 맞는 안내를 보인다.
+const photoMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && !("status" in error)
+    ? error.message
+    : apiErrorMessage(error, fallback);
+
 const isEditable = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (target.isContentEditable ||
@@ -74,12 +84,15 @@ function sideOf(event: DragMoveEvent | DragEndEvent): Side {
 
 export function MenusPage({
   repository,
+  photos,
   storeId,
   board,
   onBoardChange,
   guard,
 }: {
   repository: OwnerRepository;
+  // 없으면 사진 칸을 보이지 않는다.
+  photos?: MenuPhotos;
   storeId: number;
   board: MenuBoard;
   onBoardChange(update: (board: MenuBoard) => MenuBoard): void;
@@ -100,6 +113,14 @@ export function MenusPage({
   const [confirming, setConfirming] = useState(false);
   const [dragging, setDragging] = useState<DragData | null>(null);
   const [mark, setMark] = useState<DropMark | null>(null);
+  const [pendingPhotos, setPendingPhotos] = useState<PendingPhotos>({});
+  const [photoBusy, setPhotoBusy] = useState<number | null>(null);
+  const [photoError, setPhotoError] = useState<{
+    id: number;
+    text: string;
+  } | null>(null);
+  // 메뉴는 저장했지만 사진을 못 올렸을 때의 안내. 편집하면 지우는 message와 따로 둔다.
+  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
 
   // 되돌리기로 사라진 카테고리를 보고 있었다면 전체로 돌아간다.
   const view: CategoryFilter =
@@ -118,6 +139,109 @@ export function MenusPage({
 
   // 편집하면 지난 저장 안내는 지운다.
   useEffect(() => setMessage(null), [draft.draft]);
+
+  // 되돌리기·변경 취소로 사라진 새 메뉴의 사진은 버린다(같은 임시 번호가 다시 쓰일 수 있다).
+  useEffect(() => {
+    const alive = new Set(draft.draft.menus.map((m) => m.id));
+    setPendingPhotos((p) => {
+      const stale = Object.keys(p)
+        .map(Number)
+        .filter((id) => !alive.has(id));
+      if (!stale.length) return p;
+      const next = { ...p };
+      for (const id of stale) {
+        URL.revokeObjectURL(next[id].preview);
+        delete next[id];
+      }
+      return next;
+    });
+  }, [draft.draft]);
+  const pendingRef = useRef(pendingPhotos);
+  pendingRef.current = pendingPhotos;
+  useEffect(
+    () => () =>
+      Object.values(pendingRef.current).forEach((p) =>
+        URL.revokeObjectURL(p.preview),
+      ),
+    [],
+  );
+
+  const photoSrc = (m: Menu) =>
+    m.id < 0
+      ? (pendingPhotos[m.id]?.preview ?? null)
+      : (photos?.imageSrc(m.imageUrl ?? null) ?? null);
+
+  // 저장된 메뉴는 바로 올리고(품절처럼 즉시 반영), 새 메뉴는 저장할 때까지 들고 있는다.
+  async function pickPhoto(id: number, file: File) {
+    if (!photos) return;
+    setPhotoError(null);
+    setPhotoNotice(null);
+    setPhotoBusy(id);
+    try {
+      const blob = await shrinkImage(file);
+      if (id < 0) {
+        const preview = URL.createObjectURL(blob);
+        setPendingPhotos((p) => {
+          if (p[id]) URL.revokeObjectURL(p[id].preview);
+          return { ...p, [id]: { blob, preview } };
+        });
+      } else {
+        draft.setMenuImage(id, await photos.uploadMenuImage(id, blob));
+      }
+    } catch (error) {
+      setPhotoError({ id, text: photoMessage(error, "사진을 올리지 못했습니다.") });
+    } finally {
+      setPhotoBusy(null);
+    }
+  }
+  async function removePhoto(id: number) {
+    setPhotoError(null);
+    if (id < 0) {
+      setPendingPhotos((p) => {
+        if (!p[id]) return p;
+        URL.revokeObjectURL(p[id].preview);
+        const { [id]: _, ...rest } = p;
+        return rest;
+      });
+      return;
+    }
+    if (!photos) return;
+    setPhotoBusy(id);
+    try {
+      await photos.deleteMenuImage(id);
+      draft.setMenuImage(id, null);
+    } catch (error) {
+      setPhotoError({ id, text: apiErrorMessage(error, "사진을 지우지 못했습니다.") });
+    } finally {
+      setPhotoBusy(null);
+    }
+  }
+  // 저장으로 실제 번호가 생긴 새 메뉴의 사진을 올린다. 실패해도 메뉴 저장은 이미 끝났다.
+  // waiting은 저장 전에 떠 둔 것이다. 저장 뒤 초안에서 임시 번호가 사라지면 위 정리 효과가 비우기 때문이다.
+  async function uploadPendingPhotos(
+    waiting: [string, PendingPhotos[number]][],
+    ids: Record<number, number>,
+  ) {
+    if (!photos || !waiting.length) return;
+    let failed = 0;
+    for (const [temp, { blob }] of waiting) {
+      const id = ids[Number(temp)];
+      if (!id) continue;
+      try {
+        draft.setMenuImage(id, await photos.uploadMenuImage(id, blob));
+      } catch {
+        failed++;
+      }
+    }
+    setPendingPhotos((p) => {
+      Object.values(p).forEach((x) => URL.revokeObjectURL(x.preview));
+      return {};
+    });
+    if (failed)
+      setPhotoNotice(
+        `메뉴는 저장했지만 사진 ${failed}장을 올리지 못했습니다. 메뉴를 눌러 사진을 다시 올려 주세요.`,
+      );
+  }
 
   function requestFocus(id: number, field: FocusRequest["field"]) {
     setFocus((f) => ({ id, field, serial: (f?.serial ?? 0) + 1 }));
@@ -181,8 +305,11 @@ export function MenusPage({
     return !!problem;
   }
   async function commit() {
+    const waiting = Object.entries(pendingRef.current);
+    setPhotoNotice(null);
     try {
       const { ids } = await draft.save();
+      await uploadPendingPhotos(waiting, ids);
       // 새로 만든 항목은 실제 id로 바뀐다.
       setSelection((s) =>
         s && s.id < 0 && ids[s.id] ? { ...s, id: ids[s.id] } : s,
@@ -325,6 +452,15 @@ export function MenusPage({
                   menu={menu}
                   draft={draft}
                   focus={focus}
+                  photo={
+                    photos && {
+                      src: photoSrc(menu),
+                      busy: photoBusy === menu.id,
+                      error: photoError?.id === menu.id ? photoError.text : null,
+                      onPick: (file) => void pickPhoto(menu.id, file),
+                      onRemove: () => void removePhoto(menu.id),
+                    }
+                  }
                   onClose={() => setSelection(null)}
                   onCategoryChange={(id) => {
                     if (view !== "all") setCategory(id);
@@ -369,6 +505,7 @@ export function MenusPage({
               )
             }
             onFinishCategory={finishCategory}
+            photoSrc={photoSrc}
           />
         </div>
         <DragOverlay dropAnimation={null}>
@@ -379,7 +516,7 @@ export function MenusPage({
         count={draft.changes.length}
         canUndo={draft.canUndo}
         saving={draft.saving}
-        message={message}
+        message={message ?? photoNotice}
         onUndo={draft.undo}
         onDiscard={() => {
           draft.discard();
