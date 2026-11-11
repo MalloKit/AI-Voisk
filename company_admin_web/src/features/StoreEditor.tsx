@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { PostcodeSearch } from "./PostcodeSearch";
+import { usePostcodeSearch } from "./usePostcodeSearch";
 import { LimitedInput } from "../components/LimitedInput";
 import { NumberInput } from "../components/NumberInput";
 import { numberDigits, validPhone, validBusiness, canonicalNumber, sameNumber } from "../data/koreanNumbers";
@@ -61,8 +61,10 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId, owners
   const [loginId, setLoginId] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [searchingAddress, setSearchingAddress] = useState(false);
-  const addressButton = useRef<HTMLButtonElement>(null);
+  const { addressButton, searchingAddress, addressError, openAddressSearch } = usePostcodeSearch(({ zonecode, address }) => {
+    setValues((previous) => ({ ...previous, store_code: zonecode, address }));
+    setErrors((previous) => ({ ...previous, store_code: undefined, address: undefined }));
+  });
   const pending = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -129,10 +131,6 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId, owners
     setValues(next);
     setErrors((previous) => ({ ...previous, [key]: previous[key] ? validateStore(next, original)[key] : undefined }));
   }
-  function closeAddressSearch() {
-    setSearchingAddress(false);
-    addressButton.current?.focus();
-  }
   return <form id={formId} ref={form} className="store-form" onSubmit={save} noValidate aria-busy={busy}>
     <div className="store-form-grid">
       {storeFields.map(([key, label, limit]) => <div className="field form-field" key={key}>
@@ -153,16 +151,12 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId, owners
             onValueChange={(value) => updateValue(key, value)} />
             {key === "store_code" && <button ref={addressButton} type="button"
               style={{ flexShrink: 0, whiteSpace: "nowrap" }} disabled={busy}
-              aria-expanded={searchingAddress} onClick={() => setSearchingAddress(true)}>주소 검색</button>}
+              onClick={openAddressSearch}>주소 검색</button>}
           </div>}
         {errors[key] && <p id={key + "-error"} className="field-error">{errors[key]}</p>}
       </div>)}
     </div>
-    {searchingAddress && <PostcodeSearch onClose={closeAddressSearch} onSelect={({ zonecode, address }) => {
-      setValues((previous) => ({ ...previous, store_code: zonecode, address }));
-      setErrors((previous) => ({ ...previous, store_code: undefined, address: undefined }));
-      closeAddressSearch();
-    }} />}
+    {addressError && <p role="alert" className="field-error">{addressError}</p>}
     {!store && ownersResult && <fieldset className="store-form">
       <legend>점주 연결</legend>
       <label className="field"><span>연결 방식</span>
