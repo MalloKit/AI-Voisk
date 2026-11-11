@@ -16,7 +16,8 @@ import '../voice/voice_port.dart';
 import 'json_file_store.dart';
 import 'kiosk_settings.dart';
 
-const appVersion = '1.1.0+2';
+/// pubspec.yaml의 version과 같아야 합니다(test/release_config_test.dart).
+const appVersion = '1.2.0+3';
 
 /// 주문 전송 결과. queued는 기기에 저장했고 연결이 복구되면 자동으로 보냅니다.
 sealed class OrderSubmitResult {
