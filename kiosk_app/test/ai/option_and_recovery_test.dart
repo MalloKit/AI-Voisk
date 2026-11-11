@@ -57,6 +57,8 @@ void main() {
     onHighlight: (ids, {focus = false}) => highlights.add((ids, focus)),
     errorTimeout: errorTimeout,
     maxFailures: maxFailures,
+    // 대화 흐름 검증용: 안내 뒤 자동으로 다음 발화를 듣습니다(마이크 버튼 동작은 push_to_talk_test.dart).
+    listenAfterPrompt: true,
   );
 
   setUp(() {

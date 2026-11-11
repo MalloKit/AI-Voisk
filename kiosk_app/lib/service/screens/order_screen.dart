@@ -356,7 +356,10 @@ class _OrderScreenState extends State<OrderScreen> {
     if (L10n.instance.language != AppLanguage.ko) {
       _showNotice(tr('음성 주문은 한국어만 지원합니다.'));
     }
-    if (conversation.active) return;
+    if (conversation.active) {
+      await conversation.talk();
+      return;
+    }
     await conversation.start(seniorMode: _senior);
     if (!conversation.active && conversation.message.isNotEmpty) {
       _showNotice(conversation.message);
@@ -902,19 +905,28 @@ class _OrderScreenState extends State<OrderScreen> {
           listenable: _conversation ?? _noVoice,
           builder: (context, _) {
             final active = _conversation?.active ?? false;
+            // 마이크는 누를 때만 켜집니다. 실제로 듣는 동안만 빨간 "듣는 중"이고,
+            // 대화 중에 듣지 않을 때는 "말하기"(누르면 한 번 듣기)입니다.
+            final listening = _conversation?.micOpen ?? false;
             return OutlinedButton.icon(
               key: const Key('voice-button'),
               onPressed: _startVoice,
               style: _feedbackStyle().copyWith(
-                backgroundColor: active
+                backgroundColor: listening
                     ? const WidgetStatePropertyAll(Color(0xFFD94F3D))
                     : null,
-                foregroundColor: active
+                foregroundColor: listening
                     ? const WidgetStatePropertyAll(Colors.white)
                     : null,
               ),
-              icon: Icon(active ? Icons.mic : Icons.mic_none),
-              label: Text(active ? tr('듣는 중') : tr('말로 주문하기')),
+              icon: Icon(listening ? Icons.mic : Icons.mic_none),
+              label: Text(
+                listening
+                    ? tr('듣는 중')
+                    : active
+                    ? tr('말하기')
+                    : tr('말로 주문하기'),
+              ),
             );
           },
         ),

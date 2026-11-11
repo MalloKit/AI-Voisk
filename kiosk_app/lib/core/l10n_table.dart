@@ -119,6 +119,12 @@ const Map<String, Map<String, String>> translations = {
   '대기 중': {'ja': '待機中', 'en': 'Waiting', 'zh': '待机中'},
   '도움이 필요하신가요?': {'ja': 'お手伝いが必要ですか？', 'en': 'Need help?', 'zh': '需要帮助吗？'},
   '듣고 있어요': {'ja': '聞いています', 'en': 'Listening', 'zh': '正在聆听'},
+  '마이크 버튼을 누르고 말씀해 주세요': {
+    'ja': 'マイクボタンを押して話してください',
+    'en': 'Press the mic button to speak',
+    'zh': '请按麦克风按钮说话',
+  },
+  '말하기': {'ja': '話す', 'en': 'Speak', 'zh': '说话'},
   '듣는 중': {'ja': '聞き取り中', 'en': 'Listening', 'zh': '聆听中'},
   '등록된 메뉴가 없습니다.': {
     'ja': '登録されたメニューがありません。',

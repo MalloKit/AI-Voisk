@@ -28,6 +28,8 @@ void main() {
     maxFailures: maxFailures,
     clock: () => now,
     newId: () => '00000000-0000-4000-8000-000000000001',
+    // 대화 흐름 검증용: 안내 뒤 자동으로 다음 발화를 듣습니다(마이크 버튼 동작은 push_to_talk_test.dart).
+    listenAfterPrompt: true,
   );
 
   setUp(() {
