@@ -95,7 +95,7 @@ export function OwnersPage({
                       aria-label={`연결 매장: ${o.loginId}`}
                       onClick={() => setDetail(o)}
                     >연결 매장</button>
-                    {repository?.resetPassword && <button aria-label={`비밀번호 초기화: ${o.loginId}`}
+                    {repository?.resetPasswordFromStore && <button aria-label={`비밀번호 초기화: ${o.loginId}`}
                       onClick={() => { setNotice(""); setResetting(o); }}>비밀번호 초기화</button>}
                     </div>
                   ),
@@ -111,7 +111,7 @@ export function OwnersPage({
           setSaving(false); setCreating(false); setNotice("점주 계정을 생성했습니다. 목록에서 연결 매장과 상세 정보를 확인할 수 있습니다."); result.reload();
         }} />
       </Modal>}
-      {resetting && repository?.resetPassword && <Modal title="점주 비밀번호 초기화" closeDisabled={saving}
+      {resetting && repository?.resetPasswordFromStore && <Modal title="점주 비밀번호 초기화" closeDisabled={saving}
         onClose={() => { if (!saving) setResetting(undefined); }}
         footer={<div className="store-form-actions"><button disabled={saving} onClick={() => setResetting(undefined)}>취소</button>
           <button type="submit" form={formId} disabled={saving} className="button-primary">{saving ? "변경 중…" : "변경"}</button></div>}>

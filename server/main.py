@@ -25,7 +25,7 @@ from order_service import OrderPayment, OrderInput, save_order, list_orders, ord
 from store_service import StoreNotFound, list_stores, store_detail
 from store_write_service import StoreRegistration, StorePatch, create_store, update_store
 from owner_service import OwnerNotFound, list_owners, owner_detail
-from owner_write_service import OwnerCreate, OwnerPassword, StoreOwnerPatch, create_owner, update_store_owner, reset_owner_password
+from owner_write_service import OwnerCreate, OwnerPassword, OwnerStorePassword, StoreOwnerPatch, create_owner, update_store_owner, reset_owner_password
 from device_service import DeviceNotFound, list_devices, device_detail
 from device_write_service import DeviceCreate, DeviceStatusPatch, create_device, update_device_status
 from alert_service import AlertNotFound, list_alerts, alert_detail
@@ -427,11 +427,13 @@ def admin_create_owner(payload: OwnerCreate):
 
 
 @app.patch('/admin/owners/{owner_id}/password', status_code=204, response_class=Response)
-def admin_reset_owner_password(payload: OwnerPassword, owner_id: int = ApiPath(ge=1, le=2147483647)):
+def admin_reset_owner_password(payload: OwnerPassword | OwnerStorePassword, owner_id: int = ApiPath(ge=1, le=2147483647)):
     try:
         reset_owner_password(owner_id, payload)
     except OwnerNotFound:
         raise HTTPException(404, '점주 계정이 없습니다.') from None
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(503, '비밀번호 변경 결과를 확인할 수 없습니다. 연결 상태를 확인한 후 다시 시도해 주세요.') from None
     return Response(status_code=204)

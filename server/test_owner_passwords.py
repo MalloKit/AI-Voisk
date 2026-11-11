@@ -126,3 +126,55 @@ class OwnerPasswordSessionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 204, response.text)
         self.assertIsNone(owner_auth.sessions.get(token))
         self.assertIsNotNone(owner_auth.sessions.get(other))
+
+
+    def test_reset_from_selected_store_revokes_session_and_uses_new_credentials(self):
+        import owner_auth
+
+        self.db.execute("UPDATE store SET owner_id=7, store_phone='010-1234-5678' WHERE store_id=10")
+        self.db.execute("UPDATE store SET owner_id=7, store_phone='051-321-4321' WHERE store_id=11")
+        self.db.commit()
+        path = '/admin/owners/7/password'
+        with patch('owner_auth.connection_factory', side_effect=lambda: owner_tests.Connection(self)), \
+                patch.object(owner_auth, 'attempts', admin_auth.AttemptLimiter()), TestClient(app) as owner:
+            def login(password):
+                origin = {'Origin': self.client.headers['Origin']}
+                csrf = owner.get('/auth/owner/csrf', headers=origin).json()['csrf_token']
+                return owner.post('/auth/owner/login', headers={**origin, 'X-CSRF-Token': csrf},
+                                  json={'login_id': 'LegacyOwner', 'password': password})
+
+            self.assertEqual(login(owner_tests._PASSWORD).status_code, 200)
+            other, _ = owner_auth.sessions.create(admin=owner_auth.Owner(8, 'second-owner'))
+            self.addCleanup(owner_auth.sessions.revoke, other)
+            response = self.client.patch(path, json={'store_id': 10})
+            self.assertEqual(response.status_code, 204)
+            self.assertEqual(response.content, b'')
+            self.assertEqual(owner.get('/auth/owner/me').status_code, 401)
+            self.assertIsNotNone(owner_auth.sessions.get(other))
+            self.assertEqual(login(owner_tests._PASSWORD).status_code, 401)
+            new = login('12345678')
+            self.assertEqual(new.status_code, 200)
+            self.assertEqual([store['store_id'] for store in new.json()['owner']['stores']], [10, 11])
+            self.assertNotIn('12345678', new.text)
+
+    def test_store_reset_rejects_unlinked_stores_short_numbers_and_failed_commit(self):
+        import owner_auth
+
+        path = '/admin/owners/7/password'
+        original = self.db.execute('SELECT own_pw FROM owner WHERE owner_id=7').fetchone()[0]
+        token, _ = owner_auth.sessions.create(admin=owner_auth.Owner(7, 'LegacyOwner'))
+        self.addCleanup(owner_auth.sessions.revoke, token)
+        self.assertEqual(self.client.patch(path, json={'store_id': 10}).status_code, 409)
+        self.assertEqual(self.client.patch(path, json={'store_id': 999}).status_code, 409)
+        self.db.execute("UPDATE store SET owner_id=7, store_phone='12-345' WHERE store_id=10")
+        self.db.commit()
+        short = self.client.patch(path, json={'store_id': 10})
+        self.assertEqual(short.status_code, 422)
+        self.assertNotIn('12-345', short.text)
+        self.assertEqual(self.client.patch(path, json={'store_id': 10, 'password': 'untrusted'}).status_code, 422)
+        self.db.execute("UPDATE store SET store_phone='010-1234-5678' WHERE store_id=10")
+        self.db.commit()
+        self.commit_failure = True
+        self.assertEqual(self.client.patch(path, json={'store_id': 10}).status_code, 503)
+        self.assertTrue(self.db.execute('SELECT own_pw FROM owner WHERE owner_id=7').fetchone()[0] == original)
+        self.assertIsNotNone(owner_auth.sessions.get(token))

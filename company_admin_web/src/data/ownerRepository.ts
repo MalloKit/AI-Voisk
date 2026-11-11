@@ -3,6 +3,7 @@ import type { ApiOwner, ApiOwnerDetail, OwnerStore } from "./models";
 
 export interface OwnerCreateInput { login_id: string; password: string; }
 export interface OwnerRepository {
+  resetPasswordFromStore?(id: number, storeId: number, signal?: AbortSignal): Promise<void>;
   resetPassword?(id: number, password: string, signal?: AbortSignal): Promise<void>;
   create?(input: OwnerCreateInput, signal?: AbortSignal): Promise<ApiOwner>;
   load(signal?: AbortSignal): Promise<ApiOwner[]>;
@@ -89,14 +90,28 @@ export class ApiOwnerRepository implements OwnerRepository {
       signal?.removeEventListener("abort", cancel);
     }
   }
-  async resetPassword(id: number, password: string, signal?: AbortSignal): Promise<void> {
+  private async changePassword(id: number, body: { password: string } | { store_id: number }, signal?: AbortSignal) {
     integer(id, 1);
     const token = record(await this.get("/auth/admin/csrf", signal)).csrf_token;
     if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("보안 요청 정보를 확인할 수 없습니다.");
-    await this.get(`/admin/owners/${id}/password`, signal, {
-      method: "PATCH", headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-      body: JSON.stringify({ password }),
-    });
+    try {
+      await this.get('/admin/owners/' + id + '/password', signal, {
+        method: "PATCH", headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      if ("store_id" in body && error instanceof AdminApiError) {
+        if (error.status === 409) throw new AdminApiError(409, "이 점주와 연결된 매장을 다시 선택해 주세요.");
+        if (error.status === 422) throw new AdminApiError(422, "선택한 매장의 전화번호가 숫자 8자리 이상인지 확인해 주세요.");
+      }
+      throw error;
+    }
+  }
+  async resetPassword(id: number, password: string, signal?: AbortSignal): Promise<void> {
+    return this.changePassword(id, { password }, signal);
+  }
+  async resetPasswordFromStore(id: number, storeId: number, signal?: AbortSignal): Promise<void> {
+    return this.changePassword(id, { store_id: integer(storeId, 1) }, signal);
   }
   async create(input: OwnerCreateInput, signal?: AbortSignal): Promise<ApiOwner> {
     const token = record(await this.get("/auth/admin/csrf", signal)).csrf_token;

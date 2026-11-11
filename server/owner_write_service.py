@@ -40,6 +40,11 @@ class OwnerCreate(OwnerPassword):
         return value
 
 
+class OwnerStorePassword(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    store_id: Identifier
+
+
 class StoreOwnerPatch(BaseModel):
     model_config = ConfigDict(extra='forbid')
     owner_id: Identifier | None
@@ -132,23 +137,37 @@ def update_store_owner(store_id: int, payload: StoreOwnerPatch):
         connection.close()
 
 
-def reset_owner_password(owner_id: int, payload: OwnerPassword):
-    encoded = _password_hash(payload)
-    connection = owner_service.connection_factory()
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute('START TRANSACTION')
-            cursor.execute('SELECT owner_id FROM owner WHERE owner_id = %s FOR UPDATE', (owner_id,))
-            if cursor.fetchone() is None:
-                raise owner_service.OwnerNotFound()
-            cursor.execute('UPDATE owner SET own_pw = %s WHERE owner_id = %s', (encoded, owner_id))
-            if cursor.rowcount != 1:
-                raise RuntimeError('Unexpected password update result')
-        connection.commit()
-        # 비밀번호가 유출돼 재설정한 경우를 위해, 이 점주의 기존 로그인 세션을 모두 끊습니다.
-        owner_auth.sessions.revoke_matching(lambda owner: getattr(owner, 'owner_id', None) == owner_id)
-    except Exception:
-        connection.rollback()
-        raise
-    finally:
-        connection.close()
+def reset_owner_password(owner_id: int, payload: OwnerPassword | OwnerStorePassword):
+    encoded = _password_hash(payload) if isinstance(payload, OwnerPassword) else None
+    with owner_auth.credential_lock:
+        connection = owner_service.connection_factory()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('START TRANSACTION')
+                store = None
+                if isinstance(payload, OwnerStorePassword):
+                    # Match the store-before-owner lock order used for changing ownership.
+                    cursor.execute('SELECT owner_id, store_phone FROM store WHERE store_id = %s FOR UPDATE',
+                                   (payload.store_id,))
+                    store = cursor.fetchone()
+                cursor.execute('SELECT owner_id FROM owner WHERE owner_id = %s FOR UPDATE', (owner_id,))
+                if cursor.fetchone() is None:
+                    raise owner_service.OwnerNotFound()
+                if isinstance(payload, OwnerStorePassword):
+                    if store is None or store['owner_id'] != owner_id:
+                        raise HTTPException(409, '이 점주와 연결된 매장을 다시 선택해 주세요.')
+                    try:
+                        password = phone_password(store['store_phone'])
+                    except ValueError:
+                        raise HTTPException(422, '매장 전화번호는 숫자가 8자리 이상이어야 합니다.') from None
+                    encoded = _password_hash(OwnerPassword(password=password))
+                cursor.execute('UPDATE owner SET own_pw = %s WHERE owner_id = %s', (encoded, owner_id))
+                if cursor.rowcount != 1:
+                    raise RuntimeError('Unexpected password update result')
+            connection.commit()
+            owner_auth.sessions.revoke_matching(lambda owner: getattr(owner, 'owner_id', None) == owner_id)
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
