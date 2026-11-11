@@ -1,5 +1,6 @@
 """점주 인증. admin_auth의 세션·CSRF·Argon2id·시도 제한을 재사용하고 저장소와 쿠키만 분리합니다."""
 from dataclasses import dataclass
+from threading import RLock
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StrictStr
@@ -18,6 +19,7 @@ class Owner:
 # Session.admin 필드 이름은 admin_auth 구현 그대로이며 여기서는 Owner를 담습니다.
 sessions = admin_auth.SessionStore()
 attempts = admin_auth.AttemptLimiter()
+credential_lock = RLock()
 
 
 def connection_factory():
@@ -121,15 +123,17 @@ def login(body: OwnerLoginInput, request: Request, response: Response):
         raise HTTPException(403, '인증 요청이 만료되었습니다. 다시 시도해 주세요.')
     admin_auth.check_csrf(request, session)
     attempts.check(request.client.host if request.client else '')
-    try:
-        row, stores = lookup_login(body.login_id)
-    except Exception:
-        raise HTTPException(503, '인증 서비스를 사용할 수 없습니다. 서버 연결을 확인해 주세요.') from None
-    # 없는 ID도 더미 해시를 검증해 응답 시간과 문구로 구분되지 않게 합니다.
-    if not admin_auth.verify_password(row.get('own_pw') if row else None, body.password.get_secret_value()):
-        raise HTTPException(401, '로그인 ID 또는 비밀번호가 올바르지 않습니다.')
-    owner = Owner(int(row['owner_id']), str(row['own_login_id']))
-    new_token, _ = sessions.create(owner, replace=token)
+    # Keep credential verification and session issuance ordered with password resets.
+    with credential_lock:
+        try:
+            row, stores = lookup_login(body.login_id)
+        except Exception:
+            raise HTTPException(503, '인증 서비스를 사용할 수 없습니다. 서버 연결을 확인해 주세요.') from None
+        # 없는 ID도 더미 해시를 검증해 응답 시간과 문구로 구분되지 않게 합니다.
+        if not admin_auth.verify_password(row.get('own_pw') if row else None, body.password.get_secret_value()):
+            raise HTTPException(401, '로그인 ID 또는 비밀번호가 올바르지 않습니다.')
+        owner = Owner(int(row['owner_id']), str(row['own_login_id']))
+        new_token, _ = sessions.create(owner, replace=token)
     set_cookie(response, new_token, authenticated=True)
     return _view(owner.owner_id, owner.login_id, stores)
 
