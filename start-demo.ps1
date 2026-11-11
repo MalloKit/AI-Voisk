@@ -8,11 +8,15 @@
 #   -NoBrowser               대시보드를 브라우저로 자동으로 열지 않습니다.
 #   -NoWeb                   서버만 켭니다(대시보드 없이).
 #   -Rebuild                 두 웹을 다시 빌드합니다(코드를 받은 뒤 처음 실행할 때는 자동으로 빌드합니다).
+#   -Tunnel                  Cloudflare Quick Tunnel로 서버를 https 주소로 엽니다. 태블릿이 같은 Wi-Fi가 아니어도 되고
+#                            방화벽 설정이 필요 없습니다. 서버는 이 노트북(127.0.0.1)에서만 열고, 관리자·점주 API는
+#                            터널로 들어와도 계속 막힙니다. cloudflared가 필요합니다(winget install Cloudflare.cloudflared).
 param(
   [ValidateSet("api", "claude_cli")] [string] $Backend = "api",
   [switch] $NoBrowser,
   [switch] $NoWeb,
-  [switch] $Rebuild
+  [switch] $Rebuild,
+  [switch] $Tunnel
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,6 +42,9 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
 if ($webs.Count -gt 0 -and -not (Get-Command npm -ErrorAction SilentlyContinue)) {
   $problems += "Node.js(npm)가 없습니다. Node.js 22.12 이상을 설치하거나 -NoWeb으로 서버만 켜 주세요."
 }
+if ($Tunnel -and -not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
+  $problems += "cloudflared가 없습니다. 'winget install --id Cloudflare.cloudflared'로 설치한 뒤 새 창에서 다시 실행해 주세요."
+}
 $ports = @(8001) + @($webs | ForEach-Object { $_.Port })
 foreach ($port in $ports) {
   $busy = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
@@ -60,10 +67,19 @@ if ($Backend -eq "api" -and -not (Select-String -LiteralPath $envFile -Pattern '
 # ---------- 2. 처음 한 번만: 파이썬 가상 환경, 웹 패키지·빌드 ----------
 $python = Join-Path $server ".venv\Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $python)) {
-  Say "서버 가상 환경을 만들고 패키지를 설치합니다(처음 한 번, 1~2분)." "Cyan"
+  Say "서버 가상 환경을 만듭니다(처음 한 번)." "Cyan"
   & python -m venv (Join-Path $server ".venv")
-  & $python -m pip install --disable-pip-version-check -q -r (Join-Path $server "requirements.txt")
+}
+# requirements.txt가 바뀌면(예: 패키지 추가) 이미 있는 가상 환경에도 다시 설치합니다.
+$requirements = Join-Path $server "requirements.txt"
+$stamp = Join-Path $server ".venv\requirements.sha256"
+$wanted = (Get-FileHash -LiteralPath $requirements -Algorithm SHA256).Hash
+$installed = if (Test-Path -LiteralPath $stamp) { (Get-Content -LiteralPath $stamp -Raw).Trim() } else { "" }
+if ($installed -ne $wanted) {
+  Say "서버 패키지를 설치합니다(처음 한 번 또는 requirements.txt가 바뀐 뒤, 1~2분)." "Cyan"
+  & $python -m pip install --disable-pip-version-check -q -r $requirements
   if ($LASTEXITCODE -ne 0) { Say "서버 패키지 설치에 실패했습니다." "Red"; exit 1 }
+  Set-Content -LiteralPath $stamp -Value $wanted -Encoding ascii
 }
 
 function Needs-Build($dir) {
@@ -105,9 +121,11 @@ function Stop-All {
 }
 
 try {
-  Say "서버를 켭니다(모든 네트워크 주소의 8001 포트)." "Cyan"
+  # 터널을 쓰면 태블릿이 터널로 들어오므로 서버를 같은 Wi-Fi에 열 필요가 없습니다.
+  $bindHost = if ($Tunnel) { "127.0.0.1" } else { "0.0.0.0" }
+  if ($Tunnel) { Say "서버를 켭니다(이 노트북의 8001 포트)." "Cyan" } else { Say "서버를 켭니다(모든 네트워크 주소의 8001 포트)." "Cyan" }
   $started += Start-Process -FilePath $python -WorkingDirectory $server -NoNewWindow -PassThru `
-    -ArgumentList @("-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1", "--no-access-log")
+    -ArgumentList @("-m", "uvicorn", "main:app", "--host", $bindHost, "--port", "8001", "--workers", "1", "--no-access-log")
   foreach ($web in $webs) {
     $started += Start-Process -FilePath "npm.cmd" -WorkingDirectory $web.Dir -NoNewWindow -PassThru -ArgumentList @("run", "preview")
   }
@@ -123,10 +141,36 @@ try {
     if (-not $ok) { throw "$url 이 60초 안에 응답하지 않았습니다. 위의 오류 메시지를 확인해 주세요." }
   }
 
+  # 터널: cloudflared가 알려 주는 https 주소를 기다렸다가, 그 주소로 서버가 실제로 응답할 때까지 확인합니다.
+  $tunnelUrl = $null
+  if ($Tunnel) {
+    Say "Cloudflare 터널을 엽니다(10~30초)." "Cyan"
+    $tunnelLog = Join-Path $env:TEMP "ai-voisk-tunnel.log"
+    Remove-Item -LiteralPath $tunnelLog -ErrorAction SilentlyContinue
+    $started += Start-Process -FilePath "cloudflared" -NoNewWindow -PassThru -RedirectStandardError $tunnelLog `
+      -ArgumentList @("tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:8001")
+    $deadline = (Get-Date).AddSeconds(60)
+    while (-not $tunnelUrl -and (Get-Date) -lt $deadline) {
+      Start-Sleep -Milliseconds 700
+      $found = Select-String -LiteralPath $tunnelLog -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($found) { $tunnelUrl = $found.Matches[0].Value }
+    }
+    if (-not $tunnelUrl) { throw "터널 주소를 60초 안에 받지 못했습니다. 인터넷 연결과 $tunnelLog 을 확인해 주세요." }
+    $ok = $false
+    while (-not $ok -and (Get-Date) -lt $deadline.AddSeconds(30)) {
+      try { $null = Invoke-WebRequest -Uri "$tunnelUrl/health" -UseBasicParsing -TimeoutSec 5; $ok = $true } catch { Start-Sleep -Seconds 2 }
+    }
+    if (-not $ok) { Say "터널 주소가 아직 응답하지 않습니다. 잠시 뒤 태블릿에서 연결 확인을 다시 눌러 주세요." "Yellow" }
+    try { Set-Clipboard -Value $tunnelUrl } catch {}
+  }
+
   # 태블릿이 접속할 주소(같은 Wi-Fi의 이 노트북 IPv4).
-  $ips = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {
-      $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" -and $_.InterfaceAlias -notmatch "vEthernet|Loopback|VirtualBox|VMware|WSL"
-    } | Sort-Object { if ($_.InterfaceAlias -match "Wi-?Fi|무선") { 0 } else { 1 } } | Select-Object -ExpandProperty IPAddress)
+  $ips = @()
+  if (-not $Tunnel) {
+    $ips = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {
+        $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" -and $_.InterfaceAlias -notmatch "vEthernet|Loopback|VirtualBox|VMware|WSL"
+      } | Sort-Object { if ($_.InterfaceAlias -match "Wi-?Fi|무선") { 0 } else { 1 } } | Select-Object -ExpandProperty IPAddress)
+  }
 
   Say ""
   Say "================ AI 보이스크 시연 준비 완료 ================" "Green"
@@ -135,7 +179,10 @@ try {
     Say "  점주 웹        : http://127.0.0.1:8081  (메뉴·사진·AI 추천 설정·주문·통계·직원 호출)" "Green"
   }
   Say "  서버           : http://127.0.0.1:8001/docs" "Green"
-  if ($ips.Count -gt 0) {
+  if ($Tunnel) {
+    Say "  태블릿 서버 주소 : $tunnelUrl   (클립보드에 복사함)" "Green"
+    Say "  * 이 주소는 실행할 때마다 바뀝니다. 태블릿 키오스크 설정에서 서버 주소와 기기 토큰을 다시 넣어 주세요." "Yellow"
+  } elseif ($ips.Count -gt 0) {
     foreach ($ip in $ips) { Say "  태블릿 서버 주소 : http://${ip}:8001" "Green" }
   } else {
     Say "  태블릿 서버 주소 : 이 노트북이 Wi-Fi에 연결되어 있지 않습니다." "Yellow"
@@ -146,7 +193,7 @@ try {
 
   # 방화벽에 8001 허용 규칙이 없으면 관리자 PowerShell에서 실행할 명령을 알려 줍니다(자동으로 바꾸지 않음).
   $rule = Get-NetFirewallRule -DisplayName "AI-Voisk 8001" -ErrorAction SilentlyContinue
-  if (-not $rule) {
+  if (-not $Tunnel -and -not $rule) {
     Say ""
     Say "태블릿이 접속하지 못하면 '관리자 권한 PowerShell'에서 한 번만 실행해 주세요(개인 네트워크에만 허용):" "Yellow"
     Say '  New-NetFirewallRule -DisplayName "AI-Voisk 8001" -Direction Inbound -Protocol TCP -LocalPort 8001 -Action Allow -Profile Private' "Yellow"
