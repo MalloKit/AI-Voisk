@@ -1,0 +1,183 @@
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  CalendarCheck,
+  UtensilsCrossed,
+  ReceiptText,
+  Store,
+  Menu,
+  Sparkles,
+  ChartColumn,
+  UserCircle,
+  X,
+  LogOut,
+  ArrowLeftRight,
+} from "lucide-react";
+import type { Page } from "../data/models";
+
+export const pages = [
+  { id: "today", label: "오늘 현황", Icon: CalendarCheck },
+  { id: "menus", label: "메뉴 관리", Icon: UtensilsCrossed },
+  { id: "ai", label: "AI 추천·음성", Icon: Sparkles },
+  { id: "orders", label: "주문 내역", Icon: ReceiptText },
+  { id: "stats", label: "통계", Icon: ChartColumn },
+  { id: "store", label: "매장 정보", Icon: Store },
+] as const;
+export function OwnerShell({
+  page,
+  onNavigate,
+  storeName,
+  soldOutCount,
+  account,
+  demo = true,
+  alert,
+  children,
+}: {
+  page: Page;
+  onNavigate(page: Page): void;
+  storeName: string;
+  soldOutCount: number;
+  // 시연(Mock) 데이터일 때만 상단에 배지를 보인다.
+  demo?: boolean;
+  // 모든 화면 위쪽에 띄울 알림(직원 호출).
+  alert?: ReactNode;
+  account?: {
+    loginId: string;
+    canSwitchStore: boolean;
+    onLogout(): void;
+    onSwitchStore(): void;
+  };
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const nav = useRef<HTMLElement>(null),
+    trigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (open)
+      nav.current
+        ?.querySelector<HTMLButtonElement>('[aria-current="page"]')
+        ?.focus();
+  }, [open]);
+  function close() {
+    setOpen(false);
+    trigger.current?.focus();
+  }
+  const label = pages.find((p) => p.id === page)!.label;
+  return (
+    <div className={`shell ${open ? "nav-open" : ""}`}>
+      <a className="skip-link" href="#main">
+        본문으로 이동
+      </a>
+      {open && (
+        <button
+          className="nav-overlay"
+          aria-label="메뉴 닫기"
+          onClick={close}
+        />
+      )}
+      <aside className="sidebar" aria-label="점주 관리자 메뉴">
+        <div className="brand">
+          <strong>AI-Voisk</strong>
+          <span>점주 · {storeName}</span>
+          <button
+            className="mobile-close icon-button"
+            aria-label="메뉴 닫기"
+            onClick={close}
+          >
+            <X />
+          </button>
+        </div>
+        <nav
+          ref={nav}
+          aria-label="주요 화면"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") close();
+          }}
+        >
+          {pages.map((p) => (
+            <button
+              key={p.id}
+              aria-current={page === p.id ? "page" : undefined}
+              onClick={() => {
+                setOpen(false);
+                onNavigate(p.id);
+                if (open) trigger.current?.focus();
+              }}
+            >
+              <p.Icon aria-hidden="true" size={21} />
+              <span className="nav-label">{p.label}</span>
+              {p.id === "menus" && soldOutCount > 0 && (
+                <span
+                  className="nav-count"
+                  aria-label={`품절 ${soldOutCount}개`}
+                >
+                  {soldOutCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+        {account ? (
+          <div
+            className="sidebar-account"
+            aria-label="로그인 정보"
+            role="group"
+          >
+            <span className="sidebar-login">
+              <UserCircle size={18} aria-hidden="true" />
+              {account.loginId}
+            </span>
+            {account.canSwitchStore && (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  account.onSwitchStore();
+                }}
+              >
+                <ArrowLeftRight size={16} aria-hidden="true" />
+                매장 바꾸기
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setOpen(false);
+                account.onLogout();
+              }}
+            >
+              <LogOut size={16} aria-hidden="true" />
+              로그아웃
+            </button>
+          </div>
+        ) : (
+          <small className="sidebar-footer">
+            AI-Voisk 매장 관리
+            <br />
+            시연 데이터로 동작합니다
+          </small>
+        )}
+      </aside>
+      <div className="workspace">
+        <header className="topbar">
+          <button
+            ref={trigger}
+            className="menu-toggle icon-button"
+            aria-label="메뉴 열기"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            <Menu />
+          </button>
+          <strong>{label}</strong>
+          {demo && <span className="badge">시연 데이터</span>}
+          <span className="account">
+            <UserCircle size={23} aria-hidden="true" />
+            {account?.loginId ?? "시연 점주"}
+          </span>
+        </header>
+        <main id="main" tabIndex={-1} key={page}>
+          {alert}
+          <div className="content">{children}</div>
+        </main>
+      </div>
+    </div>
+  );
+}

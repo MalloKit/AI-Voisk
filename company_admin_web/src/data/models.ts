@@ -78,6 +78,7 @@ export interface OrderItem {
   options: OrderOption[];
 }
 export interface Order {
+  cash_payment?: { amount: number; received: boolean };
   order_id: number;
   store_id: number;
   store_name: string;
@@ -124,6 +125,9 @@ export interface ApiDevice {
   app_version: string | null;
   last_seen_at: string | null;
   last_synced_at: string | null;
+  /** 매장의 최신 메뉴 버전과 키오스크가 마지막으로 반영한 메뉴 버전. 모르면 null입니다. */
+  current_menu_version: number | null;
+  applied_menu_version: number | null;
 }
 
 /** 실제 정수 알림 ID와 원본 문자열을 Mock DeviceAlert 모델과 분리합니다. */

@@ -30,7 +30,7 @@ class DemoMenuRepository extends ApiMenuRepository {
 
 void main() {
   for (final mode in ['포장', '매장 식사']) {
-    testWidgets('시작 선택 $mode → 복수 옵션 → 확인 → 저장 → 주문번호', (tester) async {
+    testWidgets('시작 선택 $mode → 복수 옵션 → 결제 시연, 실제 주문 요청 없음', (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -66,32 +66,29 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('장바구니 담기'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('주문 완료 (시연)'));
+      await tester.tap(find.text('결제하기'));
       await tester.pumpAndSettle();
-      expect(find.text('주문 방식: $mode'), findsOneWidget);
+      expect(find.text(mode), findsOneWidget);
       expect(find.byType(SegmentedButton<String>), findsNothing);
       expect(find.byType(TextField), findsNothing);
       expect(find.text('제육덮밥 · 2개'), findsOneWidget);
-      expect(find.text('옵션: 밥 추가, 계란 추가'), findsOneWidget);
-      await tester.tap(find.text('주문 저장'));
-      await tester.pumpAndSettle();
-      expect(requests, hasLength(1));
+      expect(find.text('밥 추가 +1,000원, 계란 추가 +1,000원'), findsOneWidget);
       expect(
-        requests.single['order_type'],
-        mode == '포장' ? 'takeaway' : 'dine_in',
+        tester.widget<Text>(find.byKey(const Key('payment-total'))).data,
+        '22,000원',
       );
-      expect(requests.single['table_no'], isNull);
-      expect(requests.single['items'], [
-        {
-          'menu_id': 1,
-          'quantity': 2,
-          'option_ids': [1, 2],
-        },
-      ]);
-      expect(find.text('주문 번호 #81'), findsOneWidget);
-      await tester.tap(find.text('확인'));
+      await tester.tap(find.text('카드 결제'));
       await tester.pumpAndSettle();
-      expect(find.text('0원'), findsOneWidget);
+      await tester.tap(find.text('결제'));
+      await tester.pumpAndSettle();
+      expect(requests, isEmpty);
+      expect(find.text('결제가 완료되었습니다'), findsOneWidget);
+      await tester.tap(find.text('확인 · 장바구니 비우기'));
+      await tester.pumpAndSettle();
+      // 다음 고객이 포장/매장 식사를 다시 고르도록 처음 화면으로 돌아갑니다.
+      expect(find.text('포장'), findsOneWidget);
+      expect(find.text('매장 식사'), findsOneWidget);
+      expect(find.text('결제하기'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }

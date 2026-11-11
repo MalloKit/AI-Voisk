@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 화면 버튼을 누른 동안에만 마이크를 씁니다. 상시 청취는 하지 않습니다. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Android 11 이상에서 기기의 음성 인식·음성 합성 서비스를 찾기 위한 선언입니다. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+</manifest>

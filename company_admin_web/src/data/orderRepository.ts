@@ -4,6 +4,7 @@ import type { Order, OrderItem } from "./models";
 export interface OrderRepository {
   load(signal?: AbortSignal): Promise<Order[]>;
   detail(id: number, signal?: AbortSignal): Promise<Order>;
+  confirmCash?(id: number): Promise<void>;
 }
 const message = "실제 주문을 조회하지 못했습니다. 서버 연결을 확인해 주세요.";
 const record = (v: unknown): Record<string, unknown> => {
@@ -26,6 +27,9 @@ export function parseOrder(raw: unknown): Order {
   const date = string(r.ordered_at);
   if (!Number.isFinite(new Date(date).getTime()))
     throw new Error("주문 시각 형식을 확인해 주세요.");
+  const cash = r.cash_payment == null ? null : record(r.cash_payment);
+  if (cash && typeof cash.received !== "boolean")
+    throw new Error("현금 수납 상태를 확인해 주세요.");
   let items: OrderItem[] = [];
   if (r.items !== undefined) {
     if (!Array.isArray(r.items))
@@ -47,6 +51,7 @@ export function parseOrder(raw: unknown): Order {
     });
   }
   return {
+    ...(cash ? { cash_payment: { amount: number(cash.amount), received: cash.received === true } } : {}),
     order_id: number(r.order_id),
     store_id: number(r.store_id),
     store_name: string(r.store_name),
@@ -71,7 +76,7 @@ export class ApiOrderRepository implements OrderRepository {
     private transport: typeof fetch = (input, init) => fetch(input, init),
     private timeoutMs = 20_000,
   ) {}
-  private async get(path: string, signal?: AbortSignal) {
+  private async request(path: string, signal?: AbortSignal, init: RequestInit = { method: "GET" }) {
     let url: URL;
     try {
       url = new URL(this.baseUrl);
@@ -93,7 +98,7 @@ export class ApiOrderRepository implements OrderRepository {
       // Preserve an optional base path, like the Flutter repository.
       const target = `${url.origin}${url.pathname.replace(/\/$/, "")}${path}`;
       const response = await adminRequest(this.transport, target, {
-        method: "GET",
+        ...init,
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(message);
@@ -102,6 +107,22 @@ export class ApiOrderRepository implements OrderRepository {
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
     }
+  }
+  private get(path: string, signal?: AbortSignal) {
+    return this.request(path, signal);
+  }
+
+  async confirmCash(id: number) {
+    if (!Number.isInteger(id) || id < 1)
+      throw new Error("주문 ID를 확인해 주세요.");
+    const token = (await this.get("/auth/admin/csrf")).csrf_token;
+    if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token))
+      throw new Error("보안 요청 정보를 확인해 주세요.");
+    const result = await this.request(`/admin/orders/${id}/cash/confirm`, undefined, {
+      method: "POST", headers: { "X-CSRF-Token": token },
+    });
+    if (result.order_id !== id || result.received !== true)
+      throw new Error("현금 수납 결과를 확인해 주세요.");
   }
   async load(signal?: AbortSignal): Promise<Order[]> {
     const orders = new Map<number, Order>();

@@ -16,7 +16,7 @@ _SELECT = """
            s.store_nm AS store_name, s.store_add1 AS store_address,
            s.store_add2 AS store_address_detail,
            d.is_active, d.registered_at, d.app_version,
-           d.last_seen_at, d.last_synced_at
+           d.last_seen_at, d.last_synced_at{versions}
     FROM kiosk_device d
     JOIN store s ON s.store_id = d.store_id
 """
@@ -49,7 +49,22 @@ def _view(row):
         'app_version': row['app_version'],
         'last_seen_at': _timestamp(row['last_seen_at']),
         'last_synced_at': _timestamp(row['last_synced_at']),
+        # 서버의 최신 메뉴 버전과 키오스크가 적용했다고 보고한 버전. 열이 없는 DB에서는 None입니다.
+        'current_menu_version': row.get('current_menu_version'),
+        'applied_menu_version': row.get('applied_menu_version'),
     }
+
+
+def _versions(cursor):
+    columns = []
+    for column in ('current_menu_version', 'applied_menu_version'):
+        try:
+            cursor.execute(f'SELECT {column} FROM kiosk_device WHERE 1 = 0')
+            cursor.fetchall()
+            columns.append(f', d.{column}')
+        except Exception:
+            pass
+    return ''.join(columns)
 
 
 def _read(device_id=None):
@@ -59,11 +74,12 @@ def _read(device_id=None):
             # Session setting only; no global setting, schema or data changes.
             cursor.execute("SET time_zone = '+00:00'")
             cursor.execute('START TRANSACTION READ ONLY')
+            select = _SELECT.format(versions=_versions(cursor))
             if device_id is None:
-                cursor.execute(_SELECT + ' ORDER BY d.device_id')
+                cursor.execute(select + ' ORDER BY d.device_id')
                 devices = [_view(row) for row in cursor.fetchall()]
                 return {'devices': devices, 'total': len(devices)}
-            cursor.execute(_SELECT + ' WHERE d.device_id = %s', (device_id,))
+            cursor.execute(select + ' WHERE d.device_id = %s', (device_id,))
             row = cursor.fetchone()
             if row is None:
                 raise DeviceNotFound()

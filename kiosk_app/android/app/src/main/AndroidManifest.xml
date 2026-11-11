@@ -1,12 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 서버 API·메뉴 사진·실시간 알림. debug 빌드에만 있던 권한이라 release APK가 서버에 접속하지 못했습니다. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 음성 주문 버튼을 누른 동안만 마이크를 씁니다(voice_engine 플러그인 매니페스트에도 선언). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- 키오스크가 절전으로 꺼지지 않도록 관리자 설정에서 배터리 최적화 예외를 요청합니다. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <application
-        android:label="kiosk_app"
+        android:label="AI 보이스크"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"

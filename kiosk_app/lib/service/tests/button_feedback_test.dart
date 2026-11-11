@@ -54,7 +54,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('장바구니 담기'));
     await tester.pumpAndSettle();
-    for (final label in ['직원 호출', '마이크', '주문내역', '주문 완료 (시연)']) {
+    // 주문내역은 이전 고객 정보라 관리자 설정 화면으로 옮겼습니다.
+    expect(find.text('주문내역'), findsNothing);
+    for (final label in ['직원 호출', '말로 주문하기', '결제하기']) {
       final finder = find
           .ancestor(
             of: find.text(label),
@@ -76,8 +78,8 @@ void main() {
       expect(color(), isNot(initial));
       await gesture.up();
       await tester.pumpAndSettle();
-      if (label == '주문 완료 (시연)') {
-        await tester.tap(find.text('취소'));
+      if (label == '결제하기') {
+        await tester.tap(find.byTooltip('주문으로 돌아가기'));
         await tester.pumpAndSettle();
       }
       if (label == '직원 호출') {

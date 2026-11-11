@@ -1,14 +1,23 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/menu_item.dart';
 import '../models/menu_option.dart';
 
 class CartEntry {
-  CartEntry(this.menu, this.quantity, [List<MenuOption> options = const []])
-    : options = List.unmodifiable(options);
+  CartEntry(
+    this.menu,
+    this.quantity, [
+    List<MenuOption> options = const [],
+    this.recommended = false,
+  ]) : options = List.unmodifiable(options);
   final MenuItem menu;
   final int quantity;
   final List<MenuOption> options;
+
+  /// 추천 카드에서 고른 품목이면 true. 주문 전송 시 추천 경유 매출로 집계합니다.
+  final bool recommended;
   String get id {
     final ids = options.map((option) => option.id).toList()..sort();
     return ids.isEmpty ? menu.id : '${menu.id}:${ids.join(',')}';
@@ -19,8 +28,11 @@ class CartEntry {
   int get subtotal => unitPrice * quantity;
 }
 
-/// 터치와 향후 음성 기능에서 같은 메서드를 호출합니다.
+/// 장바구니 상태. 터치와 음성 모두 domain/order_commands.dart의 명령을 거쳐 이 메서드를 호출합니다.
 class CartController extends ChangeNotifier {
+  /// 서버 주문 API의 한 품목 최대 수량(1~99)과 같습니다. 넘치면 99로 맞춥니다.
+  static const maxQuantity = 99;
+
   final Map<String, CartEntry> _entries = {};
   List<CartEntry> get entries => List.unmodifiable(_entries.values);
   int get total =>
@@ -28,14 +40,23 @@ class CartController extends ChangeNotifier {
   int get itemCount =>
       _entries.values.fold(0, (sum, entry) => sum + entry.quantity);
 
-  void add(MenuItem menu, int quantity, {List<MenuOption> options = const []}) {
+  CartEntry? entry(String entryId) => _entries[entryId];
+
+  void add(
+    MenuItem menu,
+    int quantity, {
+    List<MenuOption> options = const [],
+    bool recommended = false,
+  }) {
     if (menu.isSoldOut) throw StateError('품절 메뉴는 담을 수 없습니다.');
     if (quantity < 1) throw ArgumentError.value(quantity, 'quantity');
     final entry = CartEntry(menu, quantity, options);
+    final existing = _entries[entry.id];
     _entries[entry.id] = CartEntry(
       menu,
-      (_entries[entry.id]?.quantity ?? 0) + quantity,
+      min((existing?.quantity ?? 0) + quantity, maxQuantity),
       options,
+      recommended || (existing?.recommended ?? false),
     );
     notifyListeners();
   }
@@ -44,7 +65,12 @@ class CartController extends ChangeNotifier {
     final entry = _entries[entryId];
     if (entry == null) return;
     if (quantity < 1) throw ArgumentError.value(quantity, 'quantity');
-    _entries[entryId] = CartEntry(entry.menu, quantity, entry.options);
+    _entries[entryId] = CartEntry(
+      entry.menu,
+      min(quantity, maxQuantity),
+      entry.options,
+      entry.recommended,
+    );
     notifyListeners();
   }
 
@@ -62,8 +88,9 @@ class CartController extends ChangeNotifier {
     final existing = _entries[updated.id];
     _entries[updated.id] = CartEntry(
       original.menu,
-      quantity + (existing?.quantity ?? 0),
+      min(quantity + (existing?.quantity ?? 0), maxQuantity),
       options,
+      original.recommended || (existing?.recommended ?? false),
     );
     notifyListeners();
   }
@@ -75,6 +102,16 @@ class CartController extends ChangeNotifier {
   void clear() {
     if (_entries.isEmpty) return;
     _entries.clear();
+    notifyListeners();
+  }
+
+  /// 명령 되돌리기용. 항목 순서를 포함해 이전 상태로 복원합니다.
+  List<CartEntry> snapshot() => List.of(_entries.values);
+
+  void restore(List<CartEntry> entries) {
+    _entries
+      ..clear()
+      ..addEntries(entries.map((entry) => MapEntry(entry.id, entry)));
     notifyListeners();
   }
 }

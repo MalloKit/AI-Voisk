@@ -4,8 +4,18 @@ import type { ApiDevice } from "./models";
 export interface DeviceCreateInput { device_code: string; store_id: number; }
 export interface DeviceStatusInput { is_active: boolean; expected_is_active: boolean; }
 export const validDeviceCode = (value: string) => value.length >= 1 && value.length <= 50 && !/[^A-Za-z0-9_-]/.test(value);
+// 키오스크가 60초마다 상태를 보고한다(/kiosk/heartbeat). 3분 안에 보고가 있으면 연결로 본다.
+export function liveConnection(lastSeenAt: string | null, now = Date.now()): "연결" | "연결 끊김" | "미확인" {
+  if (!lastSeenAt) return "미확인";
+  const seen = new Date(lastSeenAt).getTime();
+  if (!Number.isFinite(seen)) return "미확인";
+  return now - seen <= 3 * 60_000 ? "연결" : "연결 끊김";
+}
+export interface DeviceToken { device_id: number; store_id: number; token: string; }
 export interface DeviceRepository {
   create?(input: DeviceCreateInput, signal?: AbortSignal): Promise<ApiDevice>;
+  // 키오스크 기기 토큰을 새로 발급한다. 이전 토큰은 무효가 되고, 원문은 이 응답에서만 볼 수 있다.
+  issueToken?(id: number, signal?: AbortSignal): Promise<DeviceToken>;
   setStatus?(id: number, input: DeviceStatusInput, signal?: AbortSignal): Promise<ApiDevice>;
   load(signal?: AbortSignal): Promise<ApiDevice[]>;
   detail(id: number, signal?: AbortSignal): Promise<ApiDevice>;
@@ -35,6 +45,18 @@ function timestamp(value: unknown): string {
 function nullableTimestamp(value: unknown): string | null {
   return value === null ? null : timestamp(value);
 }
+// 메뉴 버전은 나중에 추가된 필드라 이전 서버 응답에는 없을 수 있습니다. 없으면 미확인(null)으로 읽습니다.
+function menuVersion(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw invalid();
+  return value;
+}
+// 키오스크 메뉴 버전 상태. 점주 웹 menuVersionStatus와 같은 규칙이며, 둘 중 하나라도 모르면 최신이라고 하지 않습니다.
+export function menuVersionStatus(device: Pick<ApiDevice, "current_menu_version" | "applied_menu_version">): string {
+  const { current_menu_version: current, applied_menu_version: applied } = device;
+  if (current === null || applied === null) return "미확인";
+  return applied >= current ? "최신" : `반영 대기 (적용 ${applied} / 최신 ${current})`;
+}
 export function parseDevice(value: unknown): ApiDevice {
   const row = record(value);
   if (typeof row.is_active !== "boolean") throw invalid();
@@ -50,6 +72,8 @@ export function parseDevice(value: unknown): ApiDevice {
     app_version: nullableText(row.app_version),
     last_seen_at: nullableTimestamp(row.last_seen_at),
     last_synced_at: nullableTimestamp(row.last_synced_at),
+    current_menu_version: menuVersion(row.current_menu_version),
+    applied_menu_version: menuVersion(row.applied_menu_version),
   };
 }
 export class ApiDeviceRepository implements DeviceRepository {
@@ -90,6 +114,16 @@ export class ApiDeviceRepository implements DeviceRepository {
     if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("보안 요청 정보를 확인할 수 없습니다.");
     return parseDevice(await this.get(path, signal, { method,
       headers: { "Content-Type": "application/json", "X-CSRF-Token": token }, body: JSON.stringify(input) }));
+  }
+  async issueToken(deviceId: number, signal?: AbortSignal): Promise<DeviceToken> {
+    id(deviceId);
+    const csrf = record(await this.get("/auth/admin/csrf", signal)).csrf_token;
+    if (typeof csrf !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(csrf)) throw new Error("보안 요청 정보를 확인할 수 없습니다.");
+    const body = record(await this.get("/admin/devices/" + deviceId + "/token", signal,
+      { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf }, body: "{}" }));
+    const token = text(body.token);
+    if (id(body.device_id) !== deviceId || !/^[A-Za-z0-9_-]{20,200}$/.test(token)) throw invalid();
+    return { device_id: deviceId, store_id: id(body.store_id), token };
   }
   async create(input: DeviceCreateInput, signal?: AbortSignal): Promise<ApiDevice> {
     if (!validDeviceCode(input.device_code)) throw new Error("기기 코드 형식을 확인해 주세요.");
