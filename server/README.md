@@ -72,6 +72,7 @@ python -m venv .venv
 
 - AI 기능 테이블·열은 [AI_MIGRATION.md](AI_MIGRATION.md)에 있습니다(2026-11-11 공용 DB에 적용, 백업 후 추가만). `ai_migration.py --backup`, `--apply`로 다른 DB에도 같은 순서로 적용합니다.
 - `seed_demo_ai.py`는 시연 매장에 메뉴 40개, 태그, 동의어, 원가율을 넣습니다. 여러 번 실행해도 같은 결과입니다.
+- `seed_menu_images.py`는 `menu_image_sources.json`에 적은 Wikimedia Commons 사진(자유 라이선스)을 긴 변 800px로 받아 점주 업로드와 같은 경로로 메뉴에 넣고, 저작자·라이선스를 `menu_image_credits.md`에 씁니다. 사진이 이미 있는 메뉴는 건너뛰고(`--force`로 교체), `--preview <폴더>`는 DB 없이 사진만 받습니다. `server/media/`는 커밋하지 않습니다.
 - 주문 방식 열 `orders.order_type`은 [ORDER_TYPE_MIGRATION.md](ORDER_TYPE_MIGRATION.md)를 봅니다.
 - FK에 ON DELETE 규칙이 없으므로 판매 중지는 `is_active = FALSE`로 합니다.
 

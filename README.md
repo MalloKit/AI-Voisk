@@ -138,6 +138,7 @@ flutter run --release
 - 팀원 변경: `kiosk_device`, `device_alert`, `order_item_option` 테이블, `orders.device_id`, `client_order_id`, `order_type`([ORDER_TYPE_MIGRATION.md](server/ORDER_TYPE_MIGRATION.md)).
 - AI 기능 변경(2026-11-11, 백업 후 추가만): `store_ai_setting`, `menu_tag`, `menu_synonym`, `recommendation_log` 테이블, 메뉴 원가율·추천 제외·매장 추천, `kiosk_device.applied_menu_version`, `orders.order_channel`, `order_item.is_recommended`, 통계용 인덱스, `menu_option.option_group`(필수 옵션 그룹). 내용과 되돌리는 방법은 [AI_MIGRATION.md](server/AI_MIGRATION.md)에 있습니다.
 - 시연 매장(store 1)에는 메뉴 40개와 태그·동의어·원가율, 필수 옵션(떡볶이·라면 맵기, 아메리카노 사이즈)을 넣었습니다(`server/seed_demo_ai.py`).
+- 시연 메뉴 40개에는 Wikimedia Commons의 자유 라이선스 사진을 한 장씩 넣었습니다(`server/seed_menu_images.py`, 출처 목록 `server/menu_image_sources.json`, 저작자·라이선스 `server/menu_image_credits.md`). 사진 파일은 `server/media/menu/`에 저장되고 커밋하지 않으므로, 서버를 돌리는 PC에서 `seed_menu_images.py`를 한 번 실행합니다(사진이 있는 메뉴는 건너뜀).
 
 **팀 공용 DB 사용 규칙**
 
