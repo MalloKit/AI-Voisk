@@ -385,7 +385,8 @@ describe("live store registration and editing", () => {
     const dialog = screen.getByRole("dialog"), footer = dialog.querySelector("footer")!;
     const save = within(footer).getByRole("button", { name: "저장" });
     expect(within(footer).getByRole("button", { name: "취소" })).toBeInTheDocument();
-    expect(within(dialog).getAllByRole("button")).toHaveLength(2);
+    expect(within(footer).getAllByRole("button")).toHaveLength(2);
+    expect(within(dialog).getByRole("button", { name: "주소 검색" })).toHaveAttribute("type", "button");
     expect(dialog.querySelector(".modal-content")!.contains(save)).toBe(false);
     expect((save as HTMLButtonElement).form).toBe(dialog.querySelector("form"));
     await user.click(save);

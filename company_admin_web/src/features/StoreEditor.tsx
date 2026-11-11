@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { PostcodeSearch } from "./PostcodeSearch";
 import { LimitedInput } from "../components/LimitedInput";
 import { NumberInput } from "../components/NumberInput";
 import { numberDigits, validPhone, validBusiness, canonicalNumber, sameNumber } from "../data/koreanNumbers";
@@ -54,6 +55,8 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
   const [errors, setErrors] = useState<Partial<Record<Key, string>>>({});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [searchingAddress, setSearchingAddress] = useState(false);
+  const addressButton = useRef<HTMLButtonElement>(null);
   const pending = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -63,7 +66,7 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
   }, []);
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (pending.current) return;
+    if (pending.current || searchingAddress) return;
     const next = validateStore(values, original);
     setErrors(next); setMessage("");
     if (Object.keys(next).length) {
@@ -100,9 +103,13 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
     setValues(next);
     setErrors((previous) => ({ ...previous, [key]: previous[key] ? validateStore(next, original)[key] : undefined }));
   }
+  function closeAddressSearch() {
+    setSearchingAddress(false);
+    addressButton.current?.focus();
+  }
   return <form id={formId} ref={form} className="store-form" onSubmit={save} noValidate aria-busy={busy}>
     <div className="store-form-grid">
-      {storeFields.map(([key, label, limit]) => <label className="field form-field" key={key}>
+      {storeFields.map(([key, label, limit]) => <div className="field form-field" key={key}>
         <span id={key + "-label"}>{label}{key !== "address_detail" && " *"}</span>
         {key === "phone" || key === "business_no" ? <NumberInput
           aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy} required
@@ -111,16 +118,25 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId }: {
           maxDigits={key === "phone" ? 11 : 10} originalValue={original?.[key]}
           onRejected={() => setErrors((previous) => ({ ...previous, [key]: `숫자는 최대 ${key === "phone" ? 11 : 10}자리이며 지원하는 문자만 입력해 주세요.` }))}
           onValueChange={(value) => updateValue(key, value)} />
-          : <LimitedInput aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy}
+          : <div style={key === "store_code" ? { display: "flex", gap: "var(--sm)" } : undefined}><LimitedInput aria-labelledby={key + "-label"} name={key} value={values[key]} disabled={busy}
             required={key !== "address_detail"} aria-invalid={!!errors[key]}
             aria-describedby={errors[key] ? key + "-error" : undefined}
             inputMode={key === "store_code" ? "numeric" : undefined}
             rule={{ max: limit, kind: key === "store_code" ? "postcode" : "text", original: original?.[key] }}
             onRejected={() => setErrors((previous) => ({ ...previous, [key]: key === "store_code" ? "우편번호는 숫자 5자리까지 입력해 주세요." : `${limit}자 이하로 입력해 주세요.` }))}
-            onValueChange={(value) => updateValue(key, value)} />}
+            onValueChange={(value) => updateValue(key, value)} />
+            {key === "store_code" && <button ref={addressButton} type="button"
+              style={{ flexShrink: 0, whiteSpace: "nowrap" }} disabled={busy}
+              aria-expanded={searchingAddress} onClick={() => setSearchingAddress(true)}>주소 검색</button>}
+          </div>}
         {errors[key] && <p id={key + "-error"} className="field-error">{errors[key]}</p>}
-      </label>)}
+      </div>)}
     </div>
+    {searchingAddress && <PostcodeSearch onClose={closeAddressSearch} onSelect={({ zonecode, address }) => {
+      setValues((previous) => ({ ...previous, store_code: zonecode, address }));
+      setErrors((previous) => ({ ...previous, store_code: undefined, address: undefined }));
+      closeAddressSearch();
+    }} />}
     {message && <p role="alert" className="form-feedback">{message}</p>}
     {busy && <p role="status">저장 중… 창을 닫지 마세요.</p>}
   </form>;
