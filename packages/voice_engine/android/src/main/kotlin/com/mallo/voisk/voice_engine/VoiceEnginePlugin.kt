@@ -46,6 +46,9 @@ class VoiceEnginePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCall
     private var pendingPermission: MethodChannel.Result? = null
     private var lastLevelAt = 0L
     private var utteranceSeq = 0
+    // 마지막 중간 인식 결과. 일부 인식 서비스(에뮬레이터의 Google 인식 등)는 중간 결과로 문장을 다 보낸 뒤
+    // 최종 결과를 빈 목록으로 보내거나 NO_MATCH 오류로 끝내므로, 그때 이 문장을 최종 결과로 씁니다.
+    private var lastPartial = ""
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
@@ -149,6 +152,7 @@ class VoiceEnginePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCall
         // 안내 음성이 마이크로 다시 들어가지 않도록 말하는 중이면 멈춥니다.
         tts?.stop()
         releaseRecognizer()
+        lastPartial = ""
         val locale = call.argument<String>("locale") ?: "ko-KR"
         // 인식 서비스는 이 값을 Int로 읽습니다(Long이면 무시하고 기본값을 씀, 에뮬레이터 로그로 확인).
         val silenceMs = call.argument<Int>("completeSilenceMs") ?: 1500
@@ -185,21 +189,34 @@ class VoiceEnginePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCall
         override fun onBufferReceived(buffer: ByteArray?) = Unit
         override fun onEndOfSpeech() = emit("speechEnd")
         override fun onError(error: Int) {
-            emit("error", mapOf("code" to errorName(error)))
+            val code = errorName(error)
+            // 문장을 중간 결과로 이미 받았는데 "일치 없음"으로 끝나면 그 문장을 최종 결과로 봅니다.
+            if (code == "no_speech" && lastPartial.isNotEmpty()) emitFinal(lastPartial, listOf(lastPartial))
+            else emit("error", mapOf("code" to code))
+            lastPartial = ""
             releaseRecognizer()
         }
         override fun onResults(results: Bundle?) {
             val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
-            val best = texts.firstOrNull()?.trim().orEmpty()
-            if (best.isEmpty()) emit("error", mapOf("code" to "no_speech")) else emit("final", mapOf("text" to best, "alternatives" to texts))
+                .map { it.trim() }.filter { it.isNotEmpty() }
+            val best = texts.firstOrNull() ?: lastPartial
+            if (best.isEmpty()) emit("error", mapOf("code" to "no_speech"))
+            else emitFinal(best, texts.ifEmpty { listOf(best) })
+            lastPartial = ""
             releaseRecognizer()
         }
         override fun onPartialResults(partialResults: Bundle?) {
             val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
-            if (!text.isNullOrEmpty()) emit("partial", mapOf("text" to text))
+            if (!text.isNullOrEmpty()) {
+                lastPartial = text
+                emit("partial", mapOf("text" to text))
+            }
         }
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
     }
+
+    private fun emitFinal(text: String, alternatives: List<String>) =
+        emit("final", mapOf("text" to text, "alternatives" to alternatives))
 
     private fun releaseRecognizer() {
         recognizer?.let {
