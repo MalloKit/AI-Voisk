@@ -116,6 +116,7 @@ class ConversationController extends ChangeNotifier {
     this.silenceLimit = const Duration(seconds: 8),
     this.maxFailures = 3,
     this.errorTimeout = const Duration(seconds: 20),
+    this.listenAfterPrompt = false,
     DateTime Function()? clock,
     String Function()? newId,
   }) : _clock = clock ?? DateTime.now,
@@ -134,6 +135,10 @@ class ConversationController extends ChangeNotifier {
 
   /// 반복 실패 안내 뒤 아무 입력이 없으면 음성 주문을 닫는 시간(다음 고객에게 남지 않게).
   final Duration errorTimeout;
+
+  /// true면 안내가 끝날 때마다 자동으로 다시 듣습니다(이전 동작, 대화 흐름 테스트용).
+  /// 기본은 false: 처음 "말로 주문하기"를 누른 직후에만 바로 듣고, 그 뒤에는 마이크 버튼([talk])을 눌러야 듣습니다.
+  final bool listenAfterPrompt;
   final DateTime Function() _clock;
   final String Function() _newId;
   final _engine = const RecommendationEngine();
@@ -162,6 +167,13 @@ class ConversationController extends ChangeNotifier {
   Timer? _errorTimer;
 
   int _session = 0;
+  int _promptSeq = 0;
+  bool _micOpen = false;
+  // 추가 제안에 이미 "네"라고 한 메뉴의 옵션을 묻는 중이면, 옵션을 고르는 즉시 담습니다.
+  bool _alreadyConfirmed = false;
+
+  /// 지금 마이크로 듣고 있는지(화면의 마이크 표시용).
+  bool get micOpen => _micOpen;
   int _failures = 0;
   bool _upsellDone = false;
   bool _pendingClear = false;
@@ -184,9 +196,12 @@ class ConversationController extends ChangeNotifier {
 
   // ---------- 시작·종료 ----------
 
-  /// "말로 주문하기" 버튼. 이미 대화 중이면 아무것도 하지 않습니다.
+  /// "말로 주문하기" 버튼. 이미 대화 중이면 마이크 버튼([talk])과 같습니다.
   Future<void> start({bool? seniorMode}) async {
-    if (active) return;
+    if (active) {
+      await talk();
+      return;
+    }
     senior = seniorMode ?? (_settings.defaultMode == 'senior');
     final session = ++_session;
     _failures = 0;
@@ -215,16 +230,20 @@ class ConversationController extends ChangeNotifier {
     _events ??= voice.events.listen(_onEvent);
     _lastActivity = _clock();
     // 대화 루프는 따로 돌고, 버튼은 준비가 끝나면 바로 돌아옵니다.
+    // 버튼을 누른 직후이므로 첫 안내 뒤에는 바로 듣습니다.
     unawaited(
       _prompt(
         session,
         senior ? '네, 천천히 말씀해 주세요. 메뉴 이름이나 원하시는 상황을 말씀하시면 돼요.' : '네, 말씀하세요.',
+        listen: true,
       ),
     );
   }
 
   Future<void> stop({String? say}) async {
     _session++;
+    _micOpen = false;
+    _alreadyConfirmed = false;
     _waiting?.complete(const VoiceEvent(VoiceEventType.error, code: 'stopped'));
     _waiting = null;
     await voice.cancelListening();
@@ -265,6 +284,8 @@ class ConversationController extends ChangeNotifier {
   /// 그대로 두면 안내 음성을 고객 발화로 인식하거나 무음 시간 초과로 대화가 끝납니다.
   Future<void> _interrupt() async {
     _lastActivity = _clock();
+    // 말하던 안내가 끝난 뒤 이 버튼의 결과(해석 중·다음 질문) 상태를 덮지 않게 합니다.
+    _promptSeq++;
     final waiting = _waiting;
     _waiting = null;
     waiting?.complete(
@@ -296,14 +317,49 @@ class ConversationController extends ChangeNotifier {
   }
 
   /// 안내를 말한 뒤 고객 발화를 기다립니다.
-  Future<void> _prompt(int session, String text) async {
+  ///
+  /// 마이크는 고객이 누를 때만 켭니다. 안내가 끝나면 [listenAfterPrompt]가 아니면 듣지 않고,
+  /// 고객이 마이크 버튼([talk])이나 화면 버튼(추천 카드·네/아니요·옵션)을 누르기를 기다립니다.
+  /// [listen]이 true면 바로 듣고(말로 주문하기를 누른 직후), false면 설정과 관계없이 듣지 않습니다.
+  Future<void> _prompt(int session, String text, {bool? listen}) async {
     // 추천·확인·추가 제안 상태는 유지한 채 듣습니다. 그 밖에는 일반 청취입니다.
     final keep = _isWaitingState(state) ? state : ConversationState.listening;
+    final prompt = ++_promptSeq;
     message = text;
     notifyListeners();
     await voice.speak(text, rate: _rate);
-    if (session != _session) return;
-    await _listen(session, keep);
+    // 말하는 사이에 고객이 마이크·화면 버튼을 눌렀으면 그쪽 흐름이 이어 갑니다.
+    if (session != _session || prompt != _promptSeq || _micOpen) return;
+    if (listen ?? listenAfterPrompt) {
+      await _listen(session, keep);
+    } else {
+      partial = '';
+      level = 0;
+      _set(keep);
+    }
+  }
+
+  /// 지금 마이크 버튼을 누를 수 있는지(대화 중이고, 듣거나 준비·해석 중이 아님).
+  bool get canTalk =>
+      active &&
+      !_micOpen &&
+      state != ConversationState.preparing &&
+      state != ConversationState.thinking;
+
+  /// 마이크 버튼. 누를 때마다 한 번 듣고, 들은 말을 처리합니다.
+  Future<void> talk() async {
+    if (!canTalk) return;
+    // 아직 말하던 안내가 끝난 뒤 상태를 덮지 않게 합니다.
+    _promptSeq++;
+    _errorTimer?.cancel();
+    if (state == ConversationState.error) {
+      offerStaffCall = false;
+      _failures = 0;
+      state = ConversationState.listening;
+    }
+    _lastActivity = _clock();
+    final keep = _isWaitingState(state) ? state : ConversationState.listening;
+    await _listen(_session, keep);
   }
 
   bool _isWaitingState(ConversationState s) =>
@@ -316,6 +372,7 @@ class ConversationController extends ChangeNotifier {
     while (session == _session) {
       partial = '';
       level = 0;
+      _micOpen = true;
       _set(listeningState);
       final waiting = Completer<VoiceEvent>();
       _waiting = waiting;
@@ -323,10 +380,12 @@ class ConversationController extends ChangeNotifier {
         await voice.listen(silenceMs: _silenceMs);
       } catch (_) {
         _waiting = null;
+        _micOpen = false;
         await _fail(session, '음성 인식을 시작하지 못했어요.');
         return;
       }
       final event = await waiting.future;
+      _micOpen = false;
       if (session != _session) return;
       // 화면 버튼으로 이미 답했으면 이 듣기는 끝입니다.
       if (event.code == 'superseded') return;
@@ -338,6 +397,16 @@ class ConversationController extends ChangeNotifier {
       }
       final code = event.code ?? 'client';
       if (code == 'no_speech' || code == 'busy' || code == 'client') {
+        if (!listenAfterPrompt) {
+          // 누를 때마다 한 번만 듣습니다. 못 들었으면 다시 누르도록 안내합니다.
+          await _prompt(
+            session,
+            senior
+                ? '잘 들리지 않았어요. 마이크 버튼을 누르고 천천히 말씀해 주세요.'
+                : '잘 들리지 않았어요. 마이크 버튼을 누르고 다시 말씀해 주세요.',
+          );
+          return;
+        }
         if (_clock().difference(_lastActivity) >= silenceLimit) {
           await stop(say: '말씀이 없어 음성 주문을 마칠게요. 필요하시면 다시 버튼을 눌러 주세요.');
           return;
@@ -347,7 +416,13 @@ class ConversationController extends ChangeNotifier {
       if (code == 'permission') {
         await stop(say: '마이크 권한이 필요해요. 관리자에게 권한 허용을 요청해 주세요.');
       } else if (code == 'network' || code == 'language') {
-        await stop(say: '음성 인식 서비스에 연결하지 못했어요. 화면을 눌러 주문해 주세요.');
+        // 인식 서비스가 잠깐 안 되어도 고르던 메뉴(옵션 질문·추가 제안)는 버리지 않습니다.
+        // 화면 버튼은 그대로 쓸 수 있고, 마이크는 다시 누르면 다시 시도합니다.
+        await _prompt(
+          session,
+          '음성 인식 서비스에 연결하지 못했어요. 화면 버튼으로 고르시거나 잠시 뒤 마이크 버튼을 다시 눌러 주세요.',
+          listen: false,
+        );
       } else {
         await _fail(session, '잘 들리지 않았어요.');
       }
@@ -519,6 +594,7 @@ class ConversationController extends ChangeNotifier {
         }
         return;
       }
+      _alreadyConfirmed = false;
       if (result.intent == 'deny') {
         _clearAsk();
         pendingItems = const [];
@@ -656,6 +732,14 @@ class ConversationController extends ChangeNotifier {
       }
     }
     _clearAsk();
+    if (_alreadyConfirmed) {
+      _alreadyConfirmed = false;
+      pendingItems = const [];
+      state = ConversationState.listening;
+      _execute(commands);
+      await _afterAdd(session, '${_describe(commands)} 담았어요. ');
+      return;
+    }
     pendingItems = commands;
     onHighlight?.call(commands.map((c) => c.menu.id).toSet(), focus: true);
     state = ConversationState.confirming;
@@ -742,7 +826,9 @@ class ConversationController extends ChangeNotifier {
       upsellMenu = null;
       if (yes && menu != null && menu.optionGroups.isNotEmpty) {
         // 맵기·사이즈처럼 골라야 할 옵션이 있으면 먼저 묻습니다.
+        // 이미 "네"라고 했으므로 옵션을 고르면 다시 묻지 않고 바로 담습니다.
         state = ConversationState.listening;
+        _alreadyConfirmed = true;
         await _confirmItems(session, [AddItemCommand(menu, 1, recommended: true)]);
       } else if (yes && menu != null) {
         _execute([AddItemCommand(menu, 1, recommended: true)]);

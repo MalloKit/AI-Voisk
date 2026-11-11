@@ -16,118 +16,185 @@ Future<bool> askAdminPin(
   KioskSettings settings, {
   String deviceToken = '',
 }) async {
-  final creating = !settings.hasPin;
-  final needToken = creating && deviceToken.isNotEmpty;
-  final controller = TextEditingController();
-  final confirm = TextEditingController();
-  final tokenField = TextEditingController();
-  String? error;
   final ok = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (context) => StatefulBuilder(
-      builder: (context, update) => AlertDialog(
-        title: Text(creating ? '관리자 PIN 만들기' : '관리자 PIN 입력'),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (creating) const Text('키오스크 설정을 보호할 숫자 4~8자리 PIN을 정해 주세요.'),
-              if (needToken)
-                TextField(
-                  key: const Key('pin-token-field'),
-                  controller: tokenField,
-                  autofocus: true,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: '기기 토큰 (회사 관리자 웹에서 발급한 값)',
-                  ),
-                ),
-              TextField(
-                key: const Key('pin-field'),
-                controller: controller,
-                autofocus: !needToken,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(8),
-                ],
-                decoration: const InputDecoration(labelText: 'PIN'),
+    builder: (_) =>
+        _AdminPinDialog(settings: settings, deviceToken: deviceToken),
+  );
+  return ok ?? false;
+}
+
+/// 입력칸 컨트롤러는 대화상자 State가 갖고 dispose에서 정리합니다.
+/// showDialog는 닫히는 애니메이션이 시작될 때 돌아오므로, 그 직후에 정리하면
+/// 아직 그려지는 입력칸이 정리된 컨트롤러를 써서 오류 화면이 납니다.
+class _AdminPinDialog extends StatefulWidget {
+  const _AdminPinDialog({required this.settings, required this.deviceToken});
+
+  final KioskSettings settings;
+  final String deviceToken;
+
+  @override
+  State<_AdminPinDialog> createState() => _AdminPinDialogState();
+}
+
+class _AdminPinDialogState extends State<_AdminPinDialog> {
+  final controller = TextEditingController();
+  final confirm = TextEditingController();
+  final tokenField = TextEditingController();
+  late final bool creating = !widget.settings.hasPin;
+  late final bool needToken = creating && widget.deviceToken.isNotEmpty;
+  String? error;
+
+  @override
+  void dispose() {
+    controller.dispose();
+    confirm.dispose();
+    tokenField.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final settings = widget.settings;
+    final pin = controller.text;
+    if (creating) {
+      if (needToken &&
+          !_sameSecret(tokenField.text.trim(), widget.deviceToken)) {
+        setState(() => error = '기기 토큰이 맞지 않습니다.');
+        return;
+      }
+      if (!KioskSettings.validPin(pin)) {
+        setState(() => error = '숫자 4~8자리로 정해 주세요.');
+        return;
+      }
+      if (pin != confirm.text) {
+        setState(() => error = '두 PIN이 다릅니다.');
+        return;
+      }
+      await settings.setPin(pin);
+      if (mounted) Navigator.pop(context, true);
+      return;
+    }
+    final locked = settings.pinLockRemaining(DateTime.now());
+    if (locked != null) {
+      setState(
+        () => error = '여러 번 틀려 ${locked.inMinutes + 1}분 동안 잠겼습니다.',
+      );
+      return;
+    }
+    if (await settings.checkPin(pin)) {
+      if (mounted) Navigator.pop(context, true);
+    } else if (mounted) {
+      controller.clear();
+      setState(() => error = 'PIN이 맞지 않습니다.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(creating ? '관리자 PIN 만들기' : '관리자 PIN 입력'),
+    content: SizedBox(
+      width: 360,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (creating) const Text('키오스크 설정을 보호할 숫자 4~8자리 PIN을 정해 주세요.'),
+          if (needToken)
+            TextField(
+              key: const Key('pin-token-field'),
+              controller: tokenField,
+              autofocus: true,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: '기기 토큰 (회사 관리자 웹에서 발급한 값)',
               ),
-              if (creating)
-                TextField(
-                  key: const Key('pin-confirm-field'),
-                  controller: confirm,
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(8),
-                  ],
-                  decoration: const InputDecoration(labelText: 'PIN 확인'),
-                ),
-              if (error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    error!,
-                    style: const TextStyle(color: Color(0xFFB3261E)),
-                  ),
-                ),
+            ),
+          TextField(
+            key: const Key('pin-field'),
+            controller: controller,
+            autofocus: !needToken,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(8),
             ],
+            decoration: const InputDecoration(labelText: 'PIN'),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final pin = controller.text;
-              if (creating) {
-                if (needToken && !_sameSecret(tokenField.text.trim(), deviceToken)) {
-                  update(() => error = '기기 토큰이 맞지 않습니다.');
-                  return;
-                }
-                if (!KioskSettings.validPin(pin)) {
-                  update(() => error = '숫자 4~8자리로 정해 주세요.');
-                  return;
-                }
-                if (pin != confirm.text) {
-                  update(() => error = '두 PIN이 다릅니다.');
-                  return;
-                }
-                await settings.setPin(pin);
-                if (context.mounted) Navigator.pop(context, true);
-                return;
-              }
-              final locked = settings.pinLockRemaining(DateTime.now());
-              if (locked != null) {
-                update(
-                  () => error = '여러 번 틀려 ${locked.inMinutes + 1}분 동안 잠겼습니다.',
-                );
-                return;
-              }
-              if (await settings.checkPin(pin)) {
-                if (context.mounted) Navigator.pop(context, true);
-              } else {
-                controller.clear();
-                update(() => error = 'PIN이 맞지 않습니다.');
-              }
-            },
-            child: const Text('확인'),
-          ),
+          if (creating)
+            TextField(
+              key: const Key('pin-confirm-field'),
+              controller: confirm,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(8),
+              ],
+              decoration: const InputDecoration(labelText: 'PIN 확인'),
+            ),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                error!,
+                style: const TextStyle(color: Color(0xFFB3261E)),
+              ),
+            ),
         ],
       ),
     ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context, false),
+        child: const Text('취소'),
+      ),
+      FilledButton(onPressed: _submit, child: const Text('확인')),
+    ],
   );
-  controller.dispose();
-  confirm.dispose();
-  tokenField.dispose();
-  return ok ?? false;
+}
+
+/// 새 PIN 입력. 컨트롤러 정리 시점은 [_AdminPinDialog]와 같은 이유로 State.dispose입니다.
+class _NewPinDialog extends StatefulWidget {
+  const _NewPinDialog();
+
+  @override
+  State<_NewPinDialog> createState() => _NewPinDialogState();
+}
+
+class _NewPinDialogState extends State<_NewPinDialog> {
+  final controller = TextEditingController();
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('새 관리자 PIN'),
+    content: TextField(
+      controller: controller,
+      obscureText: true,
+      keyboardType: TextInputType.number,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(8),
+      ],
+      decoration: const InputDecoration(labelText: '숫자 4~8자리'),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('취소'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, controller.text),
+        child: const Text('변경'),
+      ),
+    ],
+  );
 }
 
 /// 길이와 관계없이 끝까지 비교합니다(입력 시간으로 토큰을 추측하지 못하게).
@@ -279,34 +346,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _changePin() async {
-    final controller = TextEditingController();
     final pin = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('새 관리자 PIN'),
-        content: TextField(
-          controller: controller,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-            LengthLimitingTextInputFormatter(8),
-          ],
-          decoration: const InputDecoration(labelText: '숫자 4~8자리'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('변경'),
-          ),
-        ],
-      ),
+      builder: (_) => const _NewPinDialog(),
     );
-    controller.dispose();
     if (pin == null) return;
     if (!KioskSettings.validPin(pin)) {
       setState(() => status = 'PIN은 숫자 4~8자리입니다.');

@@ -36,14 +36,12 @@ class VoicePanel extends StatelessWidget {
     listenable: controller,
     builder: (context, _) {
       final c = controller;
-      final listening =
-          c.state == ConversationState.listening ||
-          (c.state == ConversationState.recommending ||
-                  c.state == ConversationState.confirming ||
-                  c.state == ConversationState.choosingOption ||
-                  c.state == ConversationState.upsell) &&
-              c.partial.isNotEmpty;
+      // 마이크는 고객이 누를 때만 켜지므로, 실제로 듣는 동안만 빨간 마이크로 보입니다.
+      final listening = c.micOpen;
       final quote = c.partial.isNotEmpty ? c.partial : c.heard;
+      final label = c.state == ConversationState.listening && !c.micOpen
+          ? tr('마이크 버튼을 누르고 말씀해 주세요')
+          : stateLabel(c.state);
       return Material(
         key: const Key('voice-panel'),
         elevation: 16,
@@ -65,7 +63,7 @@ class VoicePanel extends StatelessWidget {
                   const SizedBox(width: 14),
                   Expanded(
                     child: Text(
-                      stateLabel(c.state),
+                      label,
                       key: const Key('voice-state'),
                       style: const TextStyle(
                         fontSize: 24,
@@ -230,6 +228,22 @@ class VoicePanel extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              ],
+              if (c.canTalk) ...[
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  key: const Key('voice-talk'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 64),
+                    backgroundColor: const Color(0xFFD94F3D),
+                  ),
+                  onPressed: () => c.talk(),
+                  icon: const Icon(Icons.mic, size: 30),
+                  label: Text(
+                    tr('말하기'),
+                    style: const TextStyle(fontSize: 22),
+                  ),
                 ),
               ],
               const SizedBox(height: 10),
