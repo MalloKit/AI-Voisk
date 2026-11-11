@@ -231,7 +231,7 @@ export function findProblem(draft: MenuBoard): Problem | null {
   return null;
 }
 
-// 되돌리기·변경 취소 때도 품절은 이미 키오스크에 반영된 값이라 지금 값을 유지한다.
+// 되돌리기·변경 취소 때도 품절·사진은 이미 키오스크에 반영된 값이라 지금 값을 유지한다.
 export function keepSoldOut(
   snapshot: MenuBoard,
   current: MenuBoard,
@@ -240,9 +240,12 @@ export function keepSoldOut(
   const options = byId(current.options);
   return {
     ...snapshot,
-    menus: snapshot.menus.map((m) =>
-      menus.has(m.id) ? { ...m, isSoldOut: menus.get(m.id)!.isSoldOut } : m,
-    ),
+    menus: snapshot.menus.map((m) => {
+      const now = menus.get(m.id);
+      return now
+        ? { ...m, isSoldOut: now.isSoldOut, imageUrl: now.imageUrl }
+        : m;
+    }),
     options: snapshot.options.map((o) =>
       options.has(o.id) ? { ...o, isSoldOut: options.get(o.id)!.isSoldOut } : o,
     ),

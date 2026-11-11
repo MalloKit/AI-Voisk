@@ -154,6 +154,7 @@ export function App({
         {page === "menus" && (
           <MenusPage
             repository={repository}
+            photos={aiRepository}
             storeId={profile.store.id}
             board={board}
             onBoardChange={changeBoard}

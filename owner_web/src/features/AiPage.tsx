@@ -3,6 +3,7 @@ import { ImagePlus, Trash2, Sparkles, Mic } from "lucide-react";
 import { Badge, Card, ErrorState, Heading, Loading, Section } from "../components/ui";
 import type { AiSettings, MenuAi, OwnerAiRepository } from "../data/aiRepository";
 import { apiErrorMessage } from "../data/ownerApiRepository";
+import { PHOTO_ACCEPT, shrinkImage } from "../data/menuImage";
 import { useAsync } from "../hooks/useAsync";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
@@ -23,28 +24,6 @@ export function parseLabels(value: string, limit: number) {
   if (tooLong) return { labels, error: `"${tooLong}"은(는) ${limit}자 이하로 써 주세요.` };
   if (labels.length > TAG_MAX) return { labels, error: `${TAG_MAX}개까지 입력할 수 있습니다.` };
   return { labels, error: null };
-}
-
-// 업로드 전에 사진을 긴 변 800px JPEG로 줄인다. 서버 한도(900KB)를 넘지 않게 하려는 것이다.
-async function shrinkImage(file: File): Promise<Blob> {
-  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type))
-    throw new Error("JPG, PNG, WEBP 사진만 올릴 수 있습니다.");
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 800 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("canvas");
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
-    if (blob) return blob;
-  } catch {
-    // 브라우저가 변환하지 못하면 원본을 그대로 보냅니다.
-  }
-  if (file.size > 900 * 1024) throw new Error("사진을 줄이지 못했습니다. 900KB 이하 사진을 골라 주세요.");
-  return file;
 }
 
 function Slider({
@@ -318,7 +297,7 @@ function MenuAiCard({ repository }: { repository: OwnerAiRepository }) {
       <p className="muted ai-lead">
         상황 태그(해장·든든한·아이와함께 등)와 동의어("아아", "제육" 등)는 음성 주문 해석과 추천에 쓰입니다. 원가율은 '매장 이익 우선' 정책의 순서 계산에만 쓰고 고객에게 보이지 않습니다.
       </p>
-      <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" hidden aria-label="메뉴 사진 파일"
+      <input ref={fileInput} type="file" accept={PHOTO_ACCEPT} hidden aria-label="메뉴 사진 파일"
         onChange={(e) => void upload(e.target.files?.[0])} />
       {rows.length === 0 ? (
         <p className="muted">등록된 메뉴가 없습니다. 메뉴 관리에서 먼저 메뉴를 만들어 주세요.</p>

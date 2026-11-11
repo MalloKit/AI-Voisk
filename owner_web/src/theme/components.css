@@ -1536,6 +1536,40 @@ label.form-field > span:first-child {
   min-height: 36px;
   padding: 0 var(--sm);
 }
+/* 메뉴 관리 편집 폼의 사진 칸 */
+.menu-photo-field .field-label {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-weight: 600;
+}
+.menu-photo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--md);
+}
+.menu-photo img,
+.menu-photo-empty {
+  width: 132px;
+  height: 92px;
+  border-radius: calc(var(--radius) - 4px);
+  object-fit: cover;
+  background: var(--kiosk-icon-surface);
+}
+.menu-photo-empty {
+  display: grid;
+  place-items: center;
+  font-size: var(--text-xs);
+  color: var(--kiosk-icon);
+}
+.menu-photo-actions {
+  display: flex;
+  gap: var(--xs);
+}
+.menu-photo-actions button {
+  min-height: 36px;
+  padding: 0 var(--sm);
+}
 .ai-menu-name {
   display: flex;
   flex-direction: column;

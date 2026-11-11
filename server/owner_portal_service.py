@@ -94,6 +94,11 @@ def read_board(cursor, store_id):
     for row in menus + options:
         row['is_active'] = bool(row['is_active'])
         row['is_sold_out'] = bool(row['is_sold_out'])
+    # 메뉴 관리 미리보기·편집에 대표 사진을 보여 줍니다. 사진 서비스가 이 모듈을 쓰므로 여기서 불러옵니다.
+    import menu_image_service
+    images = menu_image_service.images_for_store(cursor, store_id)
+    for row in menus:
+        row['image_url'] = images.get(row['menu_id'])
     return {'categories': categories, 'menus': menus, 'options': options}
 
 

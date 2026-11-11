@@ -29,6 +29,8 @@ SCHEMA = """
     CREATE TABLE menu_option (option_id INTEGER PRIMARY KEY AUTOINCREMENT, menu_id INTEGER NOT NULL REFERENCES menu(menu_id),
         option_nm TEXT NOT NULL, menu_option_sort INTEGER NOT NULL, is_active INTEGER NOT NULL DEFAULT 1,
         is_sold_out INTEGER NOT NULL DEFAULT 0, extra_price INTEGER NOT NULL DEFAULT 0 CHECK (extra_price >= 0));
+    CREATE TABLE menu_img (img_id INTEGER PRIMARY KEY AUTOINCREMENT, menu_id INTEGER NOT NULL REFERENCES menu(menu_id),
+        img_nm TEXT NOT NULL, is_main INTEGER NOT NULL);
     CREATE TABLE kiosk_device (device_id INTEGER PRIMARY KEY, device_code TEXT NOT NULL, store_id INTEGER NOT NULL REFERENCES store(store_id),
         device_token_hash TEXT, is_active INTEGER NOT NULL, last_seen_at TEXT, current_menu_version INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE orders (order_id INTEGER PRIMARY KEY, store_id INTEGER NOT NULL REFERENCES store(store_id),

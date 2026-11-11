@@ -93,6 +93,7 @@ function parseBoard(value: unknown): MenuBoard {
         isActive: bool(m.is_active),
         isSoldOut: bool(m.is_sold_out),
         sort: int(m.menu_sort),
+        imageUrl: nullable(m.image_url, text),
       }),
     ),
     options: rows(body.options).map(

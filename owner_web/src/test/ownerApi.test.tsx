@@ -37,6 +37,7 @@ const boardBody = {
       is_active: false,
       is_sold_out: true,
       menu_sort: 2,
+      image_url: "/media/menu/10_abc.jpg",
     },
   ],
   options: [
@@ -120,6 +121,7 @@ describe("ApiOwnerRepository 조회", () => {
           isActive: false,
           isSoldOut: true,
           sort: 2,
+          imageUrl: "/media/menu/10_abc.jpg",
         },
       ],
       options: [

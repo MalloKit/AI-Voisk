@@ -288,14 +288,17 @@ export class MockOwnerAiRepository implements OwnerAiRepository {
     this.calls.open = this.calls.open.filter((c) => c !== call);
     this.calls.recent.unshift({ ...call, status: "RESOLVED", resolvedAt: new Date().toISOString() });
   }
-  async uploadMenuImage(menuId: number) {
+  // 메뉴 관리에서 새로 만든 메뉴처럼 이 목록에 없는 메뉴도 올리고 지울 수 있다.
+  async uploadMenuImage(menuId: number, _image?: Blob) {
     this.uploads++;
-    const menu = this.menus.find((m) => m.menuId === menuId)!;
-    menu.imageUrl = `/media/menu/${menuId}_${String(this.uploads).padStart(16, "0")}.jpg`;
-    return menu.imageUrl;
+    const imageUrl = `/media/menu/${menuId}_${String(this.uploads).padStart(16, "0")}.jpg`;
+    const menu = this.menus.find((m) => m.menuId === menuId);
+    if (menu) menu.imageUrl = imageUrl;
+    return imageUrl;
   }
   async deleteMenuImage(menuId: number) {
-    this.menus.find((m) => m.menuId === menuId)!.imageUrl = null;
+    const menu = this.menus.find((m) => m.menuId === menuId);
+    if (menu) menu.imageUrl = null;
   }
   imageSrc(path: string | null) {
     return path;
