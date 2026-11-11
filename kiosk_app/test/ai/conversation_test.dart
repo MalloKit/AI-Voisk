@@ -78,6 +78,27 @@ void main() {
     expect(interpreter.payloads.single['text'], '제육 두 개랑 콜라 하나');
   });
 
+  test('서버가 품절이라 뺀 메뉴는 남은 메뉴를 확인할 때 함께 알립니다', () async {
+    final c = build();
+    voice
+      ..say('콜라랑 사이다 하나씩')
+      ..say('네');
+    interpreter.reply(
+      InterpretResult.fromJson({
+        'intent': 'order',
+        'items': [
+          {'menu_id': 6, 'quantity': 1, 'option_ids': [], 'entry_id': null},
+        ],
+        'sold_out_menu_ids': [7],
+      }),
+    );
+    await c.start();
+    await settle();
+
+    expect(voice.spoken, contains('사이다는 지금 품절이에요. 콜라 1개 담을까요?'));
+    expect(cart.entries.map((e) => e.menu.name), ['콜라']);
+  });
+
   test('추가 제안은 주문당 1회, 수락하면 추천 경유로 담깁니다', () async {
     final c = build();
     voice
@@ -295,9 +316,10 @@ void main() {
     expect(cart.entries.single.menu.id, '1');
   });
 
-  test('품절 메뉴는 담지 않고 되묻습니다', () async {
-    final c = build();
+  test('품절 메뉴는 담지 않고, 실패로 세지 않고 품절을 알립니다', () async {
+    final c = build(maxFailures: 1);
     voice.say('사이다');
+    // 서버 카탈로그가 늦어 품절 메뉴를 그대로 돌려줘도 화면 기준 품절로 걸러 알립니다.
     interpreter.reply(
       const InterpretResult(
         intent: 'order',
@@ -307,7 +329,8 @@ void main() {
     await c.start();
     await settle();
     expect(cart.entries, isEmpty);
-    expect(voice.spoken, contains(startsWith('말씀하신 메뉴를 찾지 못했어요.')));
+    expect(voice.spoken, contains('사이다는 지금 품절이에요. 다른 메뉴를 말씀해 주세요.'));
+    expect(c.offerStaffCall, isFalse);
   });
 
   test('확인 단계의 짧은 긍정·부정 문장은 서버 없이 처리하고, 긴 문장은 서버에 맡깁니다', () async {

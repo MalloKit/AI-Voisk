@@ -34,6 +34,7 @@ class InterpretResult {
     this.recommendations = const [],
     this.selectIndex,
     this.question,
+    this.soldOutMenuIds = const [],
   });
 
   final String intent;
@@ -42,6 +43,9 @@ class InterpretResult {
   final List<RecommendationCandidate> recommendations;
   final int? selectIndex;
   final String? question;
+
+  /// 손님이 담으려 했지만 품절이라 서버가 뺀 메뉴.
+  final List<String> soldOutMenuIds;
 
   factory InterpretResult.fromJson(Map<String, dynamic> json) =>
       InterpretResult(
@@ -66,6 +70,9 @@ class InterpretResult {
         }).toList(),
         selectIndex: json['select_index'] as int?,
         question: json['question'] as String?,
+        soldOutMenuIds: ((json['sold_out_menu_ids'] ?? const []) as List)
+            .map((id) => '$id')
+            .toList(),
       );
 }
 
@@ -127,6 +134,7 @@ class ConversationController extends ChangeNotifier {
   final OrderCommandBus bus;
   final KioskCatalog Function() catalog;
   final MenuItem? Function()? viewingMenu;
+
   /// 메뉴 강조. focus가 true면 고객이 고른 메뉴라 "이거"가 가리키는 메뉴로도 씁니다.
   final void Function(Set<String> menuIds, {bool focus})? onHighlight;
   final Future<void> Function()? onCheckout;
@@ -160,7 +168,8 @@ class ConversationController extends ChangeNotifier {
   MenuItem? askingMenu;
   String? askingGroup;
   List<MenuOption> get optionChoices => [
-    for (final option in askingMenu?.optionGroups[askingGroup] ?? const <MenuOption>[])
+    for (final option
+        in askingMenu?.optionGroups[askingGroup] ?? const <MenuOption>[])
       if (!option.isSoldOut) option,
   ];
   int _askIndex = 0;
@@ -608,13 +617,21 @@ class ConversationController extends ChangeNotifier {
     }
     switch (result.intent) {
       case 'order':
-        await _confirmItems(session, _toCommands(result.items));
+        await _confirmItems(
+          session,
+          _toCommands(result.items),
+          lead: _soldOutLead(result),
+        );
       case 'select':
         final index = result.selectIndex;
         if (index != null && index >= 0 && index < recommendations.length) {
           await selectRecommendation(index, viaVoice: true);
         } else {
-          await _confirmItems(session, _toCommands(result.items));
+          await _confirmItems(
+            session,
+            _toCommands(result.items),
+            lead: _soldOutLead(result),
+          );
         }
       case 'recommend':
         await _recommend(session, result);
@@ -712,8 +729,35 @@ class ConversationController extends ChangeNotifier {
       '${command.menu.name}${command.options.isEmpty ? '' : ' ${command.options.map((o) => o.name).join(' ')}'} ${command.quantity}개',
   ]);
 
-  Future<void> _confirmItems(int session, List<AddItemCommand> commands) async {
+  /// 담으려던 메뉴 중 품절이라 빠진 메뉴를 알리는 앞말. 서버가 뺀 메뉴와 화면 기준 품절 메뉴를 함께 봅니다.
+  String _soldOutLead(InterpretResult result) {
+    final current = catalog();
+    final names = <String>[];
+    for (final id in [
+      ...result.soldOutMenuIds,
+      ...result.items.map((item) => item.menuId),
+    ]) {
+      final menu = current.menuById(id);
+      if (menu == null || names.contains(menu.name)) continue;
+      if (menu.isSoldOut || result.soldOutMenuIds.contains(id)) {
+        names.add(menu.name);
+      }
+    }
+    return names.isEmpty ? '' : '${eunNeun(joinNames(names))} 지금 품절이에요. ';
+  }
+
+  Future<void> _confirmItems(
+    int session,
+    List<AddItemCommand> commands, {
+    String lead = '',
+  }) async {
     if (commands.isEmpty) {
+      if (lead.isNotEmpty) {
+        // 알아들었지만 품절이라 담을 게 없으면 실패로 세지 않고 품절을 알립니다.
+        _failures = 0;
+        await _prompt(session, '$lead다른 메뉴를 말씀해 주세요.');
+        return;
+      }
       await _fail(session, '말씀하신 메뉴를 찾지 못했어요.');
       return;
     }
@@ -727,7 +771,7 @@ class ConversationController extends ChangeNotifier {
         askingGroup = missing.first;
         onHighlight?.call({command.menu.id}, focus: true);
         state = ConversationState.choosingOption;
-        await _askAgain(session);
+        await _askAgain(session, lead: lead);
         return;
       }
     }
@@ -737,32 +781,43 @@ class ConversationController extends ChangeNotifier {
       pendingItems = const [];
       state = ConversationState.listening;
       _execute(commands);
-      await _afterAdd(session, '${_describe(commands)} 담았어요. ');
+      await _afterAdd(session, '$lead${_describe(commands)} 담았어요. ');
       return;
     }
     pendingItems = commands;
     onHighlight?.call(commands.map((c) => c.menu.id).toSet(), focus: true);
     state = ConversationState.confirming;
-    await _prompt(session, '${_describe(commands)} 담을까요?');
+    await _prompt(session, '$lead${_describe(commands)} 담을까요?');
   }
 
   /// 필수 옵션 질문(구상안 13장 재질문: 필요한 항목만 묻기).
-  Future<void> _askAgain(int session) async {
+  Future<void> _askAgain(int session, {String lead = ''}) async {
     final menu = askingMenu;
     final group = askingGroup;
     if (menu == null || group == null) return;
     final names = optionChoices.map((o) => o.name).toList();
     await _prompt(
       session,
-      '${eulReul('${menu.name} $group')} 골라 주세요. ${joinNames(names)} 중에 말씀하시거나 화면에서 눌러 주세요.',
+      '$lead${eulReul('${menu.name} $group')} 골라 주세요. ${joinNames(names)} 중에 말씀하시거나 화면에서 눌러 주세요.',
     );
   }
 
   static const _ordinals = {
-    '첫번째': 0, '첫째': 0, '1번': 0, '일번': 0,
-    '두번째': 1, '둘째': 1, '2번': 1, '이번': 1,
-    '세번째': 2, '셋째': 2, '3번': 2, '삼번': 2,
-    '네번째': 3, '넷째': 3, '4번': 3,
+    '첫번째': 0,
+    '첫째': 0,
+    '1번': 0,
+    '일번': 0,
+    '두번째': 1,
+    '둘째': 1,
+    '2번': 1,
+    '이번': 1,
+    '세번째': 2,
+    '셋째': 2,
+    '3번': 2,
+    '삼번': 2,
+    '네번째': 3,
+    '넷째': 3,
+    '4번': 3,
   };
 
   /// "매운맛", "보통으로", "두 번째 거"처럼 묻는 그룹의 선택지 하나를 가리키면 그 옵션.
@@ -806,7 +861,10 @@ class ConversationController extends ChangeNotifier {
     commands[_askIndex] = AddItemCommand(
       command.menu,
       command.quantity,
-      options: [...command.options.where((o) => o.group != option.group), option],
+      options: [
+        ...command.options.where((o) => o.group != option.group),
+        option,
+      ],
       recommended: command.recommended,
     );
     _clearAsk();
@@ -829,7 +887,9 @@ class ConversationController extends ChangeNotifier {
         // 이미 "네"라고 했으므로 옵션을 고르면 다시 묻지 않고 바로 담습니다.
         state = ConversationState.listening;
         _alreadyConfirmed = true;
-        await _confirmItems(session, [AddItemCommand(menu, 1, recommended: true)]);
+        await _confirmItems(session, [
+          AddItemCommand(menu, 1, recommended: true),
+        ]);
       } else if (yes && menu != null) {
         _execute([AddItemCommand(menu, 1, recommended: true)]);
         state = ConversationState.listening;

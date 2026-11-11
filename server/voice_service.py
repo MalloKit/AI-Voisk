@@ -262,12 +262,50 @@ def _short(value, limit):
     return value[:limit] or None
 
 
+def _josa(word, with_consonant, without_consonant):
+    last = word[-1:] if word else ''
+    has_consonant = '가' <= last <= '힣' and (ord(last) - 0xAC00) % 28 != 0
+    return word + (with_consonant if has_consonant else without_consonant)
+
+
+def _menu_terms(menu):
+    """메뉴 이름·동의어를 띄어쓰기 없이 돌려줍니다. 한 글자 동의어는 다른 말에 섞여 오탐이 나므로 뺍니다."""
+    terms = {''.join(str(value).split()) for value in [menu['name'], *menu.get('synonyms', [])]}
+    return [term for term in terms if len(term) >= 2]
+
+
+def _mentioned_sold_out(text, menus):
+    """발화에 품절 메뉴 이름이 들어 있으면 그 메뉴 id를 돌려줍니다.
+
+    판매 중인 더 긴 메뉴 이름 안에 들어 있는 경우(예: 품절 '콜라'와 판매 중 '제로콜라')는 세지 않습니다.
+    """
+    compact = ''.join(text.split())
+
+    def spans(menu):
+        for term in _menu_terms(menu):
+            start = compact.find(term)
+            while start != -1:
+                yield start, start + len(term)
+                start = compact.find(term, start + 1)
+
+    selling = [span for menu in menus.values() if not menu['isSoldOut'] for span in spans(menu)]
+    return [menu_id for menu_id, menu in menus.items() if menu['isSoldOut'] and any(
+        not any(s <= start and end <= e and e - s > end - start for s, e in selling)
+        for start, end in spans(menu))]
+
+
+def _sold_out_notice(menu_ids, menus):
+    names = [menus[menu_id]['name'] for menu_id in menu_ids]
+    joined = f"{_josa(names[0], '과', '와')} {names[1]}" if len(names) == 2 else ', '.join(names)
+    return f"{_josa(joined, '은', '는')} 지금 품절이에요. 다른 메뉴를 말씀해 주세요."
+
+
 def sanitize(raw, catalog, request: InterpretInput):
     menus = {int(menu['id']): menu for menu in catalog['menus']}
     cart = {line.entry_id: line for line in request.cart}
     intent = raw.get('intent') if raw.get('intent') in INTENTS else 'unknown'
 
-    items = []
+    items, sold_out = [], []
     for item in raw.get('items') or []:
         if not isinstance(item, dict):
             continue
@@ -299,6 +337,9 @@ def sanitize(raw, catalog, request: InterpretInput):
             option_ids.add(option_id)
         option_ids = sorted(option_ids)
         if menu['isSoldOut'] and entry_id is None:
+            # 품절 메뉴는 담지 않되, 손님에게 알릴 수 있게 따로 모읍니다.
+            if menu_id not in sold_out:
+                sold_out.append(menu_id)
             continue
         items.append({'menu_id': menu_id, 'quantity': quantity, 'option_ids': option_ids, 'entry_id': entry_id})
 
@@ -328,6 +369,13 @@ def sanitize(raw, catalog, request: InterpretInput):
     else:
         select_index = None
 
+    # 모델이 품절 메뉴를 담지 않고 unknown으로만 답해도, 발화에 품절 메뉴가 있으면 품절을 알립니다.
+    if intent == 'unknown' and not sold_out:
+        sold_out = _mentioned_sold_out(request.text, menus)
+    sold_out_notice = None
+    if intent in ('order', 'unknown', 'clarify') and not items and sold_out:
+        intent = 'clarify'
+        sold_out_notice = _sold_out_notice(sold_out, menus)
     if intent == 'order' and not items:
         intent = 'clarify'
     if intent in ('modify', 'remove') and not any(item['entry_id'] for item in items):
@@ -335,7 +383,7 @@ def sanitize(raw, catalog, request: InterpretInput):
     # 상황 태그는 매장 메뉴 태그에 있는 값만 남깁니다(이름·번호 같은 발화 내용이 기록되지 않게).
     known_tags = {tag for menu in catalog['menus'] for tag in menu.get('tags', [])}
     situation = [tag for tag in (_short(value, 20) for value in raw.get('situation') or []) if tag in known_tags][:5]
-    question = _short(raw.get('question'), 120) if intent in ('clarify', 'help') else None
+    question = sold_out_notice or (_short(raw.get('question'), 120) if intent in ('clarify', 'help') else None)
     return {
         'intent': intent,
         'items': items if intent in ('order', 'select', 'modify', 'remove') else [],
@@ -343,6 +391,8 @@ def sanitize(raw, catalog, request: InterpretInput):
         'recommendations': recommendations,
         'select_index': select_index,
         'question': question,
+        # 담으려다 품절이라 뺀 메뉴. 키오스크가 나머지를 담으면서 품절을 함께 알립니다.
+        'sold_out_menu_ids': sorted(sold_out) if intent in ('order', 'select', 'clarify') else [],
     }
 
 
