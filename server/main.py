@@ -12,9 +12,13 @@ from fastapi import Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 import admin_auth
-import kakaopay_test
 import owner_auth
 import owner_router
+import kakaopay_test
+import device_auth
+import kiosk_router
+import menu_image_service
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from order_service import OrderPayment, OrderInput, save_order, list_orders, order_detail, confirm_cash
@@ -48,6 +52,18 @@ class Menu(BaseModel):
 app = FastAPI(title="AI 보이스크 · 연습용 메뉴 API", version="0.1.0")
 # 메뉴판 저장 한 번의 본문 상한입니다. 인증 POST는 8KB로 더 작게 제한합니다.
 OWNER_BODY_LIMIT = 1024 * 1024
+# 로컬 전용 경로가 받는 Host. DNS 리바인딩(외부 도메인을 127.0.0.1로 바꿔 브라우저가 보내는 요청)을 막습니다.
+# 10.0.2.2는 안드로이드 에뮬레이터가 PC 서버를 부르는 주소, testserver는 테스트 클라이언트입니다.
+LOOPBACK_HOSTS = {'127.0.0.1', 'localhost', '::1', '10.0.2.2', 'testserver'}
+
+
+def _loopback_host(request):
+    host = request.headers.get('host', '').strip().lower()
+    if host.startswith('['):
+        host = host[1:].split(']', 1)[0]
+    elif host.count(':') == 1:
+        host = host.split(':', 1)[0]
+    return host in LOOPBACK_HOSTS
 
 
 @app.middleware('http')
@@ -61,13 +77,23 @@ async def local_demo_only(request: Request, call_next):
             kakaopay_test.local_only(request)
         except HTTPException as error:
             return JSONResponse(status_code=error.status_code, content={'detail': error.detail})
+    kiosk_path = path == '/kiosk' or path.startswith('/kiosk/')
+    # 인증 전이므로 본문을 읽기 전에 선언된 크기로 먼저 거절합니다(크기를 밝히지 않는 요청도 거절).
+    kiosk_length = request.headers.get('content-length', '')
+    if kiosk_path and request.method == 'POST' and (
+            not kiosk_length.isdigit() or int(kiosk_length) > 64 * 1024 or len(await request.body()) > 64 * 1024):
+        return JSONResponse(status_code=413, content={'detail': '요청 크기를 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
     admin_path = path == '/admin' or path.startswith('/admin/')
     auth_path = path == '/auth/admin' or path.startswith('/auth/admin/')
     owner_password_path = path.startswith('/admin/owners/') and path.rstrip('/').endswith('/password')
     owner_path = path == '/owner' or path.startswith('/owner/')
     owner_auth_path = path == '/auth/owner' or path.startswith('/auth/owner/')
-    if (admin_path or auth_path or owner_path or owner_auth_path or path == '/orders') and (
+    # 기기 토큰 없이 쓰는 이전 시연 경로(메뉴·주문·결제)도 노트북 자신만 씁니다. 키오스크는 /kiosk를 씁니다.
+    legacy_path = path in ('/orders', '/stores', '/db/health') or path.startswith(('/stores/', '/payments/'))
+    if (admin_path or auth_path or owner_path or owner_auth_path or legacy_path) and (
         request.client is None or request.client.host not in {'127.0.0.1', '::1', 'testclient'}
+        or not _loopback_host(request)
     ):
         return JSONResponse(status_code=403, content={'detail': '인증 전에는 로컬 시연만 허용합니다.'})
     if owner_path or owner_auth_path:
@@ -84,7 +110,7 @@ async def local_demo_only(request: Request, call_next):
                 owner_auth.clear_cookie(response)
             response.headers['Cache-Control'] = 'no-store'
             return response
-        if request.method in ('POST', 'PATCH'):
+        if request.method in ('POST', 'PATCH', 'PUT'):
             limit = 8192 if owner_auth_path else OWNER_BODY_LIMIT
             if len(await request.body()) > limit:
                 return JSONResponse(status_code=413, content={'detail': '요청 크기를 확인해 주세요.'},
@@ -109,10 +135,14 @@ async def local_demo_only(request: Request, call_next):
                 return JSONResponse(status_code=413, content={'detail': '인증 요청 크기를 확인해 주세요.'},
                                     headers={'Cache-Control': 'no-store'})
     response = await call_next(request)
+    if path.startswith('/media/'):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        if response.status_code == 200:
+            response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     if path.startswith('/payments/kakaopay/'):
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Referrer-Policy'] = 'no-referrer'
-    if admin_path or auth_path or owner_path or owner_auth_path:
+    if admin_path or auth_path or owner_path or owner_auth_path or kiosk_path:
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Pragma'] = 'no-cache'
     return response
@@ -122,12 +152,17 @@ async def local_demo_only(request: Request, call_next):
 app.add_middleware(CORSMiddleware,
     allow_origins=list(admin_auth.settings.origins),
     allow_credentials=True,
-    allow_methods=['GET', 'POST', 'PATCH'],
+    allow_methods=['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
     allow_headers=['Content-Type', 'X-CSRF-Token'])
 app.include_router(admin_auth.router)
-app.include_router(kakaopay_test.router)
 app.include_router(owner_auth.router)
 app.include_router(owner_router.router)
+app.include_router(kakaopay_test.router)
+app.include_router(kiosk_router.router)
+# 메뉴 사진은 공개 자료입니다. 파일 이름에 내용 해시가 있어 오래 캐시해도 됩니다.
+(menu_image_service.MEDIA_ROOT / menu_image_service.MENU_DIR).mkdir(parents=True, exist_ok=True)
+# 메뉴 사진 폴더만 공개합니다(MEDIA_ROOT를 잘못 지정해도 다른 파일이 나가지 않게).
+app.mount('/media/menu', StaticFiles(directory=menu_image_service.MEDIA_ROOT / menu_image_service.MENU_DIR), name='media')
 
 
 @app.exception_handler(RequestValidationError)
@@ -135,6 +170,10 @@ async def safe_validation_error(request: Request, error: RequestValidationError)
     # 기본 422 응답은 입력값을 그대로 돌려주므로 비밀번호·본문이 반사되지 않게 바꿉니다.
     if request.url.path.startswith('/auth/owner/'):
         return JSONResponse(status_code=422, content={'detail': '로그인 입력 형식을 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
+    if request.url.path.startswith('/kiosk/'):
+        # 발화 텍스트가 오류 응답에 되돌아가지 않도록 입력값을 싣지 않습니다.
+        return JSONResponse(status_code=422, content={'detail': {'code': 'invalid_request', 'message': '요청 형식을 확인해 주세요.'}},
                             headers={'Cache-Control': 'no-store'})
     if request.url.path.startswith('/owner/'):
         return JSONResponse(status_code=422, content={'detail': '입력 형식과 허용 범위를 확인해 주세요.'},
@@ -420,6 +459,8 @@ class AdminDeviceView(BaseModel):
     app_version: str | None
     last_seen_at: str | None
     last_synced_at: str | None
+    current_menu_version: int | None = None
+    applied_menu_version: int | None = None
 
 
 class AdminDeviceList(BaseModel):
@@ -455,6 +496,23 @@ def admin_create_device(payload: DeviceCreate):
 @app.patch('/admin/devices/{device_id}/status', response_model=AdminDeviceView)
 def admin_update_device_status(payload: DeviceStatusPatch, device_id: int = ApiPath(ge=1, le=2147483647)):
     return _device_write_call(update_device_status, device_id, payload)
+
+
+class AdminDeviceToken(BaseModel):
+    device_id: int
+    store_id: int
+    token: str
+
+
+@app.post('/admin/devices/{device_id}/token', response_model=AdminDeviceToken)
+def admin_issue_device_token(device_id: int = ApiPath(ge=1, le=2147483647)):
+    """새 토큰을 발급하고 이전 토큰을 무효로 합니다. 토큰은 이 응답에서 한 번만 보여 줍니다."""
+    try:
+        return device_auth.issue_token(device_id)
+    except LookupError:
+        raise HTTPException(404, '기기가 없습니다.') from None
+    except Exception:
+        raise HTTPException(503, '토큰 발급 결과를 확인할 수 없습니다. 다시 발급해 주세요.') from None
 
 
 @app.get('/admin/devices', response_model=AdminDeviceList)

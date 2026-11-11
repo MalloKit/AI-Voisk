@@ -293,10 +293,31 @@ class AdminAuthTests(unittest.TestCase):
     def test_anonymous_expiry_and_bounded_store(self):
         store = auth.SessionStore(clock=lambda: self.now[0], maximum=1)
         token, _ = store.create()
-        with self.assertRaises(auth.HTTPException): store.create()
         self.now[0] = 300
         self.assertIsNone(store.get(token))
         self.assertIsNotNone(store.create())
+
+    def test_anonymous_flood_evicts_oldest_anonymous_but_keeps_logins(self):
+        # 다른 사이트가 CSRF 발급을 반복 호출해도 로그인한 세션은 남고, 새 방문자도 막히지 않습니다.
+        store = auth.SessionStore(clock=lambda: self.now[0], maximum=2)
+        logged_in, _ = store.create(admin=auth.Admin(1, '관리자'))
+        first, _ = store.create()
+        self.now[0] = 1
+        second, _ = store.create()
+        self.assertIsNotNone(store.get(logged_in))
+        self.assertIsNone(store.get(first))
+        self.assertIsNotNone(store.get(second))
+        full = auth.SessionStore(clock=lambda: self.now[0], maximum=1)
+        full.create(admin=auth.Admin(1, '관리자'))
+        with self.assertRaises(auth.HTTPException): full.create()
+
+    def test_revoke_matching_drops_only_matching_logins(self):
+        store = auth.SessionStore(clock=lambda: self.now[0])
+        mine, _ = store.create(admin=auth.Admin(1, '관리자'))
+        anonymous, _ = store.create()
+        self.assertEqual(store.revoke_matching(lambda admin: admin == auth.Admin(1, '관리자')), 1)
+        self.assertIsNone(store.get(mine))
+        self.assertIsNotNone(store.get(anonymous))
 
 
 if __name__ == '__main__':

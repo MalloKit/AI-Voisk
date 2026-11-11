@@ -8,6 +8,10 @@ from argon2 import Type, extract_parameters
 import admin_auth
 from main import app
 import test_owner_writes as owner_tests
+from starlette import testclient as _testclient
+
+# TestClient가 httpx 또는 httpx2를 쓰므로 실제 모듈의 로거를 확인합니다.
+HTTP_LOGGER = _testclient.httpx.__name__
 
 
 class OwnerPasswordTests(unittest.TestCase):
@@ -21,7 +25,7 @@ class OwnerPasswordTests(unittest.TestCase):
         previous = self.db.execute('SELECT * FROM owner WHERE owner_id=8').fetchone()
         before = self.client.get('/admin/owners/7').json()
         relations = [tuple(r) for r in self.db.execute('SELECT * FROM store')]
-        with self.assertLogs('httpx', level='INFO') as logs:
+        with self.assertLogs(HTTP_LOGGER, level='INFO') as logs:
             response = self.reset(new)
         self.assertEqual(response.status_code, 204)
         self.assertEqual(response.content, b'')
@@ -108,3 +112,17 @@ class OwnerPasswordTests(unittest.TestCase):
         admin_auth.sessions.revoke(self.client.cookies.get(admin_auth.settings.cookie))
         self.assertEqual(self.reset().status_code,401)
         self.assertFalse(self.statements)
+
+
+class OwnerPasswordSessionTests(unittest.TestCase):
+    setUp = owner_tests.OwnerWriteTests.setUp
+
+    def test_reset_signs_out_existing_owner_sessions(self):
+        import owner_auth
+        token, _ = owner_auth.sessions.create(admin=owner_auth.Owner(7, 'kim.owner'))
+        other, _ = owner_auth.sessions.create(admin=owner_auth.Owner(8, 'lee.owner'))
+        self.addCleanup(owner_auth.sessions.revoke, other)
+        response = self.client.patch('/admin/owners/7/password', json={'password': secrets.token_urlsafe(24)})
+        self.assertEqual(response.status_code, 204, response.text)
+        self.assertIsNone(owner_auth.sessions.get(token))
+        self.assertIsNotNone(owner_auth.sessions.get(other))

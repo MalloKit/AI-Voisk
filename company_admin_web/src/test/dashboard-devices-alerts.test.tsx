@@ -12,6 +12,7 @@ const device = (id = 1, active = true): ApiDevice => ({
   store_address: "실제 주소", store_address_detail: null, is_active: active,
   registered_at: "2026-01-01T00:00:00+00:00", app_version: null,
   last_seen_at: id % 2 ? null : "2000-01-01T00:00:00+00:00", last_synced_at: null,
+  current_menu_version: null, applied_menu_version: null,
 });
 const alert = (id = 1, status = "UNREAD"): ApiAlert => ({
   alert_id: id, device_id: 1, device_code: "DB-1", store_id: 1, store_name: "실제 매장",

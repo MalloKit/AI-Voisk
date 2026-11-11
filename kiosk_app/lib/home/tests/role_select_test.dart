@@ -17,25 +17,24 @@ void main() {
         await tester.tap(find.text(mode));
         await tester.pumpAndSettle();
         expect(find.text('AI 보이스크 · 메뉴 주문 · $mode'), findsOneWidget);
-        for (final role in ['관리자', '점주']) {
-          await tester.tap(find.text('설정'));
-          await tester.pumpAndSettle();
-          expect(find.text('서비스'), findsNothing);
-          await tester.tap(find.text(role));
-          await tester.pumpAndSettle();
-          if (role != '서비스') {
-            expect(find.text('$role 기능'), findsOneWidget);
-            await tester.tap(find.text('닫기'));
-            await tester.pumpAndSettle();
-          }
-        }
+        // 설정은 관리자 PIN을 거치는 키오스크 설정 하나입니다. 서버 연결 없이 실행하면 안내만 보여 줍니다.
+        await tester.tap(find.text('설정'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('키오스크 설정'));
+        await tester.pumpAndSettle();
+        expect(find.text('앱을 서버 연결 설정으로 실행하면 사용할 수 있습니다.'), findsOneWidget);
+        await tester.tap(find.text('닫기'));
+        await tester.pumpAndSettle();
         for (var i = 0; i < 2; i++) {
           await tester.tap(find.text('글자 크게'));
           await tester.pumpAndSettle();
         }
         expect(find.text('120%'), findsOneWidget);
         final menuContext = tester.element(find.text('제육덮밥').first);
-        expect(MediaQuery.textScalerOf(menuContext).scale(20), closeTo(24, 0.01));
+        expect(
+          MediaQuery.textScalerOf(menuContext).scale(20),
+          closeTo(24, 0.01),
+        );
         await tester.tap(find.text('제육덮밥').first);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);

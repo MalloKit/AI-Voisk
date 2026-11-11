@@ -133,8 +133,11 @@ class ReadTests(OwnerPortalTestCase):
     def test_devices_never_expose_token_hash(self):
         response = self.client.get(STORE + '/devices')
         self.assertEqual(response.json(), {'devices': [
-            {'device_id': 70, 'device_code': 'K-70', 'is_active': True, 'last_seen_at': '2026-10-29T01:02:03+00:00'},
-            {'device_id': 71, 'device_code': 'K-71', 'is_active': False, 'last_seen_at': None}]})
+            # 이 픽스처 DB에는 current_menu_version만 있고 나머지 상태 열은 없어 None입니다.
+            {'device_id': 70, 'device_code': 'K-70', 'is_active': True, 'last_seen_at': '2026-10-29T01:02:03+00:00',
+             'app_version': None, 'last_synced_at': None, 'current_menu_version': 3, 'applied_menu_version': None},
+            {'device_id': 71, 'device_code': 'K-71', 'is_active': False, 'last_seen_at': None,
+             'app_version': None, 'last_synced_at': None, 'current_menu_version': 5, 'applied_menu_version': None}]})
         self.assertNotIn('token', response.text)
         self.assertFalse(any('device_token_hash' in sql for sql in self.f.statements))
 
@@ -147,7 +150,8 @@ class ReadTests(OwnerPortalTestCase):
 
 
 class SoldOutTests(OwnerPortalTestCase):
-    def test_changes_immediately_without_menu_version_bump(self):
+    def test_changes_immediately_and_bumps_only_own_store_menu_version(self):
+        # 품절도 키오스크가 바로 반영해야 하므로 해당 매장 기기의 메뉴 버전을 올립니다(AI 음성 작업에서 변경).
         before = self.versions()
         self.assertEqual(self.client.patch('/owner/menus/10/sold-out', json={'is_sold_out': True}).json(),
                          {'menu_id': 10, 'is_sold_out': True})
@@ -155,7 +159,8 @@ class SoldOutTests(OwnerPortalTestCase):
                          {'option_id': 100, 'is_sold_out': True})
         self.assertEqual(self.f.value('SELECT is_sold_out FROM menu WHERE menu_id = 10'), 1)
         self.assertEqual(self.f.value('SELECT is_sold_out FROM menu_option WHERE option_id = 100'), 1)
-        self.assertEqual(self.versions(), before)
+        self.assertEqual(self.versions(), {device: version + (2 if device in (70, 71) else 0)
+                                           for device, version in before.items()})
 
     def test_repeating_same_value_succeeds(self):
         for _ in range(2):

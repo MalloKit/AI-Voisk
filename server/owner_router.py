@@ -2,10 +2,13 @@
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
+import owner_ai_service as ai
 import owner_auth
 import owner_menu_write_service as writes
+import menu_image_service as images
 import owner_portal_service as portal
 from owner_menu_write_service import MenuBoardChanges, SoldOutInput
 
@@ -18,6 +21,10 @@ class OwnerDeviceView(BaseModel):
     device_code: str
     is_active: bool
     last_seen_at: str | None
+    app_version: str | None = None
+    last_synced_at: str | None = None
+    current_menu_version: int | None = None
+    applied_menu_version: int | None = None
 
 
 class OwnerDeviceList(BaseModel):
@@ -82,3 +89,51 @@ def order(request: Request, store_id: Id, order_id: Id):
 @router.get('/stores/{store_id}/devices', response_model=OwnerDeviceList)
 def devices(request: Request, store_id: Id):
     return _call(READ_FAILED, portal.list_devices, store_id, _owner_id(request))
+
+
+@router.get('/stores/{store_id}/ai-settings')
+def ai_settings(request: Request, store_id: Id):
+    return _call(READ_FAILED, ai.get_settings, store_id, _owner_id(request))
+
+
+@router.patch('/stores/{store_id}/ai-settings')
+def save_ai_settings(payload: ai.AiSettingsInput, request: Request, store_id: Id):
+    return _call(WRITE_FAILED, ai.save_settings, store_id, _owner_id(request), payload)
+
+
+@router.get('/stores/{store_id}/menu-ai')
+def menu_ai(request: Request, store_id: Id):
+    return _call(READ_FAILED, ai.get_menu_ai, store_id, _owner_id(request))
+
+
+@router.patch('/stores/{store_id}/menu-ai')
+def save_menu_ai(payload: ai.MenuAiChanges, request: Request, store_id: Id):
+    return _call(WRITE_FAILED, ai.save_menu_ai, store_id, _owner_id(request), payload)
+
+
+@router.get('/stores/{store_id}/stats')
+def stats(request: Request, store_id: Id, days: int = Query(7, ge=1, le=90)):
+    return _call(READ_FAILED, ai.stats, store_id, _owner_id(request), days)
+
+
+@router.get('/stores/{store_id}/staff-calls')
+def staff_calls(request: Request, store_id: Id):
+    return _call(READ_FAILED, ai.staff_calls, store_id, _owner_id(request))
+
+
+@router.patch('/stores/{store_id}/staff-calls/{alert_id}/resolve')
+def resolve_staff_call(request: Request, store_id: Id, alert_id: Id):
+    return _call(WRITE_FAILED, ai.resolve_staff_call, store_id, _owner_id(request), alert_id)
+
+
+@router.put('/menus/{menu_id}/image')
+async def upload_menu_image(request: Request, menu_id: Id):
+    if request.headers.get('content-type', '').split(';')[0].strip() not in ('image/jpeg', 'image/png', 'image/webp'):
+        raise HTTPException(415, 'JPG, PNG, WEBP 사진만 올릴 수 있습니다.')
+    data = await request.body()
+    return await run_in_threadpool(_call, WRITE_FAILED, images.save_image, menu_id, _owner_id(request), data)
+
+
+@router.delete('/menus/{menu_id}/image')
+def delete_menu_image(request: Request, menu_id: Id):
+    return _call(WRITE_FAILED, images.delete_image, menu_id, _owner_id(request))

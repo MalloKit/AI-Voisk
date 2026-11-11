@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StrictInt, StrictStr, field_validator
 from pymysql.err import IntegrityError
 import admin_auth
+import owner_auth
 import owner_service
 import store_service
 
@@ -132,6 +133,8 @@ def reset_owner_password(owner_id: int, payload: OwnerPassword):
             if cursor.rowcount != 1:
                 raise RuntimeError('Unexpected password update result')
         connection.commit()
+        # 비밀번호가 유출돼 재설정한 경우를 위해, 이 점주의 기존 로그인 세션을 모두 끊습니다.
+        owner_auth.sessions.revoke_matching(lambda owner: getattr(owner, 'owner_id', None) == owner_id)
     except Exception:
         connection.rollback()
         raise

@@ -85,7 +85,10 @@ void main() {
       expect(find.text('결제가 완료되었습니다'), findsOneWidget);
       await tester.tap(find.text('확인 · 장바구니 비우기'));
       await tester.pumpAndSettle();
-      expect(find.text('0원'), findsOneWidget);
+      // 다음 고객이 포장/매장 식사를 다시 고르도록 처음 화면으로 돌아갑니다.
+      expect(find.text('포장'), findsOneWidget);
+      expect(find.text('매장 식사'), findsOneWidget);
+      expect(find.text('결제하기'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }

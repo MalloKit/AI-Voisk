@@ -33,6 +33,29 @@ export const activeOptions = (board: MenuBoard, menuId: number) =>
 export const stoppedOptions = (board: MenuBoard, menuId: number) =>
   board.options.filter((o) => o.menuId === menuId && !o.isActive).sort(byOrder);
 
+// 판매 중인 옵션을 그룹별로 묶는다. 이름 있는 그룹(필수 선택)은 처음 나오는 순서대로,
+// 그룹 없는 선택 추가 옵션은 맨 뒤에 둔다.
+export function optionGroups(board: MenuBoard, menuId: number) {
+  const groups = new Map<string | null, MenuOption[]>();
+  for (const o of activeOptions(board, menuId))
+    groups.set(o.optionGroup, [...(groups.get(o.optionGroup) ?? []), o]);
+  const list = [...groups].map(([name, options]) => ({ name, options }));
+  return [
+    ...list.filter((g) => g.name !== null),
+    ...list.filter((g) => g.name === null),
+  ];
+}
+
+// 입력 제안용. 판매 중지 옵션을 포함해 이 메뉴에서 쓰는 그룹 이름.
+export const groupNames = (board: MenuBoard, menuId: number) => [
+  ...new Set(
+    board.options
+      .filter((o) => o.menuId === menuId && o.optionGroup)
+      .sort(byOrder)
+      .map((o) => o.optionGroup!),
+  ),
+];
+
 // 새 옵션을 추가하기 전에 같은 이름의 판매 중지 옵션이 있는지 찾는다.
 export const findStoppedOption = (
   board: MenuBoard,
@@ -100,11 +123,13 @@ export function removeCategory(board: MenuBoard, id: number) {
 export function addOption(
   board: MenuBoard,
   menuId: number,
-  fields: Pick<MenuOption, "name" | "extraPrice">,
+  fields: Pick<MenuOption, "name" | "extraPrice"> &
+    Partial<Pick<MenuOption, "optionGroup">>,
 ) {
   const option: MenuOption = {
     id: nextTempId(board),
     menuId,
+    optionGroup: null,
     ...fields,
     sort:
       Math.max(

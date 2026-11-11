@@ -25,6 +25,9 @@
 - 로그아웃·만료 시 App을 내리므로 useAsync 정리로 요청을 취소하고 공유 목록·상세·필터를 폐기합니다.
 - 다시 로그인하면 새 App과 새 기본 Mock Repository를 사용합니다.
 - 60초 주기 및 포커스/가시성 복귀 확인은 정상일 때 기존 App을 유지하므로 화면 이동·조회 상태를 초기화하지 않습니다.
+- 주기·포커스 확인에서는 401만 세션 만료로 처리합니다. 시간 초과·네트워크 오류·5xx는 다음 확인까지 무시합니다(2026-11-11).
+  일시 오류로 App을 내리면 입력 중인 폼과 한 번만 보이는 기기 토큰 화면을 잃습니다. 되돌리지 마세요.
+  테스트: auth.test.tsx "keeps the App and its screen on periodic or focus verification network errors and 5xx, expiring only on 401".
 - 로그아웃 요청 실패는 데이터 화면을 숨긴 상태에서 재시도하며 완료라고 표시하지 않습니다.
 - 현재 브라우저의 서버 쿠키를 기준으로 하며 비밀번호·인증 토큰·로그인 상태를 localStorage/sessionStorage에 저장하지 않습니다.
 

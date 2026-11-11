@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { MockOwnerRepository } from "../data/ownerRepository";
+import { menuVersionStatus } from "../data/selectors";
 
 const sidebar = () => screen.getByRole("navigation", { name: "주요 화면" });
 async function open(page?: string, repository = new MockOwnerRepository()) {
@@ -49,6 +50,49 @@ describe("오늘 현황", () => {
     expect(within(list).getAllByRole("listitem")[1]).toHaveTextContent(
       "키오스크 2번연결 끊김마지막 연결 10:30",
     );
+  });
+
+  it("키오스크마다 메뉴 버전 상태, 마지막 동기화 시각(한국 시간), 앱 버전을 보여 준다", async () => {
+    const repository = new MockOwnerRepository();
+    const devices = await repository.getDevices();
+    vi.spyOn(repository, "getDevices").mockResolvedValue([
+      ...devices,
+      {
+        ...devices[0],
+        id: 9,
+        appVersion: null,
+        lastSyncedAt: null,
+        currentMenuVersion: 12,
+        appliedMenuVersion: null,
+      },
+    ]);
+    await open(undefined, repository);
+    const list = await screen.findByRole("list", { name: "키오스크 목록" });
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent(
+      "메뉴 버전 최신마지막 동기화 2026-10-29 11:55앱 버전 1.2.0+5",
+    );
+    expect(within(rows[0]).getByText("최신")).toHaveClass("badge", "ok");
+    expect(rows[1]).toHaveTextContent(
+      "메뉴 버전 반영 대기 (적용 11 / 최신 12)마지막 동기화 2026-10-29 10:20앱 버전 1.1.0+2",
+    );
+    expect(rows[2]).toHaveTextContent(
+      "메뉴 버전 미확인동기화 기록 없음앱 버전 미확인",
+    );
+  });
+
+  it("메뉴 버전은 둘 다 알 때만 최신·반영 대기로 판정한다", () => {
+    const status = (applied: number | null, current: number | null) =>
+      menuVersionStatus({
+        appliedMenuVersion: applied,
+        currentMenuVersion: current,
+      }).label;
+    expect(status(12, 12)).toBe("최신");
+    expect(status(13, 12)).toBe("최신");
+    expect(status(11, 12)).toBe("반영 대기 (적용 11 / 최신 12)");
+    expect(status(0, 1)).toBe("반영 대기 (적용 0 / 최신 1)");
+    expect(status(null, 12)).toBe("미확인");
+    expect(status(12, null)).toBe("미확인");
   });
 
   it("모든 키오스크가 연결되면 정상으로 보인다", async () => {

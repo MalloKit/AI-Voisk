@@ -5,6 +5,8 @@ import {
   ReceiptText,
   Store,
   Menu,
+  Sparkles,
+  ChartColumn,
   UserCircle,
   X,
   LogOut,
@@ -15,7 +17,9 @@ import type { Page } from "../data/models";
 export const pages = [
   { id: "today", label: "오늘 현황", Icon: CalendarCheck },
   { id: "menus", label: "메뉴 관리", Icon: UtensilsCrossed },
+  { id: "ai", label: "AI 추천·음성", Icon: Sparkles },
   { id: "orders", label: "주문 내역", Icon: ReceiptText },
+  { id: "stats", label: "통계", Icon: ChartColumn },
   { id: "store", label: "매장 정보", Icon: Store },
 ] as const;
 export function OwnerShell({
@@ -24,12 +28,18 @@ export function OwnerShell({
   storeName,
   soldOutCount,
   account,
+  demo = true,
+  alert,
   children,
 }: {
   page: Page;
   onNavigate(page: Page): void;
   storeName: string;
   soldOutCount: number;
+  // 시연(Mock) 데이터일 때만 상단에 배지를 보인다.
+  demo?: boolean;
+  // 모든 화면 위쪽에 띄울 알림(직원 호출).
+  alert?: ReactNode;
   account?: {
     loginId: string;
     canSwitchStore: boolean;
@@ -157,13 +167,14 @@ export function OwnerShell({
             <Menu />
           </button>
           <strong>{label}</strong>
-          <span className="badge">시연 데이터</span>
+          {demo && <span className="badge">시연 데이터</span>}
           <span className="account">
             <UserCircle size={23} aria-hidden="true" />
             {account?.loginId ?? "시연 점주"}
           </span>
         </header>
         <main id="main" tabIndex={-1} key={page}>
+          {alert}
           <div className="content">{children}</div>
         </main>
       </div>

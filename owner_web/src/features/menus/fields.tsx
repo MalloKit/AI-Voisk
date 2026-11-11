@@ -12,6 +12,7 @@ export function TextField({
   hint,
   placeholder,
   inputRef,
+  list,
 }: {
   label: string;
   value: string;
@@ -23,6 +24,8 @@ export function TextField({
   hint?: ReactNode;
   placeholder?: string;
   inputRef?: Ref<HTMLInputElement>;
+  // 입력 제안 목록(<datalist>)의 id. 한 줄 입력에만 쓴다.
+  list?: string;
 }) {
   const id = useId();
   const props = {
@@ -47,6 +50,7 @@ export function TextField({
           {...props}
           ref={inputRef}
           inputMode={inputMode}
+          list={list}
           onChange={(e) => onChange(e.target.value)}
         />
       )}

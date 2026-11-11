@@ -89,7 +89,8 @@ class DeviceWriteTests(unittest.TestCase):
         row=response.json(); self.assertFalse(row['is_active']); self.assertEqual(row['store_id'],2)
         self.assertEqual(row['device_code'],'KIOSK-002'); self.assertTrue(row['registered_at'].endswith('+00:00'))
         self.assertIsNone(row['app_version']); self.assertIsNone(row['last_seen_at']); self.assertIsNone(row['last_synced_at'])
-        self.assertNotIn('device_token_hash',row); self.assertNotIn('current_menu_version',row)
+        # 메뉴 버전은 기기 관리 화면(구상안 6장)에 보여 주는 값이라 응답에 포함합니다. 토큰 해시는 계속 제외합니다.
+        self.assertNotIn('device_token_hash',row); self.assertEqual(row['current_menu_version'],0); self.assertIsNone(row['applied_menu_version'])
         self.assertEqual(self.db.execute('SELECT current_menu_version FROM kiosk_device WHERE device_id=?',(row['device_id'],)).fetchone()[0],0)
         self.assertTrue(all('device_token_hash' not in sql for sql,_ in self.statements))
         insert=next(x for x in self.statements if x[0].startswith('INSERT'))

@@ -7,7 +7,7 @@ import {
   ReceiptText,
   Wallet,
 } from "lucide-react";
-import type { MenuBoard, Page } from "../data/models";
+import type { KioskDevice, MenuBoard, Page } from "../data/models";
 import type { OwnerRepository } from "../data/ownerRepository";
 import { apiErrorMessage } from "../data/ownerApiRepository";
 import {
@@ -20,7 +20,7 @@ import {
   topMenus,
   totalAmount,
 } from "../data/orderSelectors";
-import { soldOutMenuCount } from "../data/selectors";
+import { menuVersionStatus, soldOutMenuCount } from "../data/selectors";
 import { updateMenu, updateOption } from "../data/menuDraft";
 import { formatWon } from "../data/validation";
 import { useAsync } from "../hooks/useAsync";
@@ -59,6 +59,26 @@ function Metric({
         {note}
       </span>
     </>
+  );
+}
+
+// 키오스크가 최신 메뉴를 받았는지, 언제 마지막으로 받았는지, 어떤 앱 버전인지.
+// 시각은 매장 시간대(한국) 기준이다.
+const VERSION_TONE = { latest: "ok", pending: "unsaved", unknown: "neutral" } as const;
+function DeviceSyncInfo({ device }: { device: KioskDevice }) {
+  const status = menuVersionStatus(device);
+  return (
+    <span className="today-list-meta">
+      <span>
+        메뉴 버전 <Badge tone={VERSION_TONE[status.kind]}>{status.label}</Badge>
+      </span>
+      <span className="muted">
+        {device.lastSyncedAt
+          ? `마지막 동기화 ${formatDateTime(device.lastSyncedAt)}`
+          : "동기화 기록 없음"}
+      </span>
+      <span className="muted">앱 버전 {device.appVersion ?? "미확인"}</span>
+    </span>
   );
 }
 
@@ -302,6 +322,7 @@ export function TodayPage({
                       ? `마지막 확인 ${formatDateTime(d.lastSeenAt)}`
                       : `마지막 연결 ${formatTime(d.lastSeenAt)}`}
                 </span>
+                <DeviceSyncInfo device={d} />
               </li>
             ))}
           </ul>

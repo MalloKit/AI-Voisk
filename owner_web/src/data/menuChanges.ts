@@ -22,7 +22,10 @@ const OPTION_KEYS: (keyof MenuOption)[] = [
   "extraPrice",
   "sort",
   "isActive",
+  "optionGroup",
 ];
+const optionLabel = (o: MenuOption) =>
+  o.optionGroup ? `${o.optionGroup} · ${o.name}` : o.name;
 
 export function buildChanges(
   saved: MenuBoard,
@@ -138,7 +141,7 @@ export function describeChanges(saved: MenuBoard, draft: MenuBoard) {
     const before = oldOptions.get(o.id);
     if (!before) {
       if (o.isActive)
-        lines.push(`${menuName(o.menuId)}: 옵션 추가 (${o.name})`);
+        lines.push(`${menuName(o.menuId)}: 옵션 추가 (${optionLabel(o)})`);
     } else if (before.isActive && !o.isActive)
       lines.push(`${menuName(o.menuId)}: 옵션 판매 중지 (${before.name})`);
     else {
@@ -146,6 +149,10 @@ export function describeChanges(saved: MenuBoard, draft: MenuBoard) {
         lines.push(`${menuName(o.menuId)} 옵션 '${o.name}' 다시 판매`);
       if (before.name !== o.name || before.extraPrice !== o.extraPrice)
         lines.push(`${menuName(o.menuId)}: 옵션 변경 (${o.name})`);
+      if (before.optionGroup !== o.optionGroup)
+        lines.push(
+          `${menuName(o.menuId)}: 옵션 그룹 변경 (${o.name}: ${before.optionGroup ?? "선택 추가"} → ${o.optionGroup ?? "선택 추가"})`,
+        );
     }
   }
   return lines;

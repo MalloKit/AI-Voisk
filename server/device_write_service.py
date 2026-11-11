@@ -29,7 +29,8 @@ class DeviceStatusPatch(BaseModel):
 
 
 def _saved(cursor, device_id):
-    cursor.execute(device_service._SELECT + ' WHERE d.device_id = %s', (device_id,))
+    select = device_service._SELECT.format(versions=device_service._versions(cursor))
+    cursor.execute(select + ' WHERE d.device_id = %s', (device_id,))
     row = cursor.fetchone()
     if row is None:
         raise RuntimeError('Missing saved device')

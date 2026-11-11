@@ -6,6 +6,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictBool, S
 from pymysql.err import IntegrityError
 
 import owner_portal_service as portal
+import sync_hub
 from owner_portal_service import OwnerResourceNotFound
 
 INT_MAX = 2147483647
@@ -52,6 +53,19 @@ Price = Annotated[StrictInt, Field(ge=1, le=PRICE_MAX)]
 ExtraPrice = Annotated[StrictInt, Field(ge=0, le=PRICE_MAX)]
 CategoryName = Annotated[StrictStr, _name(100)]
 ItemName = Annotated[StrictStr, _name(50)]
+
+
+def _group(value):
+    if value is None:
+        return None
+    value = _no_control(value).strip()
+    if len(value) > 20:
+        raise ValueError('옵션 그룹 이름은 20자 이하로 입력해 주세요.')
+    return value or None
+
+
+# 같은 그룹 옵션은 하나를 꼭 고릅니다(맵기·사이즈). 비우면 자유롭게 더하는 옵션입니다.
+OptionGroup = Annotated[StrictStr | None, AfterValidator(_group)]
 Description = Annotated[StrictStr | None, AfterValidator(_description)]
 
 
@@ -111,6 +125,7 @@ class OptionCreate(_Input):
     extra_price: ExtraPrice
     is_sold_out: StrictBool = False
     sort: Sort
+    group: OptionGroup = None
 
 
 class OptionUpdate(_Input):
@@ -119,6 +134,8 @@ class OptionUpdate(_Input):
     extra_price: ExtraPrice
     is_active: StrictBool
     sort: Sort
+    # 보내지 않으면 기존 그룹을 유지합니다(이전 점주 웹 호환).
+    group: OptionGroup = None
 
 
 class OptionChanges(_Input):
@@ -261,15 +278,22 @@ def _apply(cursor, store_id, changes):
                           is_active = %s, menu_sort = %s WHERE menu_id = %s""",
                        (_resolve(m.category_id, ids, category_ids), m.name, m.price, m.description,
                         m.is_active, m.sort, m.id))
+    groups = portal._has_option_group(cursor)
+    if not groups and any(o.group for o in [*changes.options.create, *changes.options.update]):
+        raise HTTPException(503, '옵션 그룹 DB 변경이 아직 적용되지 않았습니다.')
     for o in changes.options.create:
         cursor.execute("""INSERT INTO menu_option (menu_id, option_nm, extra_price, is_sold_out, menu_option_sort)
                           VALUES (%s, %s, %s, %s, %s)""",
                        (_resolve(o.menu_id, ids, menu_ids), o.name, o.extra_price, o.is_sold_out, o.sort))
         ids[o.temp_id] = _inserted(cursor)
+        if groups and o.group:
+            cursor.execute('UPDATE menu_option SET option_group = %s WHERE option_id = %s', (o.group, ids[o.temp_id]))
     for o in changes.options.update:
         cursor.execute("""UPDATE menu_option SET option_nm = %s, extra_price = %s, is_active = %s,
                           menu_option_sort = %s WHERE option_id = %s""",
                        (o.name, o.extra_price, o.is_active, o.sort, o.id))
+        if groups and 'group' in o.model_fields_set:
+            cursor.execute('UPDATE menu_option SET option_group = %s WHERE option_id = %s', (o.group, o.id))
     # 메뉴를 옮긴 뒤에 삭제합니다. 판매 중지 메뉴가 남아 있어도 FK가 거부하므로 삭제하지 않습니다.
     for category_id in changes.categories.remove:
         cursor.execute('SELECT COUNT(*) AS count FROM menu WHERE category_id = %s', (category_id,))
@@ -304,6 +328,7 @@ def save_menu_board(store_id, owner_id, changes):
                            (store_id,))
             board = portal.read_board(cursor, store_id)
         connection.commit()
+        sync_hub.menu_changed(store_id)
         return {'board': board, 'ids': ids, 'devices_updated': len(devices)}
     except IntegrityError as error:
         connection.rollback()
@@ -318,25 +343,40 @@ def save_menu_board(store_id, owner_id, changes):
 
 
 def _set_sold_out(owner_id, target_id, value, select_sql, update_sql):
+    # 품절도 키오스크가 즉시 반영해야 하므로 메뉴 버전을 올리고 알립니다.
     connection = portal.connection_factory()
     try:
         with connection.cursor() as cursor:
-            cursor.execute('START TRANSACTION')
+            # 소유는 잠그지 않고 먼저 확인합니다. 잠금 순서는 주문·메뉴판 저장과 같은 기기 → 메뉴입니다
+            # (반대 순서면 같은 메뉴를 주문하는 키오스크와 교착이 생깁니다).
+            cursor.execute('START TRANSACTION READ ONLY')
             cursor.execute(select_sql, (target_id, owner_id))
+            row = cursor.fetchone()
+            connection.rollback()
+            if row is None:
+                raise OwnerResourceNotFound()
+            cursor.execute('START TRANSACTION')
+            cursor.execute('SELECT device_id FROM kiosk_device WHERE store_id = %s ORDER BY device_id FOR UPDATE',
+                           (row['store_id'],))
+            cursor.fetchall()
+            cursor.execute(select_sql + ' FOR UPDATE', (target_id, owner_id))
             if cursor.fetchone() is None:
                 raise OwnerResourceNotFound()
             cursor.execute(update_sql, (value, target_id))
+            cursor.execute('UPDATE kiosk_device SET current_menu_version = current_menu_version + 1 WHERE store_id = %s',
+                           (row['store_id'],))
         connection.commit()
     except Exception:
         connection.rollback()
         raise
     finally:
         connection.close()
+    sync_hub.menu_changed(row['store_id'])
 
 
 def set_menu_sold_out(menu_id, owner_id, value):
     _set_sold_out(owner_id, menu_id, value, """
-        SELECT m.menu_id FROM menu m JOIN category c ON c.category_id = m.category_id
+        SELECT m.menu_id, s.store_id FROM menu m JOIN category c ON c.category_id = m.category_id
         JOIN store s ON s.store_id = c.store_id WHERE m.menu_id = %s AND s.owner_id = %s
     """, 'UPDATE menu SET is_sold_out = %s WHERE menu_id = %s')
     return {'menu_id': menu_id, 'is_sold_out': value}
@@ -344,7 +384,7 @@ def set_menu_sold_out(menu_id, owner_id, value):
 
 def set_option_sold_out(option_id, owner_id, value):
     _set_sold_out(owner_id, option_id, value, """
-        SELECT o.option_id FROM menu_option o JOIN menu m ON m.menu_id = o.menu_id
+        SELECT o.option_id, s.store_id FROM menu_option o JOIN menu m ON m.menu_id = o.menu_id
         JOIN category c ON c.category_id = m.category_id
         JOIN store s ON s.store_id = c.store_id WHERE o.option_id = %s AND s.owner_id = %s
     """, 'UPDATE menu_option SET is_sold_out = %s WHERE option_id = %s')

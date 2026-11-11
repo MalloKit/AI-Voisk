@@ -62,7 +62,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('포장'));
       await tester.pumpAndSettle();
-      // 언어 선택 창만 표시하고 실제 번역은 하지 않습니다.
+      // 화면 언어를 바꾸면 문구가 번역되고, 한국어로 되돌릴 수 있습니다. 메뉴 이름은 매장 원문입니다.
       await tester.tap(find.text('Language'));
       await tester.pumpAndSettle();
       expect(find.text('日本語'), findsOneWidget);
@@ -70,7 +70,13 @@ void main() {
       expect(find.text('中文'), findsOneWidget);
       await tester.tap(find.text('English'));
       await tester.pumpAndSettle();
-      expect(find.text('English'), findsNothing);
+      expect(find.text('All menus'), findsOneWidget);
+      expect(find.text('Checkout'), findsOneWidget);
+      expect(find.text('제육덮밥'), findsOneWidget);
+      await tester.tap(find.text('Language'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('한국어'));
+      await tester.pumpAndSettle();
       expect(find.text('전체 메뉴'), findsOneWidget);
       expect(find.byType(StretchingOverscrollIndicator), findsNothing);
       final gridContext = tester.element(find.byType(GridView));

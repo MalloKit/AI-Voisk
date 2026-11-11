@@ -728,11 +728,14 @@ dd {
 .devices-table { container-type: inline-size; }
 .devices-table table { min-width: 900px; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
 .devices-table th, .devices-table td { padding: var(--md); white-space: nowrap; }
-.devices-table th:nth-child(1) { width: 8%; }
-.devices-table th:nth-child(2), .devices-table th:nth-child(3) { width: 23%; }
+.devices-table th:nth-child(1) { width: 7%; }
+.devices-table th:nth-child(2), .devices-table th:nth-child(3) { width: 17%; }
 .devices-table th:nth-child(4), .devices-table th:nth-child(5) { width: 10%; }
-.devices-table th:nth-child(6) { width: 16%; }
+.devices-table th:nth-child(6) { width: 17%; }
+.devices-table th:nth-child(7) { width: 12%; }
 .device-cell-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 메뉴 버전의 '반영 대기 (적용 n / 최신 m)'는 숫자를 자르지 않고 줄을 바꾼다 */
+.device-cell-wrap { display: block; white-space: normal; }
 .devices-table th:last-child, .devices-table td:last-child { width: 88px; background: var(--surface); }
 .devices-table th:last-child { background: var(--table-head); }
 /* Match the table's minimum width using its own available space, not the viewport. */
@@ -755,3 +758,19 @@ dd {
 }
 
 .owner-account-actions { display: flex; flex-wrap: wrap; gap: var(--sm); }
+
+/* 키오스크 기기 토큰 발급 결과 */
+.device-token-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+.device-token-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}

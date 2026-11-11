@@ -21,26 +21,41 @@ class PendingOrder {
     required int deviceId,
     required String orderType,
     String? clientOrderId,
-  }) : body = jsonEncode({
-         'store_id': storeId,
-         'device_id': deviceId,
-         'client_order_id': clientOrderId ?? newOrderUuid(),
-         'order_type': orderType,
-         'table_no': null,
-         'items': entries
-             .map(
-               (entry) => {
-                 'menu_id': int.parse(entry.menu.id),
-                 'quantity': entry.quantity,
-                 'option_ids': entry.options
-                     .map((o) => int.parse(o.id))
-                     .toList(),
-               },
-             )
-             .toList(),
-       });
+    String? orderChannel,
+  }) : clientOrderId = clientOrderId ?? newOrderUuid(),
+       total = entries.fold(0, (sum, entry) => sum + entry.subtotal),
+       summary = entries
+           .map((entry) => '${entry.menu.name} ${entry.quantity}')
+           .join(', ') {
+    body = jsonEncode({
+      'store_id': storeId,
+      'device_id': deviceId,
+      'client_order_id': this.clientOrderId,
+      'order_type': orderType,
+      'table_no': null,
+      // 음성 대화로 완성한 주문은 voice. 생략하면 서버가 기록하지 않습니다.
+      'order_channel': ?orderChannel,
+      'items': entries
+          .map(
+            (entry) => {
+              'menu_id': int.parse(entry.menu.id),
+              'quantity': entry.quantity,
+              'option_ids': entry.options.map((o) => int.parse(o.id)).toList(),
+              if (entry.recommended) 'is_recommended': true,
+            },
+          )
+          .toList(),
+    });
+  }
+
+  final String clientOrderId;
+  final int total;
+
+  /// 주문내역 화면용 요약. 서버에는 보내지 않습니다.
+  final String summary;
+
   // Encoded once: a failed retry cannot mutate the UUID or cart payload.
-  final String body;
+  late final String body;
 }
 
 abstract class OrderRepository {
@@ -95,7 +110,9 @@ class ApiOrderRepository implements OrderRepository {
           )
           .timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) {
-        final detail = jsonDecode(utf8.decode(response.bodyBytes))['detail'];
+        final raw = jsonDecode(utf8.decode(response.bodyBytes))['detail'];
+        // 서버가 {code, message}로 보내는 거절도 문구를 그대로 보여 줍니다.
+        final detail = raw is Map ? raw['message'] : raw;
         if ([403, 422].contains(response.statusCode) ||
             (response.statusCode == 503 &&
                 detail == '주문 유형 DB 변경이 적용되지 않았습니다. 저장하지 않았습니다.')) {

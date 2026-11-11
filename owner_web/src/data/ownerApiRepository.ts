@@ -15,6 +15,7 @@ import type {
   StoreProfile,
 } from "./models";
 import type { OwnerRepository } from "./ownerRepository";
+import { normalizeGroup } from "./validation";
 
 // 서버 점주 API(server/OWNER_API.md) 구현. 컬럼 이름 변환은 여기서만 한다.
 // 세션은 HttpOnly 쿠키에 있고, CSRF 토큰은 쓰기 직전에 받아 저장하지 않는다.
@@ -46,29 +47,29 @@ const PAGE_SIZE = 200;
 
 type Row = Record<string, unknown>;
 
-function record(value: unknown): Row {
+export function record(value: unknown): Row {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new OwnerApiError(0, BAD_RESPONSE);
   return value as Row;
 }
-const rows = (value: unknown) => {
+export const rows = (value: unknown) => {
   if (!Array.isArray(value)) throw new OwnerApiError(0, BAD_RESPONSE);
   return value.map(record);
 };
-function int(value: unknown) {
+export function int(value: unknown) {
   if (typeof value !== "number" || !Number.isSafeInteger(value))
     throw new OwnerApiError(0, BAD_RESPONSE);
   return value;
 }
-function text(value: unknown) {
+export function text(value: unknown) {
   if (typeof value !== "string") throw new OwnerApiError(0, BAD_RESPONSE);
   return value;
 }
-function bool(value: unknown) {
+export function bool(value: unknown) {
   if (typeof value !== "boolean") throw new OwnerApiError(0, BAD_RESPONSE);
   return value;
 }
-const nullable = <T>(value: unknown, read: (v: unknown) => T) =>
+export const nullable = <T>(value: unknown, read: (v: unknown) => T) =>
   value === null || value === undefined ? null : read(value);
 
 function parseBoard(value: unknown): MenuBoard {
@@ -103,6 +104,7 @@ function parseBoard(value: unknown): MenuBoard {
         isActive: bool(o.is_active),
         isSoldOut: bool(o.is_sold_out),
         extraPrice: int(o.extra_price),
+        optionGroup: nullable(o.option_group, text),
       }),
     ),
   };
@@ -149,6 +151,7 @@ export function toServerChanges(changes: MenuBoardChanges) {
         extra_price: o.extraPrice,
         is_sold_out: o.isSoldOut,
         sort: o.sort,
+        group: normalizeGroup(o.optionGroup),
       })),
       update: changes.options.update.map((o) => ({
         id: o.id,
@@ -156,9 +159,22 @@ export function toServerChanges(changes: MenuBoardChanges) {
         extra_price: o.extraPrice,
         is_active: o.isActive,
         sort: o.sort,
+        group: normalizeGroup(o.optionGroup),
       })),
     },
   };
+}
+
+export const DEVICE_ONLINE_MS = 3 * 60_000;
+
+export function deviceConnection(
+  lastSeenAt: string | null,
+  now: number,
+): KioskDevice["connection"] {
+  if (!lastSeenAt) return "unknown";
+  const seen = Date.parse(lastSeenAt);
+  if (Number.isNaN(seen)) return "unknown";
+  return now - seen <= DEVICE_ONLINE_MS ? "online" : "offline";
 }
 
 export class ApiOwnerRepository implements OwnerRepository {
@@ -169,7 +185,7 @@ export class ApiOwnerRepository implements OwnerRepository {
     private timeoutMs = 30_000,
   ) {}
 
-  private async request(
+  protected async request(
     path: string,
     init: RequestInit,
     signal?: AbortSignal,
@@ -226,21 +242,29 @@ export class ApiOwnerRepository implements OwnerRepository {
     }
   }
 
-  private async write(path: string, body: unknown) {
+  protected async write(
+    path: string,
+    body: unknown,
+    method: "PATCH" | "PUT" | "DELETE" = "PATCH",
+  ) {
     const csrf = record(
       await this.request("/auth/owner/csrf", { method: "GET" }),
     );
+    // Blob(사진)은 그대로, 나머지는 JSON으로 보냅니다.
+    const raw = body instanceof Blob;
     return this.request(path, {
-      method: "PATCH",
+      method,
       headers: {
-        "Content-Type": "application/json",
+        ...(body === undefined
+          ? {}
+          : { "Content-Type": raw ? body.type : "application/json" }),
         "X-CSRF-Token": text(csrf.csrf_token),
       },
-      body: JSON.stringify(body),
+      body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
     });
   }
 
-  private get store() {
+  protected get store() {
     return `/owner/stores/${this.storeId}`;
   }
 
@@ -293,6 +317,10 @@ export class ApiOwnerRepository implements OwnerRepository {
           orderType: nullable(o.order_type, text) as OrderType | null,
           tableNo: nullable(o.table_no, int),
           orderedAt: text(o.ordered_at),
+          channel:
+            o.order_channel === "voice" || o.order_channel === "touch"
+              ? o.order_channel
+              : null,
         });
         for (const i of rows(o.items)) {
           items.push({
@@ -313,18 +341,30 @@ export class ApiOwnerRepository implements OwnerRepository {
     return { orders, items, itemOptions };
   }
 
-  // DB에는 연결 상태가 없고 last_seen_at의 갱신 주체도 정해지지 않아 온라인 여부를 판정하지 않는다.
+  // 키오스크가 60초마다 상태를 보고해 last_seen_at을 갱신한다(/kiosk/heartbeat).
+  // 3분 안에 보고가 있으면 연결, 그보다 오래면 끊김, 보고 기록이 없으면 미확인이다.
   async getDevices(signal?: AbortSignal): Promise<KioskDevice[]> {
     const body = record(
       await this.request(`${this.store}/devices`, { method: "GET" }, signal),
     );
-    return rows(body.devices).map((d) => ({
-      id: int(d.device_id),
-      storeId: this.storeId,
-      isActive: bool(d.is_active),
-      connection: "unknown",
-      lastSeenAt: nullable(d.last_seen_at, text),
-    }));
+    return rows(body.devices).map((d) => {
+      const lastSeenAt = nullable(d.last_seen_at, text);
+      return {
+        id: int(d.device_id),
+        storeId: this.storeId,
+        isActive: bool(d.is_active),
+        connection: deviceConnection(lastSeenAt, this.clock()),
+        lastSeenAt,
+        appVersion: nullable(d.app_version, text),
+        lastSyncedAt: nullable(d.last_synced_at, text),
+        currentMenuVersion: nullable(d.current_menu_version, int),
+        appliedMenuVersion: nullable(d.applied_menu_version, int),
+      };
+    });
+  }
+
+  protected clock() {
+    return Date.now();
   }
 
   async setMenuSoldOut(menuId: number, isSoldOut: boolean) {

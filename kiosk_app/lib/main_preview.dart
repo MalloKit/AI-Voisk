@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'core/app_boot.dart';
 import 'home/role_select_screen.dart';
 
-/// 공통 main.dart를 바꾸지 않고 역할 선택 화면을 확인하는 실행 파일입니다.
-void main() => runApp(const PreviewApp());
+/// 기존 실행 명령(main_preview.dart) 호환용. main.dart와 같은 시작 화면을 띄웁니다.
+Future<void> main() async {
+  await bootKiosk();
+  runApp(const PreviewApp());
+}
 
 class PreviewApp extends StatelessWidget {
   const PreviewApp({super.key});

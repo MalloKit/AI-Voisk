@@ -15,7 +15,7 @@ const order = parseOrder({ order_id: 99, store_id: 99, store_name: "갱신 매�
   order_type: "takeaway", table_no: null, quantity: 1 });
 const device: ApiDevice = { device_id: 99, device_code: "REFRESH-99", store_id: 99, store_name: "갱신 매장",
   store_address: "부산", store_address_detail: null, is_active: false, registered_at: "2026-01-01T00:00:00Z",
-  app_version: null, last_seen_at: null, last_synced_at: null };
+  app_version: null, last_seen_at: null, last_synced_at: null, current_menu_version: null, applied_menu_version: null };
 const alert: ApiAlert = { alert_id: 99, device_id: 99, device_code: "REFRESH-99", store_id: 99, store_name: "갱신 매장",
   alert_type: "NEW_TYPE", severity: "NOTICE", message: "갱신 알림", alert_status: "UNREAD",
   occurred_at: "2026-01-01T00:00:00Z", acknowledged_at: null, acknowledged_by: null,

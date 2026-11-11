@@ -78,14 +78,9 @@ export function AppEntry({
           if (!stopped && !current.signal.aborted) setState({ phase: "authenticated", admin });
         },
         (error) => {
-          if (!stopped && !current.signal.aborted) {
-            if (error instanceof AdminApiError && error.status === 401) expire();
-            else {
-              route("/login");
-              setState({ phase: "login", message: failure(error), retry: true });
-            }
-          }
-        },
+          // 주기 확인에서는 401만 세션 만료로 봅니다. 시간 초과·5xx 같은 일시 오류로 App을 내리면
+          // 입력 중인 폼과 한 번만 보이는 기기 토큰 화면을 잃으므로 다음 확인까지 그대로 둡니다.
+          if (!stopped && !current.signal.aborted && error instanceof AdminApiError && error.status === 401) expire();        },
       ).finally(() => { controller = undefined; });
     };
     const visible = () => { if (document.visibilityState === "visible") verify(); };
