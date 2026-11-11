@@ -1,10 +1,11 @@
 """매장 등록·기본 정보 수정. 관계·스키마 변경은 하지 않습니다."""
 import re
-from typing import Annotated
+from typing import Annotated, Literal
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator, model_validator
 from pymysql.err import IntegrityError
 import store_service
+from owner_write_service import Identifier, OwnerCreate, _password_hash, insert_owner, phone_password
 from korean_numbers import phone_number, business_number
 
 # Workbench에서 확인한 실제 컬럼. 요청 키를 SQL 식별자로 직접 사용하지 않습니다.
@@ -31,7 +32,7 @@ class StorePatch(BaseModel):
     representative: Text | None = None
     store_type: Text | None = None
 
-    @field_validator('*')
+    @field_validator(*COLUMNS)
     @classmethod
     def validate_text(cls, value, info):
         key = info.field_name
@@ -75,20 +76,64 @@ class StoreCreate(StorePatch):
     store_type: Text
 
 
-def _write(payload, admin_id=None, store_id=None):
+class ExistingOwnerConnection(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['existing']
+    owner_id: Identifier
+
+
+class NewOwnerConnection(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['new']
+    login_id: StrictStr = Field(min_length=4, max_length=100)
+
+    @field_validator('login_id')
+    @classmethod
+    def valid_login(cls, value):
+        return OwnerCreate.valid_login(value)
+
+
+class StoreRegistration(StoreCreate):
+    owner_connection: Annotated[ExistingOwnerConnection | NewOwnerConnection, Field(discriminator='kind')] | None = None
+
+    @model_validator(mode='after')
+    def validate_initial_password(self):
+        if isinstance(self.owner_connection, NewOwnerConnection):
+            phone_password(self.phone)
+        return self
+
+
+def _write(payload, admin_id=None, store_id=None, owner_connection=None):
+    encoded = None
+    if isinstance(owner_connection, NewOwnerConnection):
+        account = OwnerCreate(login_id=owner_connection.login_id, password=phone_password(payload.phone))
+        encoded = _password_hash(account)
     connection = store_service.connection_factory()
     try:
         with connection.cursor() as cursor:
             cursor.execute('START TRANSACTION')
-            values = payload.model_dump(exclude_unset=True)
+            values = payload.model_dump(exclude_unset=True, exclude={'owner_connection'})
             if store_id is None:
                 values.setdefault('address_detail', None)
                 columns = [COLUMNS[key] for key in values]
-                # 관리자는 서버 세션에서 결정하고 owner_id는 NULL로 등록합니다.
+                owner_id = None
+                if isinstance(owner_connection, ExistingOwnerConnection):
+                    owner_id = owner_connection.owner_id
+                    cursor.execute('SELECT owner_id FROM owner WHERE owner_id = %s FOR UPDATE', (owner_id,))
+                    if cursor.fetchone() is None:
+                        raise HTTPException(404, '선택한 점주 계정이 없습니다.')
+                elif isinstance(owner_connection, NewOwnerConnection):
+                    try:
+                        owner_id = insert_owner(cursor, owner_connection.login_id, encoded)['owner_id']
+                    except IntegrityError as error:
+                        if error.args and error.args[0] == 1062:
+                            raise HTTPException(409, '이미 사용 중인 로그인 ID입니다.') from None
+                        raise
+                # 담당 관리자는 서버 세션에서 결정합니다.
                 cursor.execute(
                     'INSERT INTO store (' + ', '.join(columns + ['admin_id', 'owner_id']) +
-                    ') VALUES (' + ', '.join(['%s'] * len(columns) + ['%s', 'NULL']) + ')',
-                    tuple(values.values()) + (admin_id,))
+                    ') VALUES (' + ', '.join(['%s'] * (len(columns) + 2)) + ')',
+                    tuple(values.values()) + (admin_id, owner_id))
                 if cursor.rowcount != 1 or not isinstance(cursor.lastrowid, int) or cursor.lastrowid < 1:
                     raise RuntimeError('Unexpected insert result')
                 store_id = cursor.lastrowid
@@ -122,8 +167,8 @@ def _write(payload, admin_id=None, store_id=None):
         connection.close()
 
 
-def create_store(payload: StoreCreate, admin_id: int):
-    return _write(payload, admin_id=admin_id)
+def create_store(payload: StoreRegistration, admin_id: int):
+    return _write(payload, admin_id=admin_id, owner_connection=payload.owner_connection)
 
 
 def update_store(store_id: int, payload: StorePatch):

@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from order_service import OrderPayment, OrderInput, save_order, list_orders, order_detail, confirm_cash
 from store_service import StoreNotFound, list_stores, store_detail
-from store_write_service import StoreCreate, StorePatch, create_store, update_store
+from store_write_service import StoreRegistration, StorePatch, create_store, update_store
 from owner_service import OwnerNotFound, list_owners, owner_detail
 from owner_write_service import OwnerCreate, OwnerPassword, StoreOwnerPatch, create_owner, update_store_owner, reset_owner_password
 from device_service import DeviceNotFound, list_devices, device_detail
@@ -358,7 +358,7 @@ def _store_write_call(function, *args):
 
 
 @app.post('/admin/stores', response_model=AdminStoreView, status_code=201)
-def admin_create_store(payload: StoreCreate, request: Request):
+def admin_create_store(payload: StoreRegistration, request: Request):
     session = admin_auth.require_admin(request)
     return _store_write_call(create_store, payload, session.admin.admin_id)
 

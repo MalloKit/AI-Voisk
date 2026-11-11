@@ -54,20 +54,32 @@ def _password_hash(payload: OwnerPassword):
     return encoded
 
 
+def insert_owner(cursor, login_id, encoded):
+    cursor.execute('INSERT INTO owner (own_login_id, own_pw) VALUES (%s, %s)', (login_id, encoded))
+    if cursor.rowcount != 1 or type(cursor.lastrowid) is not int or not 1 <= cursor.lastrowid <= 2147483647:
+        raise RuntimeError('Unexpected account insert result')
+    owner_id = cursor.lastrowid
+    cursor.execute('SELECT owner_id, own_login_id AS login_id FROM owner WHERE owner_id = %s', (owner_id,))
+    row = cursor.fetchone()
+    if row is None or row['owner_id'] != owner_id or row['login_id'] != login_id:
+        raise RuntimeError('Missing saved account')
+    return row
+
+
+def phone_password(phone: str | None) -> str:
+    digits = re.sub(r'[^0-9]', '', phone or '')
+    if len(digits) < 8:
+        raise ValueError('매장 전화번호는 숫자가 8자리 이상이어야 합니다.')
+    return digits[-8:]
+
+
 def create_owner(payload: OwnerCreate):
     encoded = _password_hash(payload)
     connection = owner_service.connection_factory()
     try:
         with connection.cursor() as cursor:
             cursor.execute('START TRANSACTION')
-            cursor.execute('INSERT INTO owner (own_login_id, own_pw) VALUES (%s, %s)', (payload.login_id, encoded))
-            if cursor.rowcount != 1 or type(cursor.lastrowid) is not int or not 1 <= cursor.lastrowid <= 2147483647:
-                raise RuntimeError('Unexpected account insert result')
-            owner_id = cursor.lastrowid
-            cursor.execute('SELECT owner_id, own_login_id AS login_id FROM owner WHERE owner_id = %s', (owner_id,))
-            row = cursor.fetchone()
-            if row is None or row['owner_id'] != owner_id or row['login_id'] != payload.login_id:
-                raise RuntimeError('Missing saved account')
+            row = insert_owner(cursor, payload.login_id, encoded)
         connection.commit()
         return {**row, 'store_count': 0}
     except IntegrityError as error:

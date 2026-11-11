@@ -67,7 +67,8 @@ export function StoresPage({
   function saved(store: ApiStore) {
     setNotice(editing === null ? "매장을 등록했습니다." : "매장 정보를 저장했습니다.");
     setSaving(false); setFocusOwner(false); setFocusEdit(true); setEditing(undefined); setDetail(store);
-    result.reload();
+    if (editing === null && store.ownerId !== null && onOwnerChanged) onOwnerChanged();
+    else result.reload();
   }
   function close() {
     if (saving) return;
@@ -176,7 +177,8 @@ export function StoresPage({
               setNotice("점주 연결 정보를 저장했습니다.");
               if (onOwnerChanged) onOwnerChanged(); else result.reload();
             }} /> : editing !== undefined && repository ? <StoreEditor store={editing} repository={repository}
-            onBusy={setSaving} onSaved={saved} formId={editorFormId} />
+            onBusy={setSaving} onSaved={saved} formId={editorFormId}
+            ownersResult={liveOwners ? ownersResult : undefined} />
             : repository ? <LiveStoreDetail id={detail!.id} repository={repository} data={data}
                 onEdit={writable ? (store) => { setFocusOwner(false); setEditing(store); } : undefined} focusEdit={focusEdit && !focusOwner}
                 onManageOwner={linkable ? setLinking : undefined} focusOwner={focusOwner} />

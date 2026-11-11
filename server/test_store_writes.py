@@ -131,6 +131,37 @@ class StoreWriteTests(unittest.TestCase):
         self.assertEqual(self.client.get('/admin/stores').json()['total'], 2)
         self.assertEqual(self.client.get('/admin/stores/' + str(row['store_id'])).json(), row)
 
+    def test_register_with_existing_owner(self):
+        response = self.create({**self.input, 'owner_connection': {'kind': 'existing', 'owner_id': 7}})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()['owner_id'], 7)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM owner').fetchone()[0], 1)
+        missing = self.create({**self.input, 'owner_connection': {'kind': 'existing', 'owner_id': 999}})
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(self.count(), 2)
+
+    def test_register_with_new_owner_hashes_phone_and_rolls_back_both_on_failure(self):
+        new = {**self.input, 'phone': '010-1234-5678',
+               'owner_connection': {'kind': 'new', 'login_id': 'new.owner'}}
+        self.commit_failure = True
+        self.assertEqual(self.create(new).status_code, 503)
+        self.assertEqual(self.count(), 1)
+        self.assertIsNone(self.db.execute("SELECT owner_id FROM owner WHERE own_login_id='new.owner'").fetchone())
+        self.commit_failure = False
+        response = self.create(new)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()['owner_login_id'], 'new.owner')
+        encoded = self.db.execute('SELECT own_pw FROM owner WHERE owner_id=?',
+                                  (response.json()['owner_id'],)).fetchone()[0]
+        self.assertTrue(admin_auth.verify_password(encoded, '12345678'))
+        self.assertNotIn('own_pw', response.json())
+
+    def test_registration_rejects_credentials_and_basic_update_rejects_connection(self):
+        owner = {'kind': 'new', 'login_id': 'new.owner', 'password': 'untrusted'}
+        self.assertEqual(self.create({**self.input, 'owner_connection': owner}).status_code, 422)
+        self.assertEqual(self.modify({'owner_connection': {'kind': 'existing', 'owner_id': 7}}).status_code, 422)
+        self.assertEqual(self.count(), 1)
+
     def test_duplicate_postcode_and_business_number_are_allowed(self):
         for _ in range(2):
             self.assertEqual(self.create().status_code, 201)

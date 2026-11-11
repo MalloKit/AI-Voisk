@@ -11,10 +11,14 @@ export interface StoreInput {
   representative: string;
   store_type: string;
 }
+export type StoreOwnerConnection =
+  | { kind: "existing"; owner_id: number }
+  | { kind: "new"; login_id: string };
+export interface StoreCreateInput extends StoreInput { owner_connection?: StoreOwnerConnection; }
 export interface OwnerConnectionInput { owner_id: number | null; expected_owner_id: number | null; }
 export interface StoreRepository {
   setOwner?(id: number, input: OwnerConnectionInput, signal?: AbortSignal): Promise<ApiStore>;
-  create?(input: StoreInput, signal?: AbortSignal): Promise<ApiStore>;
+  create?(input: StoreCreateInput, signal?: AbortSignal): Promise<ApiStore>;
   update?(id: number, input: Partial<StoreInput>, signal?: AbortSignal): Promise<ApiStore>;
   load(signal?: AbortSignal): Promise<ApiStore[]>;
   detail(id: number, signal?: AbortSignal): Promise<ApiStore>;
@@ -89,19 +93,25 @@ export class ApiStoreRepository implements StoreRepository {
       signal?.removeEventListener("abort", cancel);
     }
   }
-  private async save(path: string, method: "POST" | "PATCH", input: Partial<StoreInput>, signal?: AbortSignal) {
+  private async save(path: string, method: "POST" | "PATCH", input: Partial<StoreCreateInput>, signal?: AbortSignal) {
     const token = record(await this.get("/auth/admin/csrf", signal)).csrf_token;
     if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token))
       throw new Error("보안 요청 정보를 확인할 수 없습니다.");
-    // 허용한 기본 정보만 전송. 인증·관계 필드를 런타임에도 제외합니다.
+    // 기본 정보만 전송하며 점주 연결은 등록 요청에서만 허용합니다.
     const keys: (keyof StoreInput)[] = ["store_name", "address", "address_detail", "store_code", "phone", "business_no", "representative", "store_type"];
-    const body = Object.fromEntries(keys.filter((key) => Object.hasOwn(input, key)).map((key) => [key, input[key]]));
+    const body: Record<string, unknown> = Object.fromEntries(keys.filter((key) => Object.hasOwn(input, key)).map((key) => [key, input[key]]));
+    if (method === "POST" && input.owner_connection) {
+      const owner = input.owner_connection;
+      body.owner_connection = owner.kind === "existing"
+        ? { kind: "existing", owner_id: id(owner.owner_id) }
+        : { kind: "new", login_id: owner.login_id };
+    }
     return parseStore(await this.get(path, signal, {
       method, headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
       body: JSON.stringify(body),
     }));
   }
-  async create(input: StoreInput, signal?: AbortSignal): Promise<ApiStore> {
+  async create(input: StoreCreateInput, signal?: AbortSignal): Promise<ApiStore> {
     return this.save("/admin/stores", "POST", input, signal);
   }
   async update(storeId: number, input: Partial<StoreInput>, signal?: AbortSignal): Promise<ApiStore> {
