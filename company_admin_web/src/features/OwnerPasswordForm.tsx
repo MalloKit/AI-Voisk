@@ -71,7 +71,7 @@ export function OwnerPasswordForm({ repository, owner, formId, onBusy, onSaved }
           {stores.map((store) => <option key={store.id} value={store.id}>{store.name} (#{store.id})</option>)}
         </select>
       </label>}
-    <p className="muted">시연용 임시 비밀번호는 선택한 매장 전화번호의 마지막 숫자 8자리입니다. 초기화하면 이 점주의 기존 로그인 세션이 종료됩니다.</p>
+    <p className="muted">초기 비밀번호는 선택한 매장 전화번호의 마지막 숫자 8자리입니다. 초기화하면 이 점주의 기존 로그인 세션이 종료됩니다.</p>
     {message && <p role="alert" className="form-feedback">{message}</p>}
     {busy && <p role="status">변경 중… 창을 닫지 마세요.</p>}
   </form>;

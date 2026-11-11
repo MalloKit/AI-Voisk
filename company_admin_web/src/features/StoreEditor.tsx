@@ -180,7 +180,7 @@ export function StoreEditor({ store, repository, onSaved, onBusy, formId, owners
       </>}
       {ownerMode === "new" && <label className="field form-field"><span>새 점주 로그인 ID</span>
         <input value={loginId} disabled={busy} autoComplete="off" onChange={(e) => setLoginId(e.target.value)} />
-        <small>시연용 초기 비밀번호는 매장 전화번호의 마지막 숫자 8자리입니다.</small>
+        <small>초기 비밀번호는 매장 전화번호의 마지막 숫자 8자리입니다.</small>
       </label>}
     </fieldset>}
     {message && <p role="alert" className="form-feedback">{message}</p>}
