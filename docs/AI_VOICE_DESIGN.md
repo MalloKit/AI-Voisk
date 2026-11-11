@@ -22,7 +22,7 @@
 | 원가·추천 정책 | 없음 | 원가율, 추천 제외, 매장 우선, 정책 슬라이더, 적합도 기준선 | 점주 웹 "AI 추천·음성" |
 | 태그·동의어 | 없음 | 점주가 메뉴별 상황 태그·동의어를 입력. 시연 매장 40개 메뉴는 미리 채움 | 점주 웹, `server/seed_demo_ai.py` |
 | 음성 설정 | 없음 | 음성 주문 사용, 안내 속도, 추가 제안, 기본 사용자 모드 | 점주 웹 |
-| 메뉴 사진 | 없음 | 점주 웹에서 업로드(800px로 줄여 전송). 서버 디스크에 해시 이름으로 저장하고, 키오스크는 바뀐 사진만 받아 캐시 | `server/menu_image_service.py`, `kiosk_app/lib/data/image_store.dart` |
+| 메뉴 사진 | 없음 | 점주 웹에서 업로드(800px로 줄여 전송). 서버 디스크에 해시 이름으로 저장하고, 키오스크는 바뀐 사진만 받아 캐시. 받는 중이던 카드도 다 받으면 사진으로 바뀜. 시연 메뉴 40개는 Wikimedia Commons 자유 라이선스 사진(`server/seed_menu_images.py`, 출처 `server/menu_image_credits.md`) | `server/menu_image_service.py`, `kiosk_app/lib/data/image_store.dart` |
 | 주문 방식 구분·추천 경유 | 없음 | `orders.order_channel`(touch/voice), `order_item.is_recommended` | 서버·점주 웹 주문 내역 |
 | 추천 로그·통계 | 없음 | 추천 노출·선택 로그. 점주 통계(주문 수, 음성 비율, 추천 선택률, 추천 경유 매출, 인기 메뉴) | 점주 웹 "통계" |
 | 기기 관리 | 연결 상태 미확인 | 키오스크가 60초마다 상태 보고(마지막 접속, 적용 메뉴 버전, 앱 버전). 3분 기준 연결 판정 | 회사 관리자·점주 웹 |

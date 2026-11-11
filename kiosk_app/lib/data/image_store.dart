@@ -1,13 +1,23 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../service/models/menu_item.dart';
 import 'kiosk_api.dart';
 
 /// 메뉴 사진을 기기에 저장합니다. 파일 이름에 내용 해시가 있어 이름이 바뀐 사진만 새로 받습니다.
-class ImageStore {
-  ImageStore({required this.api, required this.directory});
+/// 사진을 새로 받을 때마다 알려, 먼저 그려진 메뉴 카드도 아이콘에서 사진으로 바뀌게 합니다.
+class ImageStore extends ChangeNotifier {
+  ImageStore({
+    required this.api,
+    required this.directory,
+    Future<List<int>> Function(String imageUrl)? fetch,
+  }) : _fetch = fetch ?? api.downloadImage;
   final KioskApi api;
   final Directory directory;
+
+  /// 사진 바이트를 받는 함수. 기본은 서버에서 받고, 테스트는 네트워크 없이 바꿔 끼웁니다.
+  final Future<List<int>> Function(String imageUrl) _fetch;
   final Map<String, Future<File?>> _pending = {};
 
   String? _name(String? imageUrl) {
@@ -31,21 +41,27 @@ class ImageStore {
     if (name == null) return Future.value(null);
     final hit = cached(imageUrl);
     if (hit != null) return Future.value(hit);
-    return _pending[name] ??= _download(
-      imageUrl!,
-      name,
-    ).whenComplete(() => _pending.remove(name));
+    // whenComplete에 화살표 함수로 remove 결과(이 Future 자신)를 돌려주면 자기 자신을 기다리며
+    // 끝나지 않습니다. 블록으로 감싸 아무것도 돌려주지 않습니다.
+    return _pending[name] ??= _download(imageUrl!, name).whenComplete(() {
+      _pending.remove(name);
+    });
   }
 
   Future<File?> _download(String imageUrl, String name) async {
     try {
-      final bytes = await api.downloadImage(imageUrl);
+      final bytes = await _fetch(imageUrl);
       await directory.create(recursive: true);
       final target = File('${directory.path}${Platform.pathSeparator}$name');
       final temporary = File('${target.path}.part');
       await temporary.writeAsBytes(bytes, flush: true);
-      return await temporary.rename(target.path);
+      final saved = await temporary.rename(target.path);
+      notifyListeners();
+      return saved;
     } on KioskUnavailable {
+      return null;
+    } on KioskApiException {
+      // 404 등으로 받지 못하면 아이콘을 보이고 다음 동기화 때 다시 받습니다.
       return null;
     } on FileSystemException {
       return null;

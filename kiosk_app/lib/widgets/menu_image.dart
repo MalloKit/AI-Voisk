@@ -56,12 +56,15 @@ class MenuImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final images = store;
     if (images == null || menu.imageUrl == null) return _icon();
-    final cached = images.cached(menu.imageUrl);
-    if (cached != null) return _file(cached);
-    return FutureBuilder<File?>(
-      future: images.fileFor(menu.imageUrl),
-      builder: (context, snapshot) =>
-          snapshot.data == null ? _icon() : _file(snapshot.data!),
+    // 받는 중이거나 실패했으면 아이콘을 보이고, 나중에라도 받아지면(동기화 재시도 포함) 사진으로 바꿉니다.
+    return ListenableBuilder(
+      listenable: images,
+      builder: (context, _) {
+        final cached = images.cached(menu.imageUrl);
+        if (cached != null) return _file(cached);
+        images.fileFor(menu.imageUrl);
+        return _icon();
+      },
     );
   }
 }
