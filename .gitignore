@@ -30,3 +30,9 @@ venv/
 server/backups/
 # 점주가 올린 메뉴 사진(서버 디스크 저장)
 server/media/
+
+# 소개 영상 작업물(brag-slim)
+brag-output/
+
+# 태블릿 설치용 APK(빌드 산출물)
+release/

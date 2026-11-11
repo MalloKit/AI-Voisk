@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI 보이스크 발표</title>
+<meta name="description" content="2026-2 캡스톤디자인 Team Mallo(말로) — AI 보이스크 발표 자료" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;800&display=swap" rel="stylesheet" />
+<!-- 강의실에 인터넷이 없어도 돌도록 GSAP은 함께 둔 파일을 씁니다. -->
+<script src="assets/vendor/gsap.min.js"></script>
+<style>
+  :root {
+    --bg: #0b1f1c; --bg2: #102c28; --teal: #246b58; --mint: #bdebdc; --mint-dim: rgba(189,235,220,.55);
+    --cream: #fff0dc; --copper: #d28a4c; --ink: #eef6f2; --muted: rgba(238,246,242,.72); --line: rgba(189,235,220,.18);
+    --card: rgba(255,255,255,.05);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #050d0c; overflow: hidden; }
+  body { font-family: "Pretendard", "Malgun Gothic", sans-serif; color: var(--ink); word-break: keep-all; -webkit-font-smoothing: antialiased; }
+  .num, .en { font-family: "Outfit", "Pretendard", sans-serif; }
+
+  /* 1920x1080 무대를 창 크기에 맞춰 축소합니다. */
+  #viewport { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #stage { position: relative; width: 1920px; height: 1080px; flex: none; overflow: hidden;
+    background: radial-gradient(110% 80% at 20% 10%, #1b4a43 0%, var(--bg2) 40%, var(--bg) 100%); }
+  .slide { position: absolute; inset: 0; visibility: hidden; padding: 120px 140px; }
+  .slide.active { visibility: visible; }
+  .bgimg { position: absolute; inset: -40px; background-size: cover; background-position: center; filter: saturate(.9) brightness(.42) blur(10px); }
+  .wash { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(11,31,28,.9) 0%, rgba(11,31,28,.6) 60%, rgba(11,31,28,.75) 100%); }
+  .z { position: relative; z-index: 2; }
+
+  .kicker { font-size: 26px; font-weight: 600; color: var(--mint); letter-spacing: 0.04em; }
+  h1, h2, h3, p { margin: 0; }
+  h2 { font-size: 76px; font-weight: 800; line-height: 1.18; letter-spacing: -1.5px; max-width: 1640px; }
+  h2 .hl { color: var(--mint); }
+  .lead { margin-top: 28px; font-size: 34px; line-height: 1.55; color: var(--muted); max-width: 1300px; }
+  .mask { display: block; overflow: hidden; padding-bottom: 6px; }
+  .mask > span { display: inline-block; }
+  .pill { display: inline-block; width: 150px; height: 74px; border-radius: 40px; background-size: cover; background-position: center; vertical-align: -10px; margin: 0 14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+
+  /* 표지 */
+  .marquee { position: absolute; left: 0; right: 0; display: flex; gap: 24px; opacity: .55; }
+  .marquee img { width: 360px; height: 230px; object-fit: cover; border-radius: 22px; filter: saturate(.85) brightness(.75); }
+  .title-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; z-index: 3; }
+  .title-wrap h1 { font-size: 168px; font-weight: 800; letter-spacing: -4px; line-height: 1.05; }
+  .title-wrap .sub { margin-top: 30px; font-size: 42px; color: var(--mint); }
+  .title-wrap .meta { margin-top: 64px; font-size: 26px; color: var(--muted); letter-spacing: 0.04em; }
+  .mic-orb { width: 120px; height: 120px; border-radius: 50%; background: #d4543f; display: flex; align-items: center; justify-content: center; margin-bottom: 46px; position: relative; }
+  .mic-orb .ring { position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--mint); }
+
+  /* 문제 카드 */
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; margin-top: 70px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 30px; padding: 44px 42px; min-height: 330px; }
+  .tile .big { font-size: 46px; font-weight: 800; line-height: 1.25; }
+  .tile p { margin-top: 20px; font-size: 27px; line-height: 1.55; color: var(--muted); }
+  .law { margin-top: 44px; display: flex; gap: 22px; align-items: center; font-size: 28px; color: var(--cream); }
+  .law b { color: var(--copper); }
+
+  /* 데모 */
+  .demo { display: grid; grid-template-columns: 1080px 1fr; gap: 70px; align-items: center; margin-top: 50px; }
+  .tablet { border-radius: 30px; background: #06110f; padding: 14px; box-shadow: 0 50px 120px rgba(0,0,0,.5); }
+  .tablet .scr { position: relative; border-radius: 18px; overflow: hidden; aspect-ratio: 16 / 10; }
+  .tablet img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .chat { display: flex; flex-direction: column; gap: 22px; }
+  .b { padding: 24px 32px; border-radius: 28px; font-size: 34px; line-height: 1.4; max-width: 560px; }
+  .b.u { align-self: flex-end; background: #fff; color: #142c27; font-weight: 700; border-bottom-right-radius: 8px; }
+  .b.a { align-self: flex-start; background: var(--teal); border-bottom-left-radius: 8px; }
+  .chips { display: flex; gap: 14px; flex-wrap: wrap; }
+  .chip { padding: 14px 30px; border-radius: 40px; background: rgba(255,255,255,.12); font-size: 30px; font-weight: 700; }
+  .chip.on { background: var(--mint); color: #12302a; }
+  .cart { background: #fff; color: #142c27; border-radius: 24px; padding: 22px 28px; display: flex; flex-direction: column; gap: 14px; }
+  .row { display: flex; align-items: center; gap: 18px; font-size: 32px; font-weight: 700; }
+  .row img { width: 92px; height: 68px; object-fit: cover; border-radius: 14px; }
+  .row span { margin-left: auto; color: var(--teal); }
+
+  .recs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 56px; }
+  .rec { background: #fff; color: #142c27; border-radius: 30px; overflow: hidden; box-shadow: 0 40px 90px rgba(0,0,0,.4); }
+  .rec .ph { height: 330px; overflow: hidden; }
+  .rec .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .rec .t { padding: 26px 32px 34px; }
+  .rec .r { font-size: 24px; font-weight: 700; color: #b8692e; }
+  .rec .n { font-size: 46px; font-weight: 800; margin-top: 6px; }
+  .rec .w { font-size: 28px; color: #3d5852; margin-top: 10px; }
+  .rec.first { outline: 6px solid var(--mint); }
+
+  /* 구성도 */
+  .arch { position: relative; height: 700px; margin-top: 30px; }
+  .node { position: absolute; width: 420px; padding: 30px 34px; border-radius: 26px; background: rgba(255,255,255,.06); border: 1px solid var(--line); }
+  .node h3 { font-size: 36px; font-weight: 800; }
+  .node p { margin-top: 10px; font-size: 25px; line-height: 1.5; color: var(--muted); }
+  .node.core { background: rgba(36,107,88,.55); border-color: var(--mint-dim); }
+  .node .tag { display: inline-block; margin-top: 14px; font-size: 21px; color: var(--mint); }
+  svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  svg.wires path { fill: none; stroke: var(--mint); stroke-width: 3; opacity: .7; }
+
+  /* 파이프라인 */
+  .pipe { display: flex; gap: 22px; margin-top: 70px; align-items: stretch; }
+  .step { flex: 1; background: var(--card); border: 1px solid var(--line); border-radius: 26px; padding: 34px 30px; position: relative; }
+  .step .n { font-family: "Outfit"; font-size: 64px; font-weight: 800; color: var(--mint); line-height: 1; }
+  .step h3 { margin-top: 18px; font-size: 32px; font-weight: 800; }
+  .step p { margin-top: 12px; font-size: 24px; color: var(--muted); line-height: 1.5; }
+  .formula { margin-top: 56px; font-size: 40px; font-weight: 700; text-align: center; padding: 30px; border-radius: 26px; background: rgba(36,107,88,.35); }
+  .formula em { font-style: normal; color: var(--mint); }
+
+  /* 차트 */
+  .bars { display: flex; gap: 90px; align-items: flex-end; height: 470px; margin-top: 70px; padding: 0 60px; border-bottom: 2px solid var(--line); }
+  .bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .bar .col { width: 190px; flex-shrink: 0; border-radius: 20px 20px 0 0; background: linear-gradient(180deg, var(--mint), #5fb79c); height: 0; }
+  .bar .v { font-family: "Outfit"; font-size: 64px; font-weight: 800; margin-bottom: 18px; }
+  .bar .lab { position: absolute; }
+  .barlabels { display: flex; gap: 90px; padding: 0 60px; margin-top: 22px; }
+  .barlabels div { flex: 1; text-align: center; font-size: 30px; font-weight: 700; }
+  .barlabels small { display: block; font-size: 24px; color: var(--muted); font-weight: 400; margin-top: 6px; }
+
+  /* 지표 */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; margin-top: 70px; }
+  .metric { background: var(--card); border: 1px solid var(--line); border-radius: 28px; padding: 40px 36px; }
+  .metric .v { font-family: "Outfit"; font-size: 104px; font-weight: 800; line-height: 1; }
+  .metric .v small { font-size: 48px; }
+  .metric .k { margin-top: 18px; font-size: 30px; font-weight: 700; }
+  .metric .d { margin-top: 8px; font-size: 23px; color: var(--muted); }
+  .honest { margin-top: 40px; display: flex; gap: 30px; }
+  .honest div { flex: 1; padding: 30px 34px; border-radius: 24px; background: rgba(210,138,76,.12); border: 1px solid rgba(210,138,76,.35); font-size: 27px; line-height: 1.5; }
+  .honest b { color: var(--copper); }
+
+  /* 가로 아코디언 */
+  .acc { display: flex; gap: 18px; height: 600px; margin-top: 60px; }
+  .acc .it { flex: 1; position: relative; border-radius: 30px; overflow: hidden; border: 1px solid var(--line); background: var(--card); transition: flex .7s cubic-bezier(.2,.8,.2,1); cursor: pointer; }
+  .acc .it.open { flex: 3.2; background: rgba(36,107,88,.35); }
+  .acc .it .vt { position: absolute; left: 34px; bottom: 34px; font-size: 38px; font-weight: 800; }
+  .acc .it .ct { position: absolute; left: 40px; right: 40px; top: 44px; opacity: 0; transition: opacity .4s; }
+  .acc .it.open .ct { opacity: 1; transition-delay: .3s; }
+  .acc .it .ct p { font-size: 28px; line-height: 1.6; color: var(--ink); margin-bottom: 16px; }
+  .acc .it .ct p b { color: var(--mint); }
+
+  .patterns { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-flow: dense; gap: 28px; margin-top: 60px; }
+  .pat { background: rgba(14,38,34,.82); border: 1px solid var(--line); border-radius: 26px; padding: 36px; }
+  .pat h3 { font-family: "Outfit"; font-size: 42px; font-weight: 800; color: var(--mint); }
+  .pat p { margin-top: 14px; font-size: 26px; line-height: 1.55; color: var(--muted); }
+
+  .todo { margin-top: 60px; display: flex; flex-direction: column; gap: 22px; }
+  .todo div { display: flex; gap: 30px; align-items: baseline; padding: 30px 40px; border-radius: 24px; background: var(--card); border: 1px solid var(--line); font-size: 32px; }
+  .todo b { min-width: 300px; color: var(--mint); }
+
+  .end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; z-index: 3; }
+  .end h1 { font-size: 150px; font-weight: 800; letter-spacing: -3px; }
+  .end p { margin-top: 26px; font-size: 40px; color: var(--mint); }
+  .credit { position: absolute; left: 140px; right: 140px; bottom: 96px; font-size: 19px; color: rgba(238,246,242,.78); text-align: center; }
+
+  /* 진행 표시·안내 */
+  #hud { position: absolute; left: 140px; right: 140px; bottom: 44px; display: flex; align-items: center; gap: 24px; z-index: 10; pointer-events: none; }
+  #bar { flex: 1; height: 3px; background: rgba(189,235,220,.15); border-radius: 2px; overflow: hidden; }
+  #bar i { display: block; height: 100%; width: 0; background: var(--mint); }
+  #count { font-family: "Outfit"; font-size: 22px; color: var(--muted); min-width: 90px; text-align: right; }
+  #grain { position: absolute; inset: 0; z-index: 20; pointer-events: none; opacity: .08; mix-blend-mode: overlay; }
+  #shutter { position: absolute; inset: 0; z-index: 15; pointer-events: none; background: #050d0c; opacity: 0; }
+  .hint { position: fixed; right: 18px; bottom: 14px; font-size: 13px; color: rgba(238,246,242,.7); z-index: 30; }
+  @media (prefers-reduced-motion: reduce) { .acc .it { transition: none; } }
+</style>
+</head>
+<body>
+<div id="viewport"><div id="stage">
+
+  <!-- 1 표지 -->
+  <section class="slide" data-title="표지">
+    <div class="marquee" style="top:70px" id="mq1">
+      <img src="assets/menu_2.jpg" alt="비빔밥" /><img src="assets/menu_11.jpg" alt="떡볶이" /><img src="assets/menu_45.jpg" alt="북엇국" /><img src="assets/menu_42.jpg" alt="돈가스" /><img src="assets/menu_57.jpg" alt="냉면" /><img src="assets/menu_63.jpg" alt="팥빙수" /><img src="assets/menu_9.jpg" alt="불고기" /><img src="assets/menu_60.jpg" alt="김밥" />
+      <img src="assets/menu_2.jpg" alt="" /><img src="assets/menu_11.jpg" alt="" /><img src="assets/menu_45.jpg" alt="" /><img src="assets/menu_42.jpg" alt="" />
+    </div>
+    <div class="marquee" style="bottom:70px" id="mq2">
+      <img src="assets/menu_3.jpg" alt="순두부찌개" /><img src="assets/menu_43.jpg" alt="오므라이스" /><img src="assets/menu_4.jpg" alt="콩나물국밥" /><img src="assets/menu_64.jpg" alt="호떡" /><img src="assets/menu_44.jpg" alt="카레라이스" /><img src="assets/menu_41.jpg" alt="김치볶음밥" /><img src="assets/menu_47.jpg" alt="김치찌개" /><img src="assets/menu_1.jpg" alt="제육덮밥" />
+      <img src="assets/menu_3.jpg" alt="" /><img src="assets/menu_43.jpg" alt="" /><img src="assets/menu_4.jpg" alt="" /><img src="assets/menu_64.jpg" alt="" />
+    </div>
+    <div class="wash"></div>
+    <div class="title-wrap">
+      <div class="mic-orb" data-a="pop"><div class="ring" id="orb-ring"></div>
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="#fff"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11z"/></svg>
+      </div>
+      <h1><span class="mask"><span data-a="rise">AI 보이스크</span></span></h1>
+      <div class="sub" data-a="fade">말로 주문하고, 상황에 맞는 메뉴를 추천받는 음성 키오스크</div>
+      <div class="meta" data-a="fade">2026-2 캡스톤디자인 · Team Mallo(말로)</div>
+    </div>
+  </section>
+
+  <!-- 2 문제 -->
+  <section class="slide" data-title="문제">
+    <div class="kicker" data-a="fade">왜 만들었나</div>
+    <h2 style="margin-top:22px"><span class="mask"><span data-a="rise">키오스크 앞에서 우리는</span></span><span class="mask"><span data-a="rise"><span class="hl">탭을 반복하고, 고민하고, 포기합니다</span></span></span></h2>
+    <div class="grid3">
+      <div class="tile" data-a="card"><div class="big">메뉴는 흩어져 있고</div><p>원하는 메뉴를 찾으려고 카테고리를 오가며 탭을 반복합니다.</p></div>
+      <div class="tile" data-a="card"><div class="big">뭘 먹을지 모르겠고</div><p>메뉴가 많은 매장일수록 고르는 데 오래 걸리고, 상황에 맞는 추천은 없습니다.</p></div>
+      <div class="tile" data-a="card"><div class="big">터치가 어렵습니다</div><p>시니어·디지털 취약 고객은 뒷사람 눈치를 보며 주문을 포기하기도 합니다.</p></div>
+    </div>
+    <div class="law" data-a="fade"><b>매장 쪽</b> 직원이 하던 추천·추가 권유가 사라졌고, 2026년 1월부터 무인정보단말기 접근성 의무가 기존 기기까지 적용됩니다.</div>
+  </section>
+
+  <!-- 3 해결 -->
+  <section class="slide" data-title="해결">
+    <div class="bgimg" style="background-image:url(assets/cart.jpg)" data-a="kenburns"></div><div class="wash"></div>
+    <div class="z" style="margin-top:170px">
+      <div class="kicker" data-a="fade">AI 보이스크</div>
+      <h2 style="margin-top:22px;font-size:92px"><span class="mask"><span data-a="rise">버튼을 누르고 <span class="pill" style="background-image:url(assets/menu_1.jpg)"></span> 말하면</span></span><span class="mask"><span data-a="rise"><span class="hl">주문과 추천이 끝납니다</span></span></span></h2>
+      <p class="lead" data-a="fade">"제육 두 개랑 콜라 하나"처럼 한 문장으로 주문하고, "해장할 만한 거"처럼 상황만 말해도 매장 메뉴 중 맞는 3개를 이유와 함께 추천합니다. 점주는 웹에서 메뉴·사진·추천 정책을 관리합니다.</p>
+    </div>
+  </section>
+
+  <!-- 4 음성 주문 -->
+  <section class="slide" data-title="음성 주문">
+    <div class="kicker" data-a="fade">시연 · 한 문장 주문</div>
+    <div class="demo">
+      <div class="tablet" data-a="tablet"><div class="scr"><img src="assets/voice_listening.jpg" alt="음성 주문 듣는 중 화면" /></div></div>
+      <div class="chat">
+        <div class="b u" data-a="pop">“제육 두 개랑 콜라 하나”</div>
+        <div class="b a" data-a="pop">제육덮밥 2개와 콜라 1개 담을까요?</div>
+        <div class="chips" data-a="pop"><div class="chip on">네</div><div class="chip">아니요</div></div>
+        <div class="cart" data-a="pop">
+          <div class="row"><img src="assets/menu_1.jpg" alt="" />제육덮밥<span>2개</span></div>
+          <div class="row"><img src="assets/menu_6.jpg" alt="" />콜라<span>1개</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 상황 추천 -->
+  <section class="slide" data-title="상황 추천">
+    <div class="kicker" data-a="fade">시연 · 상황 기반 추천</div>
+    <h2 style="margin-top:22px;font-size:58px"><span class="mask"><span data-a="rise">“어제 술을 많이 마셨는데 해장할 만한 거 추천해 줘”</span></span></h2>
+    <div class="recs">
+      <div class="rec first" data-a="card"><div class="ph"><img src="assets/menu_45.jpg" alt="북엇국" /></div><div class="t"><div class="r">추천 1</div><div class="n">북엇국</div><div class="w">담백해서 속 풀기 좋아요</div></div></div>
+      <div class="rec" data-a="card"><div class="ph"><img src="assets/menu_4.jpg" alt="콩나물국밥" /></div><div class="t"><div class="r">추천 2</div><div class="n">콩나물국밥</div><div class="w">시원한 국물로 속 풀기 좋아요</div></div></div>
+      <div class="rec" data-a="card"><div class="ph"><img src="assets/menu_3.jpg" alt="순두부찌개" /></div><div class="t"><div class="r">추천 3</div><div class="n">순두부찌개</div><div class="w">얼큰한 국물이 해장에 좋아요</div></div></div>
+    </div>
+    <p class="lead" style="margin-top:40px;font-size:27px" data-a="fade">실제 매장 메뉴 40개로 평가한 결과(ml/voice_eval). 이유 문장은 Claude Haiku가 메뉴 태그·설명에 근거해 만들고, 순위는 키오스크 추천 엔진이 정합니다.</p>
+  </section>
+
+  <!-- 6 필수 옵션 -->
+  <section class="slide" data-title="옵션 되묻기">
+    <div class="kicker" data-a="fade">시연 · 꼭 필요한 것만 되묻기</div>
+    <div class="demo">
+      <div class="tablet" data-a="tablet"><div class="scr"><img src="assets/option_dialog.jpg" alt="필수 옵션 선택 화면" /><img src="assets/option_chosen.jpg" alt="" data-a="wipe" /></div></div>
+      <div class="chat">
+        <div class="b u" data-a="pop">“떡볶이 하나”</div>
+        <div class="b a" data-a="pop">떡볶이 맵기를 골라 주세요. 순한맛, 보통맛, 매운맛이 있어요.</div>
+        <div class="chips" data-a="pop"><div class="chip">순한맛</div><div class="chip">보통맛</div><div class="chip on">매운맛</div></div>
+        <p class="lead" style="font-size:26px;margin-top:6px" data-a="fade">맵기·사이즈처럼 하나를 꼭 골라야 하는 옵션만 묻고, 화면 버튼으로도 고를 수 있습니다. 서버도 주문 저장 때 다시 확인합니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 구성 -->
+  <section class="slide" data-title="시스템 구성">
+    <div class="kicker" data-a="fade">시스템 구성</div>
+    <h2 style="margin-top:22px;font-size:62px"><span class="mask"><span data-a="rise">오디오는 태블릿 밖으로 나가지 않고, <span class="hl">글자만</span> 서버로 갑니다</span></span></h2>
+    <div class="arch">
+      <svg class="wires" viewBox="0 0 1640 700" preserveAspectRatio="none">
+        <path d="M420 150 C 560 150, 560 350, 640 350" data-a="draw" />
+        <path d="M1060 350 C 1140 350, 1140 150, 1220 150" data-a="draw" />
+        <path d="M1060 350 C 1140 350, 1140 550, 1220 550" data-a="draw" />
+        <path d="M420 550 C 560 550, 560 350, 640 350" data-a="draw" />
+      </svg>
+      <div class="node" style="left:0;top:40px" data-a="card"><h3>키오스크 앱</h3><p>Flutter · 대화 상태 기계 · 추천 엔진 · 오프라인 메뉴 캐시 · 주문 Outbox</p><span class="tag">Kotlin 음성 엔진 (STT·TTS)</span></div>
+      <div class="node" style="left:0;top:450px" data-a="card"><h3>점주·관리자 웹</h3><p>React · 메뉴·옵션·사진 · 추천 정책 · 통계 · 기기 토큰</p></div>
+      <div class="node core" style="left:640px;top:240px" data-a="card"><h3>FastAPI 서버</h3><p>기기 토큰 인증 · 음성 해석 · WebSocket 동기화 · 주문 저장</p><span class="tag">노트북 LAN 서버</span></div>
+      <div class="node" style="left:1220px;top:40px" data-a="card"><h3>Claude Haiku</h3><p>주문 해석 · 상황 적합도와 이유. 발화는 저장하지 않음</p></div>
+      <div class="node" style="left:1220px;top:450px" data-a="card"><h3>Azure MySQL</h3><p>메뉴·주문·추천 로그. TLS 접속</p></div>
+    </div>
+  </section>
+
+  <!-- 8 추천 로직 -->
+  <section class="slide" data-title="추천 로직">
+    <div class="kicker" data-a="fade">추천 로직</div>
+    <h2 style="margin-top:22px;font-size:62px"><span class="mask"><span data-a="rise">AI는 <span class="hl">해석과 적합도</span>만, 순위는 정해진 규칙으로</span></span></h2>
+    <div class="pipe">
+      <div class="step" data-a="card"><div class="n">1</div><h3>후보 거르기</h3><p>품절·추천 제외 메뉴를 뺍니다</p></div>
+      <div class="step" data-a="card"><div class="n">2</div><h3>적합도</h3><p>Haiku가 상황에 맞는 정도(0~100)와 이유를 냅니다</p></div>
+      <div class="step" data-a="card"><div class="n">3</div><h3>기준선</h3><p>기준 미달 메뉴는 이익이 커도 추천하지 않습니다</p></div>
+      <div class="step" data-a="card"><div class="n">4</div><h3>점수·정렬</h3><p>점주 정책 가중치로 합산해 상위 3개</p></div>
+    </div>
+    <div class="formula" data-a="pop">최종 점수 = <em>적합도</em> × w1 + <em>이익 점수</em> × w2 + <em>매장 우선</em> × w3</div>
+  </section>
+
+  <!-- 9 정책 결과 -->
+  <section class="slide" data-title="정책 반영">
+    <div class="kicker" data-a="fade">정책 반영 검증</div>
+    <h2 style="margin-top:22px;font-size:62px"><span class="mask"><span data-a="rise">정책을 이익 쪽으로 옮기면 <span class="hl">원가율은 내려가고</span> 적합률은 그대로</span></span></h2>
+    <div class="bars">
+      <div class="bar"><div class="v num" data-count="31.6">0</div><div class="col" data-h="31.6"></div></div>
+      <div class="bar"><div class="v num" data-count="27.1">0</div><div class="col" data-h="27.1"></div></div>
+      <div class="bar"><div class="v num" data-count="23.5">0</div><div class="col" data-h="23.5"></div></div>
+    </div>
+    <div class="barlabels" data-a="fade"><div>고객 적합 우선<small>적합률 100%</small></div><div>균형<small>적합률 100%</small></div><div>매장 이익 우선<small>적합률 100%</small></div></div>
+    <p class="lead" style="font-size:25px;margin-top:30px" data-a="fade">추천 1순위 메뉴의 평균 원가율(%). 상황 질의 15개 · 같은 Haiku 적합도 결과에 정책 슬라이더만 바꿔 적용.</p>
+  </section>
+
+  <!-- 10 평가 -->
+  <section class="slide" data-title="평가">
+    <div class="kicker" data-a="fade">평가 · 발화 67개 (ml/voice_eval)</div>
+    <h2 style="margin-top:22px;font-size:62px"><span class="mask"><span data-a="rise">목표를 넘긴 것과, <span class="hl">아직 남은 것</span></span></span></h2>
+    <div class="metrics">
+      <div class="metric" data-a="card"><div class="v num" data-count="100">0</div><div class="k">의도 분류</div><div class="d">목표 90% 이상 · 67개</div></div>
+      <div class="metric" data-a="card"><div class="v num" data-count="100">0</div><div class="k">품목·수량</div><div class="d">41개</div></div>
+      <div class="metric" data-a="card"><div class="v num" data-count="100">0</div><div class="k">추천 적합률</div><div class="d">목표 85% 이상 · 15개</div></div>
+      <div class="metric" data-a="card"><div class="v num" data-count="4.06" data-unit="초">0</div><div class="k">응답 시간 평균</div><div class="d">목표 2초 · 구독 CLI 경유</div></div>
+    </div>
+    <div class="honest" data-a="fade">
+      <div><b>응답 시간</b> 측정값에는 CLI 실행 비용이 들어 있습니다. 실제 API 키 경로는 키를 넣은 뒤 다시 잽니다.</div>
+      <div><b>평가 범위</b> 합성 발화 세트 기준입니다. 실제 태블릿 마이크 인식률과 시니어 사용자 테스트는 남은 과제입니다.</div>
+    </div>
+  </section>
+
+  <!-- 11 신뢰성 -->
+  <section class="slide" data-title="신뢰성">
+    <div class="kicker" data-a="fade">매장에서 멈추지 않게</div>
+    <h2 style="margin-top:22px;font-size:62px"><span class="mask"><span data-a="rise">네트워크가 끊겨도, 가격이 바뀌어도</span></span></h2>
+    <div class="acc" id="acc">
+      <div class="it open" data-a="card"><div class="ct"><p><b>오프라인 우선</b></p><p>마지막으로 받은 메뉴로 터치 주문을 계속 받고, 주문은 기기의 대기열(Outbox)에 쌓았다가 순서대로 보냅니다.</p><p>주문마다 고유 ID를 붙여 다시 보내도 한 번만 저장됩니다.</p></div><div class="vt">오프라인</div></div>
+      <div class="it" data-a="card"><div class="ct"><p><b>실시간 메뉴 동기화</b></p><p>점주가 저장하면 WebSocket으로 알리고, 진행 중인 주문은 시작한 메뉴로 끝낸 뒤 새 메뉴를 적용합니다.</p><p>결제 중 가격이 바뀌면 새 가격으로 다시 계산해 알려 줍니다.</p></div><div class="vt">동기화</div></div>
+      <div class="it" data-a="card"><div class="ct"><p><b>프라이버시</b></p><p>마이크는 "말로 주문하기"를 누른 동안만 켜집니다. 녹음·저장하지 않고, 서버는 발화를 DB·로그에 남기지 않습니다.</p></div><div class="vt">프라이버시</div></div>
+      <div class="it" data-a="card"><div class="ct"><p><b>다음 고객 준비</b></p><p>결제가 끝나거나 90초 동안 조작이 없으면 처음 화면으로 돌아가 장바구니와 대화를 비웁니다.</p></div><div class="vt">초기화</div></div>
+    </div>
+  </section>
+
+  <!-- 12 점주 웹 -->
+  <section class="slide" data-title="점주 웹">
+    <div class="bgimg" style="background-image:url(assets/menu_meals.jpg)" data-a="kenburns"></div><div class="wash"></div>
+    <div class="z">
+      <div class="kicker" data-a="fade">점주·회사 관리자 웹</div>
+      <h2 style="margin-top:22px;font-size:62px"><span class="mask"><span data-a="rise">저장하면 매장 태블릿에 <span class="hl">바로</span> 반영됩니다</span></span></h2>
+      <div class="patterns">
+        <div class="pat" data-a="card"><h3>메뉴판</h3><p>메뉴·옵션·필수 옵션 그룹·품절·노출 순서, 메뉴 사진 업로드</p></div>
+        <div class="pat" data-a="card"><h3>AI 추천</h3><p>상황 태그·동의어·원가율, 추천 정책 프리셋(고객 적합 우선·균형·매장 이익 우선)</p></div>
+        <div class="pat" data-a="card"><h3>음성 설정</h3><p>음성 주문 사용, 안내 속도, 추가 제안, 기본 사용자 모드</p></div>
+        <div class="pat" data-a="card"><h3>통계</h3><p>주문 수, 음성 주문 비율, 추천 선택률, 추천 경유 매출, 인기 메뉴</p></div>
+        <div class="pat" data-a="card"><h3>직원 호출</h3><p>키오스크에서 부르면 점주 웹에 바로 알림</p></div>
+        <div class="pat" data-a="card"><h3>기기 관리</h3><p>기기 토큰 발급, 연결 상태, 적용 메뉴 버전</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13 설계 -->
+  <section class="slide" data-title="설계">
+    <div class="kicker" data-a="fade">설계 원칙과 패턴</div>
+    <h2 style="margin-top:22px;font-size:62px"><span class="mask"><span data-a="rise">음성과 터치는 <span class="hl">같은 주문 명령</span>을 거칩니다</span></span></h2>
+    <div class="patterns">
+      <div class="pat" data-a="card"><h3 class="en">Command</h3><p>담기·빼기·수량·옵션을 명령 객체로 통일. 터치와 음성이 같은 길로 장바구니를 바꿉니다</p></div>
+      <div class="pat" data-a="card"><h3 class="en">State</h3><p>대기 → 청취 → 이해 → 추천·되묻기·확인 → 실행 → 결제 안내</p></div>
+      <div class="pat" data-a="card"><h3 class="en">Pipeline</h3><p>후보 거르기 → 적합도 → 기준선 → 점수 → 정렬</p></div>
+      <div class="pat" data-a="card"><h3 class="en">Outbox</h3><p>주문을 기기에 먼저 저장하고 순서대로 전송, 유실 방지</p></div>
+      <div class="pat" data-a="card"><h3 class="en">Repository</h3><p>화면은 기기에 저장한 메뉴만 읽고, 동기화가 서버 변경을 반영</p></div>
+      <div class="pat" data-a="card"><h3 class="en">Facade</h3><p>Kotlin 음성 엔진이 STT·TTS를 하나의 인터페이스로 묶음</p></div>
+    </div>
+  </section>
+
+  <!-- 14 다음 -->
+  <section class="slide" data-title="남은 과제">
+    <div class="kicker" data-a="fade">남은 과제</div>
+    <h2 style="margin-top:22px;font-size:62px"><span class="mask"><span data-a="rise">시연 너머, <span class="hl">실제 매장</span>까지</span></span></h2>
+    <div class="todo">
+      <div data-a="card"><b>응답 2초</b>실제 API 키 경로에서 응답 시간 측정과 조정</div>
+      <div data-a="card"><b>실기기 검증</b>갤럭시 탭 마이크로 음성 인식률, 3D 프린팅 케이스 시연</div>
+      <div data-a="card"><b>사용자 테스트</b>시니어 주문 완료율 80%, 터치 대비 탭 수·소요 시간 비교(앱에 측정 기록 내장)</div>
+      <div data-a="card"><b>배치</b>HTTPS와 서버 배포, 실제 결제 연동</div>
+    </div>
+  </section>
+
+  <!-- 15 끝 -->
+  <section class="slide" data-title="마무리">
+    <div class="bgimg" style="background-image:url(assets/menu_meals.jpg)" data-a="kenburns"></div><div class="wash"></div>
+    <div class="end">
+      <h1><span class="mask"><span data-a="rise">감사합니다</span></span></h1>
+      <p data-a="fade">AI 보이스크 · Team Mallo(말로)</p>
+    </div>
+    <div class="credit">메뉴 사진: Wikimedia Commons 자유 라이선스 사진(저작자·라이선스는 server/menu_image_credits.md). 키오스크 화면은 실제 앱을 에뮬레이터에서 촬영.</div>
+  </section>
+
+  <div id="shutter"></div>
+  <div id="hud"><div id="bar"><i></i></div><div id="count" class="num">1 / 15</div></div>
+  <svg id="grain" width="1920" height="1080" xmlns="http://www.w3.org/2000/svg"><filter id="gn"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="4" /></filter><rect width="1920" height="1080" filter="url(#gn)" /></svg>
+</div></div>
+<div class="hint">← → / Space 이동 · F 전체 화면</div>
+
+<script>
+(() => {
+  const stage = document.getElementById("stage");
+  const slides = [...document.querySelectorAll(".slide")];
+  const count = document.getElementById("count");
+  const barFill = document.querySelector("#bar i");
+  let current = -1, busy = false;
+
+  // 프레임 간격이 길어져도(다른 창에 가렸다 돌아옴 등) 애니메이션이 늦춰지지 않고 제시간에 끝나게 합니다.
+  gsap.ticker.lagSmoothing(0);
+
+  function fit() {
+    const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stage.style.transform = `scale(${s})`;
+  }
+  window.addEventListener("resize", fit);
+  fit();
+
+  // 표지 사진 띠는 계속 흐릅니다(가로 이동만, 느리게).
+  gsap.to("#mq1", { x: -1536, duration: 60, ease: "none", repeat: -1 });
+  gsap.fromTo("#mq2", { x: -1536 }, { x: 0, duration: 60, ease: "none", repeat: -1 });
+  gsap.to("#orb-ring", { scale: 2.2, opacity: 0, duration: 2.4, ease: "power1.out", repeat: -1 });
+
+  function enter(slide) {
+    const tl = gsap.timeline();
+    let at = 0.15;
+    slide.querySelectorAll("[data-a]").forEach((el) => {
+      const a = el.dataset.a;
+      if (a === "rise") { tl.fromTo(el, { yPercent: 110 }, { yPercent: 0, duration: 1.0, ease: "expo.out" }, at); at += 0.12; }
+      else if (a === "fade") { tl.fromTo(el, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.9, ease: "power2.out" }, at + 0.25); at += 0.08; }
+      else if (a === "pop") { tl.fromTo(el, { opacity: 0, y: 26, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out" }, at + 0.35); at += 0.35; }
+      else if (a === "card") { tl.fromTo(el, { opacity: 0, y: 60, rotateX: 8, transformPerspective: 900 }, { opacity: 1, y: 0, rotateX: 0, duration: 1.0, ease: "power3.out" }, at + 0.25); at += 0.1; }
+      else if (a === "tablet") { tl.fromTo(el, { opacity: 0, y: 70, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 1.2, ease: "expo.out" }, at); at += 0.2; }
+      else if (a === "wipe") { tl.fromTo(el, { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 1.1, ease: "power2.inOut" }, at + 1.6); }
+      else if (a === "kenburns") { tl.fromTo(el, { scale: 1.12 }, { scale: 1.0, duration: 6, ease: "power1.out" }, 0); }
+      else if (a === "draw") {
+        const len = el.getTotalLength();
+        tl.fromTo(el, { strokeDasharray: len, strokeDashoffset: len }, { strokeDashoffset: 0, duration: 1.1, ease: "power2.inOut" }, at + 0.6);
+      }
+    });
+    slide.querySelectorAll(".col[data-h]").forEach((el, i) => {
+      tl.fromTo(el, { height: 0 }, { height: (parseFloat(el.dataset.h) * 11) + "px", duration: 1.4, ease: "expo.out" }, 0.7 + i * 0.25);
+    });
+    slide.querySelectorAll("[data-count]").forEach((el, i) => {
+      const target = parseFloat(el.dataset.count);
+      const unit = el.dataset.unit || (target === 100 ? "%" : "");
+      const digits = Number.isInteger(target) ? 0 : (String(target).split(".")[1] || "").length;
+      const o = { v: 0 };
+      tl.to(o, { v: target, duration: 1.4, ease: "expo.out", onUpdate: () => {
+        el.innerHTML = o.v.toFixed(digits) + (unit ? `<small>${unit}</small>` : (target < 50 ? "<small>%</small>" : ""));
+      } }, 0.7 + i * 0.2);
+    });
+    return tl;
+  }
+
+  function go(index) {
+    if (busy || index < 0 || index >= slides.length || index === current) return;
+    busy = true;
+    const prev = slides[current];
+    const next = slides[index];
+    const forward = index > current;
+    const tl = gsap.timeline({ onComplete: () => { busy = false; } });
+    if (prev) {
+      // 장면 전환: 이전 장면이 살짝 물러나며 어두워지고(셔터), 다음 장면이 아래에서 열립니다.
+      tl.to(prev, { scale: 0.96, opacity: 0, filter: "blur(6px)", duration: 0.55, ease: "power2.in" }, 0);
+      tl.to("#shutter", { opacity: 0.6, duration: 0.3, ease: "power1.in" }, 0.15);
+      tl.add(() => { prev.classList.remove("active"); gsap.set(prev, { clearProps: "all" }); });
+    }
+    tl.add(() => { next.classList.add("active"); }, prev ? 0.55 : 0);
+    tl.fromTo(next, { clipPath: forward ? "inset(100% 0 0 0)" : "inset(0 0 100% 0)" },
+      { clipPath: "inset(0% 0 0 0)", duration: 0.9, ease: "expo.inOut" }, prev ? 0.5 : 0);
+    tl.to("#shutter", { opacity: 0, duration: 0.6, ease: "power1.out" }, prev ? 0.7 : 0);
+    tl.add(() => enter(next), prev ? 0.75 : 0.05);
+    current = index;
+    count.textContent = `${index + 1} / ${slides.length}`;
+    gsap.to(barFill, { width: ((index + 1) / slides.length * 100) + "%", duration: 0.8, ease: "power2.out" });
+    try { history.replaceState(null, "", "#" + (index + 1)); } catch (e) { /* 파일로 열면 무시 */ }
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (["ArrowRight", "PageDown", " ", "Enter"].includes(e.key)) { e.preventDefault(); go(current + 1); }
+    else if (["ArrowLeft", "PageUp", "Backspace"].includes(e.key)) { e.preventDefault(); go(current - 1); }
+    else if (e.key === "Home") go(0);
+    else if (e.key === "End") go(slides.length - 1);
+    else if (e.key.toLowerCase() === "f") { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
+  });
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".acc .it")) return;
+    go(e.clientX < window.innerWidth * 0.25 ? current - 1 : current + 1);
+  });
+
+  // 신뢰성 장표의 가로 아코디언: 누르거나 올리면 펼쳐집니다.
+  document.querySelectorAll(".acc .it").forEach((it) => {
+    const open = () => document.querySelectorAll(".acc .it").forEach((x) => x.classList.toggle("open", x === it));
+    it.addEventListener("mouseenter", open);
+    it.addEventListener("click", open);
+  });
+
+  const start = parseInt((location.hash || "#1").slice(1), 10);
+  go(Number.isFinite(start) && start >= 1 && start <= slides.length ? start - 1 : 0);
+})();
+</script>
+</body>
+</html>

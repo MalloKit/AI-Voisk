@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 시연 서버는 같은 Wi-Fi의 노트북에서 HTTP(http://노트북IP:8001)로 돌기 때문에 release 빌드에서도 평문 HTTP를 허용합니다.
+     실제 매장에 HTTPS 서버를 두면 cleartextTrafficPermitted를 false로 바꿉니다. 이 파일을 지우면 release APK가 서버에 접속하지 못합니다
+     (test/release_config_test.dart가 확인). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
