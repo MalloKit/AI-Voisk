@@ -200,11 +200,61 @@ class VoiceSanitizeTests(unittest.TestCase):
                                            {'menu_id': 11, 'quantity': 1, 'option_ids': [], 'entry_id': None}])
 
     def test_order_without_valid_items_becomes_clarify(self):
-        raw = {'intent': 'order', 'items': [{'menu_id': 13, 'quantity': 1, 'option_ids': [], 'entry_id': None}],
-               'question': '품절이에요. 다른 메뉴는 어떠세요?'}
+        raw = {'intent': 'order', 'items': [{'menu_id': 999, 'quantity': 1, 'option_ids': [], 'entry_id': None}],
+               'question': '어떤 메뉴를 말씀하셨나요?'}
         result = voice_service.sanitize(raw, self.catalog, self.request())
         self.assertEqual(result['intent'], 'clarify')
-        self.assertEqual(result['question'], '품절이에요. 다른 메뉴는 어떠세요?')
+        self.assertEqual(result['question'], '어떤 메뉴를 말씀하셨나요?')
+
+    def test_order_of_only_sold_out_menu_names_it_in_question(self):
+        # 모델 문장 대신 서버가 품절 메뉴 이름으로 안내 문장을 만듭니다.
+        raw = {'intent': 'order', 'items': [{'menu_id': 13, 'quantity': 2, 'option_ids': [], 'entry_id': None}],
+               'question': None}
+        result = voice_service.sanitize(raw, self.catalog, self.request())
+        self.assertEqual((result['intent'], result['items']), ('clarify', []))
+        self.assertEqual(result['question'], '품절메뉴는 지금 품절이에요. 다른 메뉴를 말씀해 주세요.')
+        self.assertEqual(result['sold_out_menu_ids'], [13])
+
+    def test_partial_sold_out_order_keeps_rest_and_reports_sold_out(self):
+        # "콜라랑 사이다 하나씩"에서 사이다만 품절: 콜라는 담고 사이다는 알려야 합니다.
+        raw = {'intent': 'order', 'items': [
+            {'menu_id': 10, 'quantity': 1, 'option_ids': [], 'entry_id': None},
+            {'menu_id': 13, 'quantity': 1, 'option_ids': [], 'entry_id': None}]}
+        result = voice_service.sanitize(raw, self.catalog, self.request())
+        self.assertEqual(result['intent'], 'order')
+        self.assertEqual([item['menu_id'] for item in result['items']], [10])
+        self.assertEqual(result['sold_out_menu_ids'], [13])
+        self.assertIsNone(result['question'])
+
+    def test_unknown_with_sold_out_menu_in_text_becomes_sold_out_clarify(self):
+        # 실제 Haiku 응답: "사이다 하나 주세요" → intent unknown, items 없음, 품절 문장은 question에만.
+        catalog = {'menus': self.catalog['menus'] + [
+            {'id': '7', 'name': '사이다', 'isSoldOut': True, 'recExcluded': False, 'options': [],
+             'synonyms': ['칠성사이다']}]}
+        raw = {'intent': 'unknown', 'items': [], 'question': '사이다는 현재 품절입니다. 다른 음료를 선택해 주세요.'}
+        for text in ('사이다 하나 주세요', '칠성 사이다 두 개요'):
+            result = voice_service.sanitize(raw, catalog, voice_service.InterpretInput(text=text))
+            self.assertEqual(result['intent'], 'clarify', text)
+            self.assertEqual(result['question'], '사이다는 지금 품절이에요. 다른 메뉴를 말씀해 주세요.')
+            self.assertEqual(result['sold_out_menu_ids'], [7])
+
+    def test_sold_out_name_inside_selling_menu_name_is_not_reported(self):
+        catalog = {'menus': [
+            {'id': '6', 'name': '콜라', 'isSoldOut': True, 'recExcluded': False, 'options': []},
+            {'id': '51', 'name': '제로콜라', 'isSoldOut': False, 'recExcluded': False, 'options': []}]}
+        raw = {'intent': 'unknown', 'items': [], 'question': None}
+        result = voice_service.sanitize(raw, catalog, voice_service.InterpretInput(text='오늘 제로 콜라 맛있나요'))
+        self.assertEqual((result['intent'], result['sold_out_menu_ids']), ('unknown', []))
+        result = voice_service.sanitize(raw, catalog, voice_service.InterpretInput(text='콜라 주세요'))
+        self.assertEqual((result['intent'], result['sold_out_menu_ids']), ('clarify', [6]))
+
+    def test_sold_out_notice_joins_two_names_with_josa(self):
+        menus = {1: {'name': '콜라'}, 2: {'name': '사이다'}, 3: {'name': '만두'}, 4: {'name': '떡볶이'}}
+        self.assertEqual(voice_service._sold_out_notice([1, 2], menus),
+                         '콜라와 사이다는 지금 품절이에요. 다른 메뉴를 말씀해 주세요.')
+        self.assertEqual(voice_service._sold_out_notice([2, 4, 3], menus),
+                         '사이다, 떡볶이, 만두는 지금 품절이에요. 다른 메뉴를 말씀해 주세요.')
+        self.assertTrue(voice_service._sold_out_notice([3], {3: {'name': '불고기덮밥'}}).startswith('불고기덮밥은'))
 
     def test_modify_uses_cart_menu_and_rejects_unknown_entries(self):
         cart = [voice_service.CartLine(entry_id='10:100', menu_id=10, quantity=1, option_ids=[100])]
