@@ -1,6 +1,6 @@
 # 점주 API 계약
 
-점주 웹(`owner_web`)이 쓰는 인증과 업무 API입니다. 구현은 `owner_auth.py`, `owner_router.py`, `owner_portal_service.py`, `owner_menu_write_service.py`입니다. 회사 관리자 API(`/admin/*`, `/auth/admin/*`)와 키오스크 API(`/stores/*`, `/orders`)의 동작은 바꾸지 않았고, `admin_auth.py`는 수정 없이 import해서 씁니다. AI 기능(추천 설정, 메뉴 태그·동의어, 통계, 직원 호출, 메뉴 사진)은 `owner_ai_service.py`, `menu_image_service.py`에 있고, 필요한 테이블·열은 `AI_MIGRATION.md`로 추가합니다.
+점주 웹(`owner_web`)이 쓰는 인증과 업무 API입니다. 구현은 `owner_auth.py`(로그인·비밀번호 변경), `owner_router.py`, `owner_portal_service.py`, `owner_menu_write_service.py`입니다. 회사 관리자 API(`/admin/*`, `/auth/admin/*`)와 키오스크 API(`/stores/*`, `/orders`)의 동작은 바꾸지 않았고, `admin_auth.py`는 수정 없이 import해서 씁니다. AI 기능(추천 설정, 메뉴 태그·동의어, 통계, 직원 호출, 메뉴 사진)은 `owner_ai_service.py`, `menu_image_service.py`에 있고, 필요한 테이블·열은 `AI_MIGRATION.md`로 추가합니다.
 
 ## 공통 규칙
 
@@ -12,13 +12,13 @@
 
 | 상태 | 뜻 | 점주 웹 처리 |
 | --- | --- | --- |
-| 401 | 세션 없음·만료, 로그인 실패 | 로그인 화면으로 이동 |
-| 403 | Origin·CSRF·역할·원격 접속 | 오류 문구, 로그인 유지 |
+| 401 | 세션 없음·만료, 로그인 실패, 비밀번호 변경 때 현재 비밀번호 틀림 | 로그인 화면으로 이동(현재 비밀번호 틀림은 `me`로 세션을 확인해 구분하고 화면에 남음) |
+| 403 | Origin·CSRF·역할·원격 접속, 임시 비밀번호 세션의 `/owner/*` | 오류 문구, 로그인 유지 |
 | 404 | 없거나 다른 점주의 항목 | 오류 문구 |
 | 409 | 메뉴가 남은 카테고리 삭제, FK 충돌 | 서버 문구 표시, 전체 롤백됨 |
 | 413 | 본문 크기 초과(인증 8KB, 업무 1MB) | 오류 문구 |
 | 422 | 입력 형식·범위. 입력값을 응답에 반사하지 않음 | 서버 문구 표시 |
-| 429 | 로그인 시도 제한(접속 주소별 60초 5회) | 오류 문구 |
+| 429 | 로그인·비밀번호 변경 시도 제한(접속 주소별 60초 5회, 둘이 같은 제한을 씀) | 오류 문구 |
 | 503 | DB 오류·커밋 결과 불명. 내부 정보 없음 | 서버 문구와 다시 시도 |
 
 ## 인증 `/auth/owner`
@@ -31,13 +31,40 @@
 | POST | `/login` | `{ "login_id", "password" }`만 허용, CSRF | 점주 객체. 세션과 CSRF를 새로 발급 |
 | GET | `/me` | 세션 | 점주 객체. 매장 목록은 매번 DB에서 읽음 |
 | POST | `/logout` | CSRF | 204, 세션 폐기·쿠키 삭제 |
+| POST | `/password` | `{ "current_password", "new_password" }`만 허용, 로그인 세션, CSRF | 점주 객체. 다른 세션을 끊고 현재 세션을 새로 발급 |
 
 ```json
 { "owner": { "owner_id": 7, "login_id": "kim.owner", "role": "owner",
-             "stores": [{ "store_id": 1, "store_name": "본점" }] } }
+             "stores": [{ "store_id": 1, "store_name": "본점" }],
+             "password_change_required": false } }
 ```
 
 `owner.own_login_id`, `owner.own_pw`로 검증합니다. 없는 ID와 틀린 비밀번호는 같은 401입니다. 평문 등 정책에 맞지 않는 저장값은 로그인되지 않고, 로그인 때 재해시나 DB 쓰기는 없습니다.
+
+### 비밀번호 변경 `POST /auth/owner/password`
+
+로그인한 점주가 자기 비밀번호를 바꿉니다. 회사 관리자의 비밀번호 초기화(`PATCH /admin/owners/{id}/password`)는 그대로입니다.
+
+1. 로그인 세션과 CSRF를 미들웨어에서 먼저 확인합니다. 로그인하지 않았으면 본문과 상관없이 401, Origin·CSRF가 틀리면 403입니다.
+2. 본문은 `current_password`, `new_password`(각 1~1024자)만 받습니다. 다른 필드(예: 새 비밀번호 확인 값)가 있으면 422이고, 응답에 입력값을 싣지 않습니다. 확인 값 비교는 점주 웹 화면에서만 합니다.
+3. 새 비밀번호는 회사 관리자의 점주 비밀번호 정책(`owner_write_service.OwnerPassword`: 8~128자, 공백만·제어 문자 금지)을 그대로 씁니다. 어기면 422입니다. 현재 비밀번호와 같아도 422입니다.
+4. 여기까지 통과한 요청만 로그인과 같은 시도 제한(`owner_auth.attempts`, 접속 주소별 60초 5회)에 셉니다. 넘으면 429와 `Retry-After: 60`입니다.
+5. 해시는 회사 관리자와 같은 `owner_write_service._password_hash`(Argon2id)로 만듭니다.
+6. `credential_lock` 안에서 트랜잭션을 열고 `owner` 행을 `FOR UPDATE`로 읽어 `admin_auth.verify_password`로 현재 비밀번호를 확인합니다. 틀리면 401 "현재 비밀번호가 올바르지 않습니다."이고 세션은 유지됩니다. 새 비밀번호가 연결 매장의 전화번호 초기화 값과 같으면 422입니다(바꾼 뒤에도 임시 비밀번호로 판정되는 것을 막음).
+7. `UPDATE owner SET own_pw = %s WHERE owner_id = %s`만 실행하고 영향 행이 1개가 아니면 롤백하고 503입니다. 테이블 구조와 다른 열은 바꾸지 않습니다.
+8. 커밋 뒤 이 점주의 세션을 모두 끊고(`revoke_matching`, 다른 기기 포함) 현재 브라우저에 새 세션 쿠키를 발급합니다. 새 세션은 `password_change_required: false`입니다. CSRF 토큰도 새 세션 것으로 바뀌므로 다음 쓰기 전에 `/csrf`를 다시 받습니다.
+
+계정이 그사이 삭제됐으면 401, DB 오류·커밋 실패는 503이며 비밀번호는 그대로입니다.
+
+### 임시 비밀번호 판단
+
+`owner` 테이블에 임시 여부 칸이 없으므로 테이블을 바꾸지 않고 로그인할 때 판단합니다.
+
+- 로그인 비밀번호 검증이 성공하면, 입력한 비밀번호가 그 점주에게 연결된 매장 중 하나의 `phone_password(store_phone)`(전화번호 숫자 마지막 8자리, 회사 관리자의 '매장 전화번호로 초기화'와 같은 함수) 값과 같은지 비교합니다. 숫자가 8자리 미만인 번호는 건너뜁니다. 다른 점주 매장의 번호는 보지 않습니다.
+- 같으면 세션의 `Owner.password_change_required`를 `True`로 둡니다. 세션과 로그에는 이 결과만 남기고 비밀번호 원문은 남기지 않습니다. login·me 응답의 `password_change_required`가 이 값입니다.
+- 이 세션으로 `/owner/*`를 요청하면 미들웨어와 라우터 모두 403 "임시 비밀번호를 먼저 변경해 주세요."를 돌려줍니다. `/auth/owner/password`, `/me`, `/csrf`, `/logout`은 쓸 수 있습니다.
+- 비밀번호를 바꾸면 새 세션은 `False`이므로 바로 `/owner/*`를 쓸 수 있습니다.
+- 점주가 직접 고른 비밀번호가 우연히 연결 매장 전화번호 끝 8자리와 같아도 임시로 봅니다. 그런 값은 비밀번호 변경에서 받지 않습니다.
 
 ## 조회
 

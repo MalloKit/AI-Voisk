@@ -1398,6 +1398,26 @@ tr.clickable:hover td {
   padding: var(--sm) var(--md);
   font-weight: 500;
 }
+/* 로그인 ID 옆 '비밀번호 변경'. 좁으면 아래 줄로 내린다. */
+.sidebar-login-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sm);
+}
+.sidebar-account .sidebar-password {
+  padding: var(--xs) var(--sm);
+  font-size: var(--text-xs);
+}
+.login-help {
+  margin: var(--md) 0 0;
+  font-size: var(--text-xs);
+}
+.password-rule {
+  margin: 0 0 var(--md);
+  font-size: var(--text-xs);
+}
 
 /* ---------- AI 추천·음성, 통계, 직원 호출 (기존 토큰만 사용) ---------- */
 .ai-page {

@@ -76,6 +76,9 @@ class Cursor:
     @property
     def rowcount(self):
         # MySQL은 값이 같은 UPDATE를 0행으로 돌려줍니다. 코드가 이 값에 기대면 여기서 드러납니다.
+        # 비밀번호 해시는 매번 새 salt로 값이 바뀌므로 MySQL도 1행을 돌려줍니다.
+        if self.last_sql.startswith('UPDATE owner SET own_pw'):
+            return 0 if self.fixture.bad_rowcount else self.cursor.rowcount
         return 0 if self.last_sql.lstrip().startswith('UPDATE') else self.cursor.rowcount
 
     def execute(self, sql, params=()):
@@ -143,7 +146,8 @@ class OwnerFixture:
         self.commits = 0
         self.fail_on = None
         self.commit_failure = False
-        self.db = sqlite3.connect(':memory:', check_same_thread=False)
+        self.bad_rowcount = False
+        self.db =sqlite3.connect(':memory:', check_same_thread=False)
         testcase.addCleanup(self.db.close)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA.replace('__HASH__', HASH))

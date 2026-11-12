@@ -21,6 +21,8 @@ import {
   MockOwnerAiRepository,
   type OwnerAiRepository,
 } from "./data/aiRepository";
+import type { OwnerPasswordChangeInput } from "./data/ownerAuth";
+import { PasswordChangeForm } from "./features/PasswordChange";
 
 // 로그인 뒤 화면. 실제 진입점은 AppEntry이고, 매장별 Repository를 받아 이 화면을 그린다.
 // 단독 렌더링(테스트)용 기본값만 여기 둔다.
@@ -41,6 +43,9 @@ export interface Account {
   storeCount: number;
   onLogout(): void;
   onSwitchStore(): void;
+  // 사이드바 '비밀번호 변경'. 없으면 버튼을 보이지 않는다.
+  onChangePassword?(input: OwnerPasswordChangeInput): Promise<unknown>;
+  onSessionExpired?(): void;
 }
 
 export function App({
@@ -65,6 +70,8 @@ export function App({
   const menusGuard = useRef<MenusGuard | null>(null);
   const [leavingTo, setLeavingTo] = useState<Leave | null>(null);
   const [leaving, setLeaving] = useState(false);
+  // 비밀번호 변경은 모달로 열어 메뉴 편집 중인 내용을 건드리지 않는다.
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const load = useCallback(
     async (signal: AbortSignal) => {
       const [profile, board] = await Promise.all([
@@ -139,6 +146,9 @@ export function App({
             canSwitchStore: account.storeCount > 1,
             onLogout: () => request({ kind: "logout" }),
             onSwitchStore: () => request({ kind: "switch" }),
+            onChangePassword: account.onChangePassword
+              ? () => setPasswordOpen(true)
+              : undefined,
           }
         }
       >
@@ -194,6 +204,14 @@ export function App({
             메뉴 관리에 저장 안 된 변경 {menusGuard.current?.changeCount ?? 0}
             건이 있습니다. 품절은 이미 반영되어 있어 버려도 그대로입니다.
           </p>
+        </Modal>
+      )}
+      {passwordOpen && account?.onChangePassword && (
+        <Modal title="비밀번호 변경" onClose={() => setPasswordOpen(false)}>
+          <PasswordChangeForm
+            onChange={account.onChangePassword}
+            onExpired={account.onSessionExpired}
+          />
         </Modal>
       )}
     </>

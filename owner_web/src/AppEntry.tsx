@@ -22,7 +22,9 @@ import {
   isUnauthorized,
   type AuthOwner,
   type OwnerLoginInput,
+  type OwnerPasswordChangeInput,
 } from "./data/ownerAuth";
+import { TemporaryPasswordPage } from "./features/PasswordChange";
 import { DEMO_NOW } from "./data/demoClock";
 import {
   ApiOwnerAiRepository,
@@ -52,6 +54,8 @@ const defaultCreateAiRepository = (storeId: number): OwnerAiRepository =>
 type State =
   | { phase: "checking" }
   | { phase: "login"; busy?: boolean; feedback?: Feedback; retry?: boolean }
+  // 임시 비밀번호 로그인: 비밀번호 변경 화면만 보인다. changed면 변경 완료 안내.
+  | { phase: "password"; owner: AuthOwner; changed?: boolean }
   | { phase: "stores"; owner: AuthOwner }
   | { phase: "app"; owner: AuthOwner; storeId: number }
   | { phase: "logout"; error?: boolean };
@@ -65,11 +69,14 @@ const failure = (error: unknown) =>
     ? error.message
     : "인증 서버에 연결하지 못했습니다. 서버 연결을 확인한 뒤 다시 시도해 주세요.";
 
-// 매장이 하나면 바로 들어가고, 여러 개거나 없으면 매장 선택 화면으로 간다.
+// 임시 비밀번호면 비밀번호 변경 화면만 보인다(서버도 /owner/*를 403으로 막는다).
+// 아니면 매장이 하나일 때 바로 들어가고, 여러 개거나 없으면 매장 선택 화면으로 간다.
 const enter = (owner: AuthOwner): State =>
-  owner.stores.length === 1
-    ? { phase: "app", owner, storeId: owner.stores[0].storeId }
-    : { phase: "stores", owner };
+  owner.passwordChangeRequired
+    ? { phase: "password", owner }
+    : owner.stores.length === 1
+      ? { phase: "app", owner, storeId: owner.stores[0].storeId }
+      : { phase: "stores", owner };
 
 // 서버(또는 Mock) 세션을 확인한 뒤에만 점주 화면을 그린다.
 // 로그인 상태는 브라우저 저장소에 두지 않고, 새로고침하면 me로 다시 확인한다.
@@ -132,7 +139,10 @@ export function AppEntry({
   }, [expire]);
 
   // 로그인한 동안 60초마다, 그리고 창으로 돌아올 때 세션을 다시 확인한다.
-  const signedIn = state.phase === "app" || state.phase === "stores";
+  const signedIn =
+    state.phase === "app" ||
+    state.phase === "stores" ||
+    state.phase === "password";
   useEffect(() => {
     if (!signedIn) return;
     let controller: AbortController | undefined;
@@ -146,6 +156,9 @@ export function AppEntry({
           (owner) => {
             if (stopped || current.signal.aborted) return;
             setState((s) => {
+              if (s.phase === "password") return s;
+              if (owner.passwordChangeRequired)
+                return { phase: "password", owner };
               if (s.phase === "app")
                 return owner.stores.some((x) => x.storeId === s.storeId)
                   ? { ...s, owner }
@@ -198,6 +211,20 @@ export function AppEntry({
           feedback: { kind: "error", message: failure(error) },
         });
     }
+  }
+
+  // 성공하면 서버가 새 세션을 주므로 화면의 점주 정보도 응답 값으로 바꾼다.
+  // 로그인 만료(401)는 폼이 onExpired로 알려 로그인 화면으로 보낸다.
+  async function changePassword(input: OwnerPasswordChangeInput) {
+    const owner = await authRepository.changePassword(input);
+    setState((s) =>
+      s.phase === "password"
+        ? { phase: "password", owner, changed: true }
+        : s.phase === "app" || s.phase === "stores"
+          ? { ...s, owner }
+          : s,
+    );
+    return owner;
   }
 
   async function logout() {
@@ -259,6 +286,17 @@ export function AppEntry({
         }
       />
     );
+  if (state.phase === "password")
+    return (
+      <TemporaryPasswordPage
+        loginId={state.owner.loginId}
+        changed={!!state.changed}
+        onChange={changePassword}
+        onExpired={expire}
+        onContinue={() => setState(enter(state.owner))}
+        onLogout={() => void logout()}
+      />
+    );
   if (state.phase === "stores")
     return (
       <StoreSelectPage
@@ -298,6 +336,8 @@ export function AppEntry({
         storeCount: owner.stores.length,
         onLogout: () => void logout(),
         onSwitchStore: () => setState({ phase: "stores", owner }),
+        onChangePassword: changePassword,
+        onSessionExpired: expire,
       }}
     />
   );
