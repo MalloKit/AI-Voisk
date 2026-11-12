@@ -103,6 +103,13 @@ async def local_demo_only(request: Request, call_next):
                 session = owner_auth.require_owner(request)
                 if request.method not in ('GET', 'HEAD', 'OPTIONS'):
                     admin_auth.check_csrf(request, session)
+                # 임시 비밀번호 세션은 비밀번호 변경(/auth/owner/password)·me·csrf·logout만 씁니다.
+                if session.admin.password_change_required:
+                    raise HTTPException(403, owner_auth.CHANGE_REQUIRED)
+            elif path.rstrip('/') == '/auth/owner/password':
+                # 본문 검증(422)보다 로그인·CSRF 확인(401/403)이 먼저 나오게 합니다.
+                session = owner_auth.require_owner(request)
+                admin_auth.check_csrf(request, session)
         except HTTPException as error:
             response = JSONResponse(status_code=error.status_code, content={'detail': error.detail},
                                     headers=error.headers)
@@ -168,6 +175,9 @@ app.mount('/media/menu', StaticFiles(directory=menu_image_service.MEDIA_ROOT / m
 @app.exception_handler(RequestValidationError)
 async def safe_validation_error(request: Request, error: RequestValidationError):
     # 기본 422 응답은 입력값을 그대로 돌려주므로 비밀번호·본문이 반사되지 않게 바꿉니다.
+    if request.url.path.rstrip('/') == '/auth/owner/password':
+        return JSONResponse(status_code=422, content={'detail': '비밀번호 입력 형식을 확인해 주세요.'},
+                            headers={'Cache-Control': 'no-store'})
     if request.url.path.startswith('/auth/owner/'):
         return JSONResponse(status_code=422, content={'detail': '로그인 입력 형식을 확인해 주세요.'},
                             headers={'Cache-Control': 'no-store'})

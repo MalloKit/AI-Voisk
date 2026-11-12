@@ -11,6 +11,7 @@ import {
   X,
   LogOut,
   ArrowLeftRight,
+  KeyRound,
 } from "lucide-react";
 import type { Page } from "../data/models";
 
@@ -45,6 +46,7 @@ export function OwnerShell({
     canSwitchStore: boolean;
     onLogout(): void;
     onSwitchStore(): void;
+    onChangePassword?(): void;
   };
   children: ReactNode;
 }) {
@@ -122,10 +124,24 @@ export function OwnerShell({
             aria-label="로그인 정보"
             role="group"
           >
-            <span className="sidebar-login">
-              <UserCircle size={18} aria-hidden="true" />
-              {account.loginId}
-            </span>
+            <div className="sidebar-login-row">
+              <span className="sidebar-login">
+                <UserCircle size={18} aria-hidden="true" />
+                {account.loginId}
+              </span>
+              {account.onChangePassword && (
+                <button
+                  className="sidebar-password"
+                  onClick={() => {
+                    setOpen(false);
+                    account.onChangePassword?.();
+                  }}
+                >
+                  <KeyRound size={16} aria-hidden="true" />
+                  비밀번호 변경
+                </button>
+              )}
+            </div>
             {account.canSwitchStore && (
               <button
                 onClick={() => {

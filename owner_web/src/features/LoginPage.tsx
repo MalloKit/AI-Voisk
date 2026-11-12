@@ -15,7 +15,7 @@ import type { MockOwnerAccount } from "../data/mock/mockOwnerAccounts";
 
 export type Feedback = { kind: "notice" | "error"; message: string };
 
-function AuthLayout({
+export function AuthLayout({
   title,
   children,
 }: {
@@ -38,7 +38,7 @@ function AuthLayout({
   );
 }
 
-function FeedbackText({ feedback }: { feedback?: Feedback }) {
+export function FeedbackText({ feedback }: { feedback?: Feedback }) {
   if (!feedback) return null;
   return feedback.kind === "error" ? (
     <p className="form-feedback error-text" role="alert">
@@ -219,6 +219,9 @@ export function LoginPage({
           </button>
         )}
       </form>
+      <p className="login-help muted">
+        비밀번호를 잊으셨나요? 회사 관리자에게 초기화를 요청해 주세요.
+      </p>
       {devAccounts && <DevAccounts accounts={devAccounts} />}
     </AuthLayout>
   );

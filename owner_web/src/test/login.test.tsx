@@ -7,6 +7,7 @@ import {
   LOGIN_FAILED,
   OWNER_SESSION_EXPIRED,
   OwnerAuthError,
+  PASSWORD_CHANGE_MESSAGES,
 } from "../data/ownerAuth";
 import { MOCK_OWNER_ACCOUNTS } from "../data/mock/mockOwnerAccounts";
 
@@ -356,9 +357,180 @@ describe("저장 안 한 변경 경고", () => {
   });
 });
 
-it("개발용 Mock 계정 2개는 매장 1개·2개 연결이다", () => {
-  expect(MOCK_OWNER_ACCOUNTS.map((a) => [a.loginId, a.stores.length])).toEqual([
-    ["mock.single", 1],
-    ["mock.multi", 2],
+it("개발용 Mock 계정은 매장 1개·2개 연결과 임시 비밀번호 계정이다", () => {
+  expect(
+    MOCK_OWNER_ACCOUNTS.map((a) => [
+      a.loginId,
+      a.stores.length,
+      !!a.temporaryPassword,
+    ]),
+  ).toEqual([
+    ["mock.single", 1, false],
+    ["mock.multi", 2, false],
+    ["mock.temp", 0, true],
   ]);
+});
+
+describe("비밀번호 변경", () => {
+  const sidebarPassword = () =>
+    within(sidebar()).getByRole("button", { name: "비밀번호 변경" });
+  async function fill(
+    user: User,
+    current: string,
+    next: string,
+    confirm = next,
+  ) {
+    for (const [label, value] of [
+      ["현재 비밀번호", current],
+      ["새 비밀번호", next],
+      ["새 비밀번호 확인", confirm],
+    ] as const) {
+      // 한 글자씩 치면 느려서 붙여넣기로 채운다.
+      const input = screen.getByLabelText(label);
+      await user.clear(input);
+      if (value) await user.paste(value);
+    }
+    const form = screen.getByRole("form", { name: "비밀번호 변경 입력" });
+    await user.click(
+      within(form).getByRole("button", { name: "비밀번호 변경" }),
+    );
+  }
+
+  it("로그인 화면 아래에 비밀번호 초기화 안내가 있다", async () => {
+    await start();
+    expect(
+      screen.getByText(
+        "비밀번호를 잊으셨나요? 회사 관리자에게 초기화를 요청해 주세요.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("사이드바 로그인 ID 옆 버튼으로 바꾸고, 확인 값은 보내지 않는다", async () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    const { user, auth } = await start();
+    const change = vi.spyOn(auth, "changePassword");
+    await signIn(user, "mock.single");
+    await screen.findByRole("heading", { level: 1, name: "오늘 현황" });
+    const account = within(sidebar()).getByRole("group", {
+      name: "로그인 정보",
+    });
+    expect(
+      within(account).getByRole("button", { name: "비밀번호 변경" }),
+    ).toBeInTheDocument();
+    await user.click(sidebarPassword());
+    const dialog = screen.getByRole("dialog", { name: "비밀번호 변경" });
+    expect(within(dialog).getByLabelText("현재 비밀번호")).toBeInTheDocument();
+
+    // 화면에서 먼저 막는 경우는 요청하지 않는다.
+    await fill(user, PASSWORD, "brand-new-pass", "different-pass");
+    expect(
+      screen.getByText("새 비밀번호 확인이 일치하지 않습니다."),
+    ).toBeInTheDocument();
+    await fill(user, PASSWORD, PASSWORD);
+    expect(
+      screen.getByText("새 비밀번호는 현재 비밀번호와 달라야 합니다."),
+    ).toBeInTheDocument();
+    await fill(user, PASSWORD, "short");
+    expect(screen.getByText(/새 비밀번호는 8~128자/)).toBeInTheDocument();
+    expect(change).not.toHaveBeenCalled();
+
+    await fill(user, PASSWORD, "brand-new-pass");
+    expect(await within(dialog).findByRole("status")).toHaveTextContent(
+      "비밀번호를 변경했습니다.",
+    );
+    expect(change).toHaveBeenCalledWith({
+      currentPassword: PASSWORD,
+      newPassword: "brand-new-pass",
+    });
+    for (const label of ["현재 비밀번호", "새 비밀번호", "새 비밀번호 확인"])
+      expect(screen.getByLabelText(label)).toHaveValue("");
+    expect(setItem).not.toHaveBeenCalled();
+    expect([localStorage.length, sessionStorage.length]).toEqual([0, 0]);
+    // 메뉴 화면은 그대로이고 닫으면 계속 쓸 수 있다.
+    await user.click(within(dialog).getByRole("button", { name: "닫기" }));
+    expect(
+      screen.getByRole("heading", { level: 1, name: "오늘 현황" }),
+    ).toBeInTheDocument();
+    await expect(auth.me()).resolves.toMatchObject({ loginId: "mock.single" });
+  });
+
+  it("실패 문구를 401·422·429·403으로 구분하고, 로그인 만료면 로그인 화면으로 보낸다", async () => {
+    const { user, auth } = await start();
+    await signIn(user, "mock.single");
+    await screen.findByRole("heading", { level: 1, name: "오늘 현황" });
+    await user.click(sidebarPassword());
+    const dialog = screen.getByRole("dialog", { name: "비밀번호 변경" });
+
+    await fill(user, "wrong-password", "brand-new-pass");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      PASSWORD_CHANGE_MESSAGES[401],
+    );
+    expect(screen.getByLabelText("현재 비밀번호")).toHaveValue("");
+
+    const change = vi.spyOn(auth, "changePassword");
+    for (const status of [422, 429, 403] as const) {
+      change.mockRejectedValueOnce(
+        new OwnerAuthError(status, PASSWORD_CHANGE_MESSAGES[status]),
+      );
+      await fill(user, PASSWORD, "brand-new-pass");
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+        PASSWORD_CHANGE_MESSAGES[status],
+      );
+    }
+
+    change.mockRejectedValueOnce(new OwnerAuthError(401, "만료"));
+    await fill(user, PASSWORD, "brand-new-pass");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "로그인이 만료되었습니다. 다시 로그인해 주세요.",
+    );
+    expect(
+      screen.getByRole("heading", { name: "점주 로그인" }),
+    ).toBeInTheDocument();
+  });
+
+  it("임시 비밀번호로 로그인하면 비밀번호 변경 화면만 보이고, 바꾸면 들어간다", async () => {
+    const auth = new MockOwnerAuthRepository([
+      {
+        ownerId: 1,
+        loginId: "mock.temp",
+        password: "12345678",
+        stores: [{ storeId: 1, storeName: "보이스크 테스트 매장" }],
+        temporaryPassword: true,
+        note: "임시",
+      },
+    ]);
+    const { user } = await start(auth);
+    await signIn(user, "mock.temp", "12345678");
+    expect(
+      await screen.findByRole("heading", { name: "비밀번호 변경" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "임시 비밀번호로 로그인했습니다. 새 비밀번호로 바꿔 주세요.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "주요 화면" })).toBeNull();
+    expect(screen.getByRole("button", { name: "로그아웃" })).toBeInTheDocument();
+
+    await fill(user, "12345678", "brand-new-pass");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "비밀번호를 변경했습니다.",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "매장 화면으로 이동" }),
+    );
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "오늘 현황" }),
+    ).toBeInTheDocument();
+  });
+
+  it("임시 비밀번호 화면에서 로그아웃할 수 있다", async () => {
+    const { user } = await start();
+    await signIn(user, "mock.temp", "12345678");
+    await screen.findByRole("heading", { name: "비밀번호 변경" });
+    await user.click(screen.getByRole("button", { name: "로그아웃" }));
+    expect(
+      await screen.findByRole("heading", { name: "점주 로그인" }),
+    ).toBeInTheDocument();
+  });
 });

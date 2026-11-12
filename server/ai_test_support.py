@@ -23,7 +23,8 @@ OTHER_TOKEN = secrets.token_urlsafe(32)
 SCHEMA = """
     PRAGMA foreign_keys=ON;
     CREATE TABLE owner (owner_id INTEGER PRIMARY KEY, own_login_id TEXT NOT NULL UNIQUE, own_pw TEXT NOT NULL);
-    CREATE TABLE store (store_id INTEGER PRIMARY KEY, store_nm TEXT NOT NULL, owner_id INTEGER REFERENCES owner(owner_id));
+    CREATE TABLE store (store_id INTEGER PRIMARY KEY, store_nm TEXT NOT NULL, owner_id INTEGER REFERENCES owner(owner_id),
+        store_phone TEXT NOT NULL DEFAULT '051');
     CREATE TABLE category (category_id INTEGER PRIMARY KEY AUTOINCREMENT, store_id INTEGER NOT NULL REFERENCES store(store_id),
         category_nm TEXT NOT NULL, category_sort INTEGER NOT NULL);
     CREATE TABLE menu (menu_id INTEGER PRIMARY KEY AUTOINCREMENT, category_id INTEGER NOT NULL REFERENCES category(category_id),
@@ -64,7 +65,7 @@ SCHEMA = """
         occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, acknowledged_at TEXT, acknowledged_by INTEGER, resolved_at TEXT);
 
     INSERT INTO owner VALUES (7, 'owner.one', '__HASH__'), (8, 'owner.two', '__HASH__');
-    INSERT INTO store VALUES (1, '시연 매장', 7), (2, '다른 매장', 8);
+    INSERT INTO store (store_id, store_nm, owner_id) VALUES (1, '시연 매장', 7), (2, '다른 매장', 8);
     INSERT INTO category VALUES (1, 1, '식사', 1), (2, 1, '음료', 2), (3, 2, '다른 매장', 1);
     INSERT INTO menu VALUES
         (10, 1, '제육덮밥', 9000, '매콤한 제육볶음 덮밥', 1, 0, 1, 35, 0, 0),

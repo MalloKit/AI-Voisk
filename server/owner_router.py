@@ -32,7 +32,11 @@ class OwnerDeviceList(BaseModel):
 
 
 def _owner_id(request):
-    return owner_auth.require_owner(request).admin.owner_id
+    owner = owner_auth.require_owner(request).admin
+    # 미들웨어에서 먼저 막지만, 라우터만 쓰여도 임시 비밀번호 세션이 데이터에 닿지 않게 합니다.
+    if owner.password_change_required:
+        raise HTTPException(403, owner_auth.CHANGE_REQUIRED)
+    return owner.owner_id
 
 
 def _call(failure, function, *args):

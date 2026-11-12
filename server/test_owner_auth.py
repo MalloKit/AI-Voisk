@@ -18,7 +18,8 @@ class OwnerAuthTests(unittest.TestCase):
         response = self.f.login(self.client)
         self.assertEqual(response.status_code, 200)
         expected = {'owner': {'owner_id': 7, 'login_id': 'owner.one', 'role': 'owner', 'stores': [
-            {'store_id': 1, 'store_name': '점주1 매장'}, {'store_id': 3, 'store_name': '점주1 2호점'}]}}
+            {'store_id': 1, 'store_name': '점주1 매장'}, {'store_id': 3, 'store_name': '점주1 2호점'}],
+            'password_change_required': False}}
         self.assertEqual(response.json(), expected)
         self.assertEqual(response.headers['cache-control'], 'no-store')
         self.assertNotIn(HASH, response.text)
