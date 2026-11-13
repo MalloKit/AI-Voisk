@@ -88,8 +88,9 @@
 | POST | `/kiosk/rec-logs` | 추천 노출·선택 로그(`client_log_id`로 멱등) |
 | POST | `/kiosk/staff-call` | 직원 호출(처리 전 호출이 있으면 새로 만들지 않음) |
 
-`/kiosk/voice/interpret` 요청: `text`(200자 이하), `state`, `viewing_menu_id`, `cart`, `recommended_menu_ids`, `mode`.
-응답: `intent`(order·recommend·select·modify·remove·clear·confirm·deny·checkout·cancel·help·clarify·unknown), `items`, `situation`, `recommendations[{menu_id, fit, reason}]`, `select_index`, `question`.
+`/kiosk/voice/interpret` 요청: `text`(200자 이하), `alternatives`(음성 인식의 다른 후보 문장, 4개·각 200자 이하, 선택), `state`, `viewing_menu_id`, `cart`, `recommended_menu_ids`, `mode`.
+응답: `intent`(order·recommend·select·modify·remove·clear·confirm·deny·checkout·cancel·help·clarify·unknown), `items`, `situation`, `recommendations[{menu_id, fit, reason}]`, `select_index`, `question`, `sold_out_menu_ids`(담으려다 품절이라 뺀 메뉴).
+- 음성 인식이 메뉴를 실제 낱말로 잘못 받아 적는 경우(식혜→"시계", 콜라→"골라", 계란말이→"계란 마리")를 위해, 서버가 발화를 자모 소리로 판매 중 메뉴 이름·동의어와 비교해 `sound_alike` 후보를 모델에 함께 보냅니다. 된소리·거센소리, ㄹ/ㄴ, 소리 없는 ㅇ·ㅎ, ㅐ/ㅔ, 받침 대표음을 같은 소리로 봅니다. 두 글자 이름은 소리가 완전히 같을 때만 후보로 넣습니다. 주문 문맥인지는 모델이 판단하고, 짐작한 메뉴는 키오스크가 손님에게 확인한 뒤 담습니다.
 - 가격·합계는 응답에 없습니다. 금액은 키오스크 장바구니와 서버 주문 저장이 계산합니다.
 - 키가 없거나 호출이 실패하면 503 `voice_unavailable`, 기기당 1분 30회를 넘으면 429입니다. 검증 오류(422)는 발화를 응답에 싣지 않습니다.
 

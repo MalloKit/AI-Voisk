@@ -99,6 +99,33 @@ void main() {
     expect(cart.entries.map((e) => e.menu.name), ['콜라']);
   });
 
+  test('음성 인식의 다른 후보 문장을 서버에 함께 보냅니다', () async {
+    final c = build();
+    voice.script.add(
+      const VoiceEvent(
+        VoiceEventType.finalResult,
+        text: '계단 말이 하나',
+        alternatives: [
+          '계단 말이 하나',
+          '계란말이 하나',
+          ' ',
+          '계란말이 하나',
+          '계단 마리 하나',
+          '세 번째 후보',
+        ],
+      ),
+    );
+    interpreter.reply(const InterpretResult(intent: 'unknown'));
+    await c.start();
+    await settle();
+
+    // 첫 후보와 같은 문장·빈 문장·중복은 빼고 최대 2개만 보냅니다.
+    expect(interpreter.payloads.single['alternatives'], [
+      '계란말이 하나',
+      '계단 마리 하나',
+    ]);
+  });
+
   test('추가 제안은 주문당 1회, 수락하면 추천 경유로 담깁니다', () async {
     final c = build();
     voice

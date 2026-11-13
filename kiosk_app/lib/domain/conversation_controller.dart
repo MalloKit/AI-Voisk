@@ -401,7 +401,11 @@ class ConversationController extends ChangeNotifier {
       if (event.type == VoiceEventType.finalResult &&
           (event.text ?? '').trim().isNotEmpty) {
         _lastActivity = _clock();
-        await handleText(event.text!.trim(), session: session);
+        await handleText(
+          event.text!.trim(),
+          session: session,
+          alternatives: event.alternatives,
+        );
         return;
       }
       final code = event.code ?? 'client';
@@ -442,7 +446,13 @@ class ConversationController extends ChangeNotifier {
   // ---------- 발화 처리 ----------
 
   /// 인식된 문장을 처리합니다. 화면 버튼(네/아니요/추천 카드)도 이 흐름을 씁니다.
-  Future<void> handleText(String text, {int? session}) async {
+  ///
+  /// [alternatives]는 음성 인식의 다른 후보 문장입니다. 서버가 오인식을 메뉴로 바로잡을 때 함께 봅니다.
+  Future<void> handleText(
+    String text, {
+    int? session,
+    List<String> alternatives = const [],
+  }) async {
     if (session == null) await _interrupt();
     final current = session ?? _session;
     heard = text;
@@ -463,7 +473,9 @@ class ConversationController extends ChangeNotifier {
     _set(ConversationState.thinking, say: '알아보는 중이에요…');
     InterpretResult result;
     try {
-      result = await interpreter.interpret(_payload(text, waitingState));
+      result = await interpreter.interpret(
+        _payload(text, waitingState, alternatives),
+      );
     } on VoiceServiceUnavailable {
       if (current != _session) return;
       await stop(say: '지금은 음성 주문을 쓸 수 없어요. 화면을 눌러 주문해 주세요.');
@@ -561,8 +573,20 @@ class ConversationController extends ChangeNotifier {
     return null;
   }
 
-  Map<String, Object?> _payload(String text, ConversationState current) => {
+  Map<String, Object?> _payload(
+    String text,
+    ConversationState current, [
+    List<String> alternatives = const [],
+  ]) => {
     'text': text.length > 200 ? text.substring(0, 200) : text,
+    // 첫 후보(text)를 뺀 다른 후보 최대 2개. 서버 상한(4개·200자)보다 작게 보냅니다.
+    'alternatives': alternatives
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty && value != text)
+        .map((value) => value.length > 200 ? value.substring(0, 200) : value)
+        .toSet()
+        .take(2)
+        .toList(),
     'state': switch (current) {
       ConversationState.recommending => 'recommending',
       ConversationState.confirming => 'confirming',

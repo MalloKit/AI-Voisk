@@ -292,6 +292,42 @@ class VoiceSanitizeTests(unittest.TestCase):
         self.assertEqual((result['intent'], result['question']), ('unknown', None))
 
 
+class SoundAlikeTests(unittest.TestCase):
+    """음성 인식이 실제 낱말로 잘못 받아 적은 메뉴를 자모 발음으로 찾습니다(실측 오인식 사례)."""
+
+    def setUp(self):
+        def menu(menu_id, name, synonyms=(), sold_out=False):
+            return {'id': str(menu_id), 'name': name, 'synonyms': list(synonyms), 'isSoldOut': sold_out}
+        self.menus = [menu(54, '식혜'), menu(6, '콜라', ['코카콜라']), menu(49, '계란말이'), menu(64, '호떡'),
+                      menu(45, '북엇국', ['북어국']), menu(44, '카레라이스', ['카레']), menu(61, '라면'),
+                      menu(7, '사이다', sold_out=True)]
+
+    def found(self, text):
+        return [(item['heard'], item['menu_id']) for item in voice_service.sound_alike(text, self.menus)]
+
+    def test_real_word_misrecognitions_point_to_menus(self):
+        self.assertEqual(self.found('시계 하나 주세요'), [('시계', 54)])
+        self.assertEqual(self.found('골라 하나 주세요'), [('골라', 6)])
+        self.assertEqual(self.found('계란 마리 하나'), [('계란마리', 49)])
+        self.assertEqual(self.found('오떡 하나 주세요'), [('오떡', 64)])
+        self.assertEqual(self.found('가래 라이스 하나'), [('가래라이스', 44)])
+        self.assertEqual(self.found('부엌 국 하나 주세요'), [('부엌국', 45)])
+
+    def test_exact_names_sold_out_and_unrelated_talk_are_not_candidates(self):
+        self.assertEqual(self.found('콜라 하나랑 라면 주세요'), [])
+        # 품절 메뉴는 소리가 같아도 후보가 아닙니다(품절 안내는 sanitize가 따로 합니다).
+        self.assertEqual(self.found('싸이다 하나'), [])
+        for text in ('오늘 날씨 어때요', '지금 몇 시예요', '양자역학이 뭐예요', '파이썬 알려줘'):
+            self.assertEqual(self.found(text), [], text)
+
+    def test_two_syllable_names_need_identical_sound(self):
+        # '시켜'는 '식혜'와 자모 하나만 달라도 두 글자라 후보가 아닙니다(주문하다는 뜻일 수 있음).
+        self.assertEqual(self.found('시켜 두 개 주세요'), [])
+
+    def test_long_input_is_bounded(self):
+        self.assertLessEqual(len(voice_service.sound_alike('가나다라마바사' * 30, self.menus)), 5)
+
+
 class FakeAnthropic:
     def __init__(self, response=None, error=None):
         self.calls, self.response, self.error = [], response, error
@@ -334,6 +370,23 @@ class VoiceApiTests(unittest.TestCase):
         self.assertNotIn('다른 매장 메뉴', call['system'][1]['text'])
         self.assertNotIn('판매중지', call['system'][1]['text'])
         self.assertEqual(json.loads(call['messages'][0]['content'])['text'], '제육 두 개 주세요')
+
+    def test_alternatives_and_sound_alike_menus_reach_the_model(self):
+        fake = FakeAnthropic(model_response({'intent': 'unknown', 'items': [], 'situation': [],
+                                             'recommendations': [], 'select_index': None, 'question': None}))
+        with patch('voice_service._anthropic_client', return_value=fake), \
+             patch.dict('os.environ', {'VOICE_LLM_BACKEND': 'api'}):
+            response = self.interpret(text='순두부 지게 하나', alternatives=['순두부 지게 하나', '순두부찌개 하나', ' '])
+        self.assertEqual(response.status_code, 200, response.text)
+        sent = json.loads(fake.calls[0]['messages'][0]['content'])
+        # 첫 후보와 같은 문장·빈 문장은 빼고 보냅니다.
+        self.assertEqual(sent['alternatives'], ['순두부찌개 하나'])
+        self.assertEqual(sent['sound_alike'], [{'heard': '순두부지게', 'menu_id': 11}])
+
+    def test_alternatives_are_limited(self):
+        self.assertEqual(self.interpret(alternatives=['a'] * 5).status_code, 422)
+        self.assertEqual(self.interpret(alternatives=['가' * 201]).status_code, 422)
+        self.assertEqual(self.interpret(alternatives=[1]).status_code, 422)
 
     def test_failures_become_voice_unavailable_without_details(self):
         for fake in (FakeAnthropic(error=RuntimeError('secret prompt text')),

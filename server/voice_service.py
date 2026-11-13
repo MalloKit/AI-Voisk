@@ -37,6 +37,8 @@ class CartLine(BaseModel):
 class InterpretInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
     text: StrictStr = Field(min_length=1, max_length=TEXT_MAX)
+    # 음성 인식의 다른 후보 문장(text 다음 순위). 발화와 같이 모델에만 보내고 저장하지 않습니다.
+    alternatives: list[StrictStr] = Field(default_factory=list, max_length=4)
     state: StrictStr = Field(default='listening', pattern='^(listening|recommending|confirming|upsell)$')
     viewing_menu_id: StrictInt | None = Field(default=None, ge=1, le=2147483647)
     cart: list[CartLine] = Field(default_factory=list, max_length=100)
@@ -50,6 +52,18 @@ class InterpretInput(BaseModel):
         if not value:
             raise ValueError('발화가 비어 있습니다.')
         return value
+
+    @field_validator('alternatives')
+    @classmethod
+    def clean_alternatives(cls, values):
+        cleaned = []
+        for value in values:
+            if len(value) > TEXT_MAX:
+                raise ValueError('후보 문장이 너무 깁니다.')
+            value = ''.join(ch for ch in value if ch.isprintable()).strip()
+            if value and value not in cleaned:
+                cleaned.append(value)
+        return cleaned
 
 
 # ---------- 모델 출력 형식 ----------
@@ -90,6 +104,17 @@ OUTPUT_SCHEMA = {
 
 RULES = """당신은 한국어 음성 키오스크의 주문 해석기입니다. 고객 발화(음성 인식 결과)를 읽고 정해진 JSON만 출력합니다.
 음성 인식 오류가 있을 수 있으니 발음이 비슷한 메뉴명, 줄임말("아아"=아이스 아메리카노), 동의어를 고려해 메뉴를 찾습니다.
+
+음성 인식(태블릿 내장)은 자주 틀립니다. 이 키오스크는 식당 주문용이라 손님은 거의 항상 메뉴·주문·결제 이야기를 합니다.
+- 발화의 낱말이 메뉴와 상관없는 실제 낱말처럼 보여도, 발음이 비슷한 메뉴가 있으면 그 메뉴를 말한 것으로 봅니다.
+- 흔한 오인식: 자음이 바뀜(ㄱ↔ㅋ, ㄷ↔ㅌ, ㅂ↔ㅍ, ㄹ↔ㄴ, ㅈ↔ㅉ), ㅎ이나 받침이 빠지거나 생김, 비슷한 모음(ㅐ↔ㅔ),
+  한 낱말이 띄어 쓰여 다른 낱말처럼 보임. 예: 김밥→김빱, 볶음밥→보끔밥, 아메리카노→아메리카 노.
+- alternatives는 음성 인식이 내놓은 다른 후보 문장입니다. text와 함께 보고 메뉴와 가장 잘 맞는 해석을 고릅니다.
+- sound_alike는 서버가 자모 발음으로 찾은 메뉴 후보입니다(heard=발화 속 부분, menu_id=그 소리와 비슷한 메뉴).
+  손님이 무언가를 달라고 하거나 개수를 말하는 등 주문 문맥이면 heard를 그 메뉴로 봅니다. 시간·날씨 질문처럼 주문 문맥이 아니면 무시합니다.
+- 짐작한 메뉴는 키오스크가 손님에게 한 번 더 확인하므로, 발음이 비슷한 메뉴가 하나로 좁혀지면 되묻지 말고 그 메뉴로 order합니다.
+  발화에 그 메뉴를 가리키는 소리가 없으면 메뉴를 지어내지 말고 clarify로 되묻습니다("두 개 시켜 주세요"처럼 메뉴가 빠진 말).
+- 날씨·시사·코딩·학문처럼 발음이 비슷한 메뉴도 없는 이야기일 때만 unknown입니다.
 
 intent 정의:
 - order: 메뉴를 새로 담기. items에 menu_id, quantity(기본 1), option_ids(말한 옵션만), entry_id=null
@@ -133,6 +158,74 @@ def catalog_text(catalog):
             (menu['description'] or '-').replace('\n', ' ')[:120],
         ]))
     return '\n'.join(lines)
+
+
+# ---------- 발음이 비슷한 메뉴 ----------
+
+_CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
+_JUNG = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ'
+_JONG = ' ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ'
+# 음성 인식이 자주 헷갈리는 소리를 하나로 묶습니다(된소리·거센소리, ㄹ/ㄴ, 소리 없는 ㅇ과 약한 ㅎ, ㅐ/ㅔ, 받침 대표음).
+_CHO_SOUND = {'ㄲ': 'ㄱ', 'ㅋ': 'ㄱ', 'ㄸ': 'ㄷ', 'ㅌ': 'ㄷ', 'ㅃ': 'ㅂ', 'ㅍ': 'ㅂ', 'ㅉ': 'ㅈ', 'ㅊ': 'ㅈ',
+              'ㅆ': 'ㅅ', 'ㄹ': 'ㄴ', 'ㅇ': '', 'ㅎ': ''}
+_JUNG_SOUND = {'ㅐ': 'ㅔ', 'ㅒ': 'ㅖ', 'ㅙ': 'ㅞ', 'ㅚ': 'ㅞ'}
+_JONG_SOUND = {'ㄲ': 'ㄱ', 'ㅋ': 'ㄱ', 'ㄳ': 'ㄱ', 'ㄺ': 'ㄱ', 'ㅅ': 'ㄷ', 'ㅆ': 'ㄷ', 'ㅈ': 'ㄷ', 'ㅊ': 'ㄷ',
+               'ㅌ': 'ㄷ', 'ㅎ': '', 'ㅍ': 'ㅂ', 'ㅄ': 'ㅂ', 'ㄿ': 'ㅂ', 'ㄹ': 'ㄴ', 'ㄵ': 'ㄴ', 'ㄶ': 'ㄴ',
+               'ㄻ': 'ㅁ', 'ㄼ': 'ㄴ', 'ㄽ': 'ㄴ', 'ㄾ': 'ㄴ', 'ㅀ': 'ㄴ', ' ': ''}
+SOUND_SYLLABLES_MAX = 60
+
+
+def _hangul(text):
+    return [ch for ch in text if '가' <= ch <= '힣']
+
+
+def _sounds(syllables):
+    out = []
+    for ch in syllables:
+        code = ord(ch) - 0xAC00
+        cho, jung, jong = _CHO[code // 588], _JUNG[code % 588 // 28], _JONG[code % 28]
+        out += [_CHO_SOUND.get(cho, cho), _JUNG_SOUND.get(jung, jung), _JONG_SOUND.get(jong, jong)]
+    return [s for s in out if s]
+
+
+def _distance(a, b):
+    prev = list(range(len(b) + 1))
+    for i, x in enumerate(a, 1):
+        cur = [i]
+        for j, y in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (x != y)))
+        prev = cur
+    return prev[-1]
+
+
+def sound_alike(text, menus, limit=5):
+    """발화 속에서 판매 중인 메뉴 이름·동의어와 소리가 비슷한 부분을 찾습니다.
+
+    이름이 그대로 들어 있는 메뉴는 모델이 바로 알아보므로 넣지 않습니다. 두 글자 이름은 오탐이 많아
+    소리가 완전히 같을 때만, 세 글자 이상은 자모 75% 이상 같을 때 후보로 봅니다.
+    """
+    syllables = _hangul(text)[:SOUND_SYLLABLES_MAX]
+    joined = ''.join(syllables)
+    best = {}
+    for menu in menus:
+        if menu['isSoldOut']:
+            continue
+        terms = {''.join(_hangul(str(value))) for value in [menu['name'], *menu.get('synonyms', [])]}
+        # 점수가 같으면 먼저 본 이름이 남으므로, 실행마다 같도록 긴 이름부터 정해진 순서로 봅니다.
+        terms = sorted((term for term in terms if len(term) >= 2), key=lambda term: (-len(term), term))
+        if any(term in joined for term in terms):
+            continue
+        for term in terms:
+            target = _sounds(term)
+            threshold = 1.0 if len(term) == 2 else 0.75
+            for size in {max(2, len(term) - 1), len(term), len(term) + 1}:
+                for start in range(len(syllables) - size + 1):
+                    window = syllables[start:start + size]
+                    score = 1 - _distance(_sounds(window), target) / len(target)
+                    if score >= threshold and score > best.get(menu['id'], (0, ''))[0]:
+                        best[menu['id']] = (score, ''.join(window))
+    ranked = sorted(best.items(), key=lambda pair: (-pair[1][0], int(pair[0])))[:limit]
+    return [{'heard': heard, 'menu_id': int(menu_id)} for menu_id, (_, heard) in ranked]
 
 
 # ---------- 호출 ----------
@@ -232,6 +325,8 @@ def _call_cli(system_blocks, user_text):
 def call_model(catalog, request: InterpretInput):
     payload = {
         'text': request.text,
+        'alternatives': [value for value in request.alternatives if value != request.text],
+        'sound_alike': sound_alike(request.text, catalog['menus']),
         'state': request.state,
         'viewing_menu_id': request.viewing_menu_id,
         'cart': [line.model_dump() for line in request.cart],
