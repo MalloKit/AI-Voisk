@@ -1,7 +1,17 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// 릴리스 서명 키. 어느 PC에서 빌드해도 같은 서명이어야 태블릿에 덮어 설치되고 설정이 남습니다.
+// android/key.properties와 키 파일은 저장소에 올리지 않습니다(설정 방법은 kiosk_app/RELEASE_SIGNING.md).
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) FileInputStream(keystorePropertiesFile).use { load(it) }
 }
 
 android {
@@ -29,11 +39,26 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                // 키가 없는 PC에서도 빌드는 되지만, 이 APK는 공용 키로 만든 앱 위에 덮어 설치되지 않습니다.
+                logger.warn("android/key.properties가 없어 디버그 키로 서명합니다. kiosk_app/RELEASE_SIGNING.md를 보세요.")
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
