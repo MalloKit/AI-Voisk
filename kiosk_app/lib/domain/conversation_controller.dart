@@ -377,7 +377,14 @@ class ConversationController extends ChangeNotifier {
       s == ConversationState.choosingOption ||
       s == ConversationState.upsell;
 
+  /// 마이크를 누른 뒤 손님이 망설이는 동안 기다려 주는 시간. 인식기는 말이 없으면 몇 초 만에 끝나므로,
+  /// 이 시간 안에 말 없이 끝나면 안내 없이 다시 듣습니다(누르고 2초 만에 "잘 들리지 않았어요"가 나오던 문제).
+  Duration get _talkWindow => Duration(seconds: senior ? 12 : 8);
+  static const _maxReopen = 3;
+
   Future<void> _listen(int session, ConversationState listeningState) async {
+    final openedAt = _clock();
+    var reopened = 0;
     while (session == _session) {
       partial = '';
       level = 0;
@@ -411,12 +418,18 @@ class ConversationController extends ChangeNotifier {
       final code = event.code ?? 'client';
       if (code == 'no_speech' || code == 'busy' || code == 'client') {
         if (!listenAfterPrompt) {
-          // 누를 때마다 한 번만 듣습니다. 못 들었으면 다시 누르도록 안내합니다.
+          if (code == 'no_speech' &&
+              reopened < _maxReopen &&
+              _clock().difference(openedAt) < _talkWindow) {
+            reopened++;
+            continue;
+          }
+          // 누를 때마다 한 번만 듣습니다. 기다려도 말이 없으면 다시 누르도록 안내합니다.
           await _prompt(
             session,
             senior
-                ? '잘 들리지 않았어요. 마이크 버튼을 누르고 천천히 말씀해 주세요.'
-                : '잘 들리지 않았어요. 마이크 버튼을 누르고 다시 말씀해 주세요.',
+                ? '말씀이 들리지 않아 잠시 멈췄어요. 준비되시면 마이크 버튼을 누르고 천천히 말씀해 주세요.'
+                : '말씀이 들리지 않아 잠시 멈췄어요. 준비되시면 마이크 버튼을 누르고 말씀해 주세요.',
           );
           return;
         }

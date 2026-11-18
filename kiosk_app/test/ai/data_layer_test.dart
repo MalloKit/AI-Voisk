@@ -11,6 +11,7 @@ import 'package:kiosk_app/data/order_outbox.dart';
 import 'package:kiosk_app/data/sync_service.dart';
 import 'package:kiosk_app/domain/recommendation_engine.dart';
 import 'package:kiosk_app/domain/catalog.dart';
+import 'package:kiosk_app/service/models/menu_item.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fakes.dart';
@@ -292,6 +293,61 @@ void main() {
       expect(balanced.fit, 1);
       expect(profit.fit + profit.profit + profit.pick, closeTo(1, 1e-9));
       expect(profit.profit, 0.5);
+    });
+
+    group('추가 제안', () {
+      // 공용 DB 시연 매장과 같은 분류·원가율(커피 원가율이 가장 낮아 이익만 보면 커피가 뽑힘).
+      MenuItem menu(
+        String id,
+        String name,
+        String category,
+        int costRate, {
+        List<String> tags = const [],
+      }) => MenuItem(
+        id: id,
+        name: name,
+        category: category,
+        price: 1000,
+        description: '',
+        costRate: costRate,
+        tags: tags,
+      );
+      final menus = [
+        menu('4', '콩나물국밥', '국물', 27),
+        menu('5', '만두', '사이드', 30),
+        menu('49', '계란말이', '사이드', 20),
+        menu('6', '콜라', '음료', 30),
+        menu('52', '아이스 아메리카노', '음료', 18, tags: ['커피']),
+        menu('54', '식혜', '음료', 25),
+        menu('64', '호떡', '디저트', 25),
+      ];
+      const settings = StoreAiSettings(policyProfit: 30);
+
+      test('식사를 담으면 사이드부터, 커피는 권하지 않습니다', () {
+        expect(engine.upsell(menus, {'4'}, settings)?.name, '계란말이');
+        expect(engine.upsell(menus, {'4', '49'}, settings)?.name, '식혜');
+        expect(engine.upsell(menus, {'4', '49', '54'}, settings)?.name, '호떡');
+      });
+
+      test('음료 이익이 더 커도 식사에는 사이드를 먼저 권합니다', () {
+        final cheapCola = [
+          ...menus.where((m) => m.id != '6'),
+          menu('6', '콜라', '음료', 10),
+        ];
+        expect(engine.upsell(cheapCola, {'4'}, settings)?.name, '계란말이');
+      });
+
+      test('식사 없이 디저트만 담았으면 커피도 권할 수 있습니다', () {
+        expect(engine.upsell(menus, {'64'}, settings)?.name, '아이스 아메리카노');
+      });
+
+      test('커피 태그가 없어도 이름으로 커피를 알아봅니다', () {
+        final onlyCoffee = [
+          menu('4', '콩나물국밥', '국물', 27),
+          menu('53', '따뜻한 아메리카노', '음료', 18),
+        ];
+        expect(engine.upsell(onlyCoffee, {'4'}, settings), isNull);
+      });
     });
 
     test('결과가 없으면 매장 우선 메뉴부터 보여 줍니다', () {
