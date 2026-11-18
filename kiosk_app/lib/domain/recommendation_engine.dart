@@ -135,38 +135,50 @@ class RecommendationEngine {
     return available.take(limit).toList();
   }
 
-  /// 주문당 1회 추가 제안 후보: 장바구니에 없는 음료·사이드·디저트 중 정책 점수가 가장 높은 메뉴.
+  /// 주문당 1회 추가 제안 후보: 장바구니에 없는 사이드·음료·디저트 중 하나.
+  ///
+  /// 식사 메뉴(사이드·음료·디저트가 아닌 분류)를 담았으면 함께 먹기 좋은 순서(사이드 → 음료 → 디저트)로 고르고,
+  /// 커피는 식사에 곁들여 권하지 않습니다(국밥에 아이스 아메리카노를 권하던 문제).
+  /// 같은 순서 안에서는 정책 점수(이익·매장 우선)가 높은 메뉴를 고릅니다.
   MenuItem? upsell(
     List<MenuItem> menus,
     Set<String> inCart,
     StoreAiSettings settings,
   ) {
-    const categories = {'음료', '사이드', '디저트'};
-    final cartCategories = menus
-        .where((m) => inCart.contains(m.id))
-        .map((m) => m.category)
-        .toSet();
+    const extras = ['사이드', '음료', '디저트'];
+    final cartMenus = menus.where((m) => inCart.contains(m.id)).toList();
+    final cartCategories = cartMenus.map((m) => m.category).toSet();
+    final hasMeal = cartMenus.any((m) => !extras.contains(m.category));
     final profits = profitScores(menus);
     final weights = PolicyWeights.from(settings);
     MenuItem? best;
+    var bestRank = extras.length;
     var bestScore = double.negativeInfinity;
     for (final menu in menus) {
-      if (!categories.contains(menu.category) ||
+      if (!extras.contains(menu.category) ||
           cartCategories.contains(menu.category)) {
         continue;
       }
       if (menu.isSoldOut || menu.recExcluded || inCart.contains(menu.id)) {
         continue;
       }
+      if (hasMeal && isCoffee(menu)) continue;
+      final rank = hasMeal ? extras.indexOf(menu.category) : 0;
       // 추가 제안에는 상황 적합도가 없으므로 이익·매장 우선만 비교합니다.
       final score =
           (profits[menu.id] ?? 50) * (weights.profit + 0.1) +
           (menu.storePick ? 100 : 0) * weights.pick;
-      if (score > bestScore) {
+      if (rank < bestRank || (rank == bestRank && score > bestScore)) {
         best = menu;
+        bestRank = rank;
         bestScore = score;
       }
     }
     return best;
   }
+
+  /// 커피 메뉴. 점주가 '커피' 태그를 달지 않았어도 이름으로 알아봅니다.
+  static bool isCoffee(MenuItem menu) =>
+      menu.tags.contains('커피') ||
+      RegExp('커피|아메리카노|라떼|에스프레소|카푸치노').hasMatch(menu.name);
 }

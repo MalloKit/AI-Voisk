@@ -11,9 +11,9 @@ import 'package:kiosk_app/voice/voice_port.dart';
 import 'fakes.dart';
 
 /// 사이즈를 꼭 골라야 하는 음료. 추가 제안 후보가 이것 하나뿐인 매장입니다.
-const americano = MenuItem(
+const icedTea = MenuItem(
   id: '50',
-  name: '아이스 아메리카노',
+  name: '아이스티',
   category: '음료',
   price: 3000,
   description: '',
@@ -24,7 +24,7 @@ const americano = MenuItem(
 );
 
 final upsellCatalog = KioskCatalog(
-  menus: [demoMenus.firstWhere((m) => m.id == '3'), americano],
+  menus: [demoMenus.firstWhere((m) => m.id == '3'), icedTea],
   aiReady: true,
 );
 
@@ -36,13 +36,15 @@ void main() {
   late KioskCatalog catalog;
 
   // 실제 키오스크와 같은 기본값: 안내 뒤에는 마이크 버튼을 눌러야 듣습니다.
-  ConversationController build() => ConversationController(
-    voice: voice,
-    interpreter: interpreter,
-    bus: bus,
-    catalog: () => catalog,
-    newId: () => '00000000-0000-4000-8000-000000000001',
-  );
+  ConversationController build({DateTime Function()? clock}) =>
+      ConversationController(
+        voice: voice,
+        interpreter: interpreter,
+        bus: bus,
+        catalog: () => catalog,
+        newId: () => '00000000-0000-4000-8000-000000000001',
+        clock: clock,
+      );
 
   setUp(() {
     voice = FakeVoicePort();
@@ -94,33 +96,64 @@ void main() {
     expect(voice.listens, 2);
   });
 
-  test('못 들었으면 마이크 버튼을 다시 누르라고 안내하고 기다립니다', () async {
+  test('누르고 잠깐 말이 없어도 안내 없이 다시 듣고, 그 사이 말하면 주문으로 이어집니다', () async {
     final c = build();
-    voice.silence();
+    voice
+      ..silence()
+      ..say('순두부 하나');
+    interpreter.reply(
+      const InterpretResult(
+        intent: 'order',
+        items: [InterpretedItem(menuId: '3', quantity: 1)],
+      ),
+    );
     await c.start();
     await settle();
 
-    expect(voice.listens, 1);
-    expect(voice.spoken.last, contains('마이크 버튼을 누르고 다시 말씀해 주세요'));
+    expect(voice.listens, 2);
+    expect(voice.spoken.any((s) => s.contains('들리지 않')), isFalse);
+    expect(voice.spoken.last, '순두부찌개 1개 담을까요?');
+  });
+
+  test('계속 말이 없으면 몇 번 다시 들은 뒤 마이크 버튼을 다시 누르라고 안내하고 기다립니다', () async {
+    final c = build();
+    for (var i = 0; i < 4; i++) {
+      voice.silence();
+    }
+    await c.start();
+    await settle();
+
+    // 처음 1번 + 다시 듣기 3번
+    expect(voice.listens, 4);
+    expect(voice.spoken.last, contains('준비되시면 마이크 버튼을 누르고 말씀해 주세요'));
     expect(c.state, ConversationState.listening);
     expect(c.active, isTrue);
     expect(c.canTalk, isTrue);
   });
 
-  test('대화 중에 "말로 주문하기"를 다시 누르면 마이크 버튼과 같습니다', () async {
-    final c = build();
-    voice.silence();
+  test('누른 지 8초가 지나면 더 기다리지 않고 안내합니다', () async {
+    var now = DateTime(2026, 11, 18, 12);
+    final c = build(clock: () => now);
+    // 인식기가 한 번 듣고 끝날 때마다 5초가 지난다고 봅니다.
+    voice.onListen = () => now = now.add(const Duration(seconds: 5));
+    for (var i = 0; i < 4; i++) {
+      voice.silence();
+    }
     await c.start();
     await settle();
-    voice.silence();
-    await c.start();
-    await settle();
+
     expect(voice.listens, 2);
+    expect(voice.spoken.last, contains('마이크 버튼을 누르고 말씀해 주세요'));
   });
 
-  test('추가 제안 옵션을 묻다 인식 서비스가 끊겨도 고르던 메뉴를 버리지 않고, 화면에서 옵션을 고르면 바로 담습니다', () async {
-    catalog = upsellCatalog;
+  test('대화 중에 "말로 주문하기"를 다시 누르면 마이크 버튼과 같습니다', () async {
     final c = build();
+    for (var i = 0; i < 4; i++) {
+      voice.silence();
+    }
+    await c.start();
+    await settle();
+    expect(voice.listens, 4);
     voice.say('순두부 하나');
     interpreter.reply(
       const InterpretResult(
@@ -130,36 +163,56 @@ void main() {
     );
     await c.start();
     await settle();
+    // 첫 누름: 1번 + 다시 듣기 3번, 두 번째 누름: 1번
+    expect(voice.listens, 5);
     expect(voice.spoken.last, '순두부찌개 1개 담을까요?');
-
-    await c.handleText('네');
-    await settle();
-    expect(c.state, ConversationState.upsell);
-    expect(voice.spoken.last, contains('아이스 아메리카노도 같이 하시겠어요?'));
-
-    // 추가 제안에 "네" → 사이즈 질문
-    await c.handleText('네');
-    await settle();
-    expect(c.state, ConversationState.choosingOption);
-    expect(c.optionChoices.map((o) => o.name), ['레귤러', '라지']);
-
-    // 마이크를 눌렀는데 인식 서비스 연결이 끊김
-    voice.script.add(const VoiceEvent(VoiceEventType.error, code: 'network'));
-    await c.talk();
-    await settle();
-    expect(c.active, isTrue);
-    expect(c.state, ConversationState.choosingOption);
-    expect(c.optionChoices, hasLength(2));
-    expect(voice.spoken.last, contains('연결하지 못했어요'));
-
-    // 화면의 옵션 버튼으로 고르면 다시 묻지 않고 바로 담습니다.
-    await c.chooseOption(c.optionChoices.last);
-    await settle();
-    final drink = cart.entries.singleWhere((e) => e.menu.id == '50');
-    expect(drink.options.map((o) => o.name), ['라지']);
-    expect(drink.recommended, isTrue);
-    expect(voice.spoken.any((s) => s.contains('아메리카노 라지 1개 담을까요?')), isFalse);
-    expect(voice.spoken.last, startsWith('아이스 아메리카노 라지 1개 담았어요.'));
-    expect(c.state, ConversationState.listening);
   });
+
+  test(
+    '추가 제안 옵션을 묻다 인식 서비스가 끊겨도 고르던 메뉴를 버리지 않고, 화면에서 옵션을 고르면 바로 담습니다',
+    () async {
+      catalog = upsellCatalog;
+      final c = build();
+      voice.say('순두부 하나');
+      interpreter.reply(
+        const InterpretResult(
+          intent: 'order',
+          items: [InterpretedItem(menuId: '3', quantity: 1)],
+        ),
+      );
+      await c.start();
+      await settle();
+      expect(voice.spoken.last, '순두부찌개 1개 담을까요?');
+
+      await c.handleText('네');
+      await settle();
+      expect(c.state, ConversationState.upsell);
+      expect(voice.spoken.last, contains('아이스티도 같이 하시겠어요?'));
+
+      // 추가 제안에 "네" → 사이즈 질문
+      await c.handleText('네');
+      await settle();
+      expect(c.state, ConversationState.choosingOption);
+      expect(c.optionChoices.map((o) => o.name), ['레귤러', '라지']);
+
+      // 마이크를 눌렀는데 인식 서비스 연결이 끊김
+      voice.script.add(const VoiceEvent(VoiceEventType.error, code: 'network'));
+      await c.talk();
+      await settle();
+      expect(c.active, isTrue);
+      expect(c.state, ConversationState.choosingOption);
+      expect(c.optionChoices, hasLength(2));
+      expect(voice.spoken.last, contains('연결하지 못했어요'));
+
+      // 화면의 옵션 버튼으로 고르면 다시 묻지 않고 바로 담습니다.
+      await c.chooseOption(c.optionChoices.last);
+      await settle();
+      final drink = cart.entries.singleWhere((e) => e.menu.id == '50');
+      expect(drink.options.map((o) => o.name), ['라지']);
+      expect(drink.recommended, isTrue);
+      expect(voice.spoken.any((s) => s.contains('아이스티 라지 1개 담을까요?')), isFalse);
+      expect(voice.spoken.last, startsWith('아이스티 라지 1개 담았어요.'));
+      expect(c.state, ConversationState.listening);
+    },
+  );
 }

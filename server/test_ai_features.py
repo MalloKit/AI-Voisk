@@ -206,6 +206,18 @@ class VoiceSanitizeTests(unittest.TestCase):
         self.assertEqual(result['intent'], 'clarify')
         self.assertEqual(result['question'], '어떤 메뉴를 말씀하셨나요?')
 
+    def test_quantity_over_limit_is_explained_not_dropped(self):
+        # "만두 100개 담아": 말없이 버리면 "어떤 메뉴요?"로 되물어 손님이 이해할 수 없습니다.
+        raw = {'intent': 'order', 'items': [
+            {'menu_id': 10, 'quantity': 100, 'option_ids': [], 'entry_id': None},
+            {'menu_id': 11, 'quantity': 1, 'option_ids': [], 'entry_id': None}]}
+        result = voice_service.sanitize(raw, self.catalog, self.request())
+        self.assertEqual((result['intent'], result['items']), ('clarify', []))
+        self.assertEqual(result['question'], '제육덮밥은 한 번에 99개까지 담을 수 있어요. 99개 이하로 다시 말씀해 주세요.')
+        raw['items'] = [{'menu_id': 10, 'quantity': 99, 'option_ids': [], 'entry_id': None}]
+        result = voice_service.sanitize(raw, self.catalog, self.request())
+        self.assertEqual((result['intent'], result['items'][0]['quantity']), ('order', 99))
+
     def test_order_of_only_sold_out_menu_names_it_in_question(self):
         # 모델 문장 대신 서버가 품절 메뉴 이름으로 안내 문장을 만듭니다.
         raw = {'intent': 'order', 'items': [{'menu_id': 13, 'quantity': 2, 'option_ids': [], 'entry_id': None}],
@@ -278,6 +290,31 @@ class VoiceSanitizeTests(unittest.TestCase):
                                                      {'menu_id': 10, 'fit': 0, 'reason': ''}])
         # 매장 메뉴 태그에 없는 값은 버립니다(발화 일부가 추천 로그에 남지 않게).
         self.assertEqual(result['situation'], ['해장'])
+
+    def test_recommendations_drop_menus_with_tags_the_customer_excluded(self):
+        # 실측: "해장하고 싶은데 매운 건 말고요"에 모델이 순두부찌개(매운)를 넣었습니다.
+        catalog = {'menus': [
+            {'id': '3', 'name': '순두부찌개', 'isSoldOut': False, 'recExcluded': False, 'options': [],
+             'tags': ['국물', '매운', '해장']},
+            {'id': '4', 'name': '콩나물국밥', 'isSoldOut': False, 'recExcluded': False, 'options': [],
+             'tags': ['국물', '안매운', '해장']},
+            {'id': '52', 'name': '아이스 아메리카노', 'isSoldOut': False, 'recExcluded': False, 'options': [],
+             'tags': ['시원한', '커피']},
+        ]}
+        raw = {'intent': 'recommend', 'recommendations': [
+            {'menu_id': 3, 'fit': 90, 'reason': ''}, {'menu_id': 4, 'fit': 95, 'reason': ''},
+            {'menu_id': 52, 'fit': 80, 'reason': ''}]}
+
+        def shown(text):
+            result = voice_service.sanitize(raw, catalog, voice_service.InterpretInput(text=text))
+            return [rec['menu_id'] for rec in result['recommendations']]
+
+        self.assertEqual(shown('해장하고 싶은데 매운 건 말고요'), [4, 52])
+        self.assertEqual(shown('안 매운 걸로 해장할 거'), [4, 52])
+        self.assertEqual(shown('커피 말고 시원한 거'), [3, 4])
+        # 빼지 않았으면 그대로 둡니다("안매운" 태그를 원하는 말은 매운 메뉴를 빼는 것과 같습니다).
+        self.assertEqual(shown('해장에 좋은 거'), [3, 4, 52])
+        self.assertEqual(shown('매운 거 먹고 싶어'), [3, 4, 52])
 
     def test_select_index_must_point_to_shown_recommendation(self):
         raw = {'intent': 'select', 'select_index': 5}

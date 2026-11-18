@@ -31,9 +31,13 @@ class FakeVoicePort implements VoicePort {
   @override
   Future<String?> prepare() async => prepareProblem;
 
+  /// 듣기를 시작할 때마다 부릅니다(테스트에서 시간을 흘려보낼 때).
+  void Function()? onListen;
+
   @override
   Future<void> listen({required int silenceMs}) async {
     listens++;
+    onListen?.call();
     if (script.isEmpty) return;
     final next = script.removeAt(0);
     scheduleMicrotask(() {
